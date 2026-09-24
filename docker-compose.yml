@@ -1,0 +1,16 @@
+services:
+  db:
+    image: pgvector/pgvector:pg18
+    container_name: kaufman-bot-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: kaufman
+      POSTGRES_PASSWORD: kaufman
+      POSTGRES_DB: kaufman_bot
+    ports:
+      - "5432:5432"
+    volumes:
+      - kaufman_bot_postgres_volume:/var/lib/postgresql
+
+volumes:
+  kaufman_bot_postgres_volume:
