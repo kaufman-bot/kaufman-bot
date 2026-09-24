@@ -1,0 +1,35 @@
+{
+  "folders": [
+    {
+      "name": "kaufman-bot (root)",
+      "path": "."
+    },
+    {
+      "name": "backend",
+      "path": "backend"
+    },
+    {
+      "name": "frontend",
+      "path": "frontend"
+    }
+  ],
+  "settings": {
+    "files.exclude": {
+      "**/node_modules": true,
+      "**/dist": true,
+      "**/.angular": true
+    }
+  },
+  "extensions": {
+    "recommendations": [
+      "angular.ng-template",
+      "nestjs.snippets",
+      "prisma.prisma",
+      "esbenp.prettier-vscode",
+      "ms-azuretools.vscode-docker",
+      "vitest.explorer",
+      "mtxr.sqltools",
+      "eamodio.gitlens"
+    ]
+  }
+}

@@ -1,0 +1,121 @@
+{
+  // ── TypeScript ──
+  "typescript.tsdk": "backend/node_modules/typescript/lib",
+  "typescript.enablePromptUseWorkspaceTsdk": true,
+
+  // ── Editor ──
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.codeActionsOnSave": {
+    "source.organizeImports": "explicit",
+    "source.fixAll.oxc": "explicit"
+  },
+  "editor.tabSize": 2,
+  "editor.insertSpaces": true,
+
+  // ── Files ──
+  "files.exclude": {
+    "**/node_modules": true,
+    "**/dist": true,
+    "**/.angular": true,
+    "backend/src/generated": true
+  },
+  "files.watcherExclude": {
+    "**/node_modules/**": true,
+    "**/dist/**": true,
+    "**/.angular/**": true,
+    "backend/src/generated/**": true
+  },
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/dist": true,
+    "**/generated": true,
+    "backend/node_modules": true,
+    "frontend/node_modules": true
+  },
+
+  // ── Per-language formatters ──
+  "[typescript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[html]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[css]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[json]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[jsonc]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[prisma]": {
+    "editor.defaultFormatter": "Prisma.prisma"
+  },
+
+  // ── Prettier ──
+  "prettier.configPath": "backend/.prettierrc",
+
+  // ── Prisma ──
+  "prisma.languageServer.prismaFmtBinaryPath": "backend/node_modules/@prisma/prisma-fmt/binaries/prisma-fmt",
+
+  // ── SQLTools (PostgreSQL) ──
+  "sqltools.connections": [
+    {
+      "name": "kaufman_bot (local)",
+      "driver": "PostgreSQL",
+      "host": "localhost",
+      "port": 5432,
+      "username": "kaufman",
+      "password": "kaufman",
+      "database": "kaufman_bot"
+    }
+  ],
+
+  // ── Docker ──
+  "docker.languageserver.diagnostics.deprecatedDirectives": "Ignore",
+
+  // ── Vitest ──
+  "vitest.commandLine": "cd backend && npx vitest",
+  "vitest.nodeEnv": {
+    "NODE_ENV": "test"
+  },
+
+  // ── MCP Servers ──
+  "mcp": {
+    "servers": {
+      "postgres-kaufman": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@modelcontextprotocol/server-postgres",
+          "postgresql://kaufman:kaufman@localhost:5432/kaufman_bot?schema=public"
+        ]
+      },
+      "context7": {
+        "command": "npx",
+        "args": ["-y", "@upstash/context7-mcp@latest"]
+      },
+      "sequential-thinking": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"]
+      },
+      "playwright": {
+        "command": "npx",
+        "args": ["@playwright/mcp@latest"]
+      },
+      "minio-storage": {
+        "command": "npx",
+        "args": ["@pickstar-2002/minio-storage-mcp@latest"],
+        "env": {
+          "MINIO_ACCESS_KEY": "minioadmin",
+          "MINIO_ENDPOINT": "localhost",
+          "MINIO_PORT": "29000",
+          "MINIO_SECRET_KEY": "minioadmin123",
+          "MINIO_USE_SSL": "false"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "recommendations": [
+    // ── Angular ──
+    "angular.ng-template",
+    "johnpapa.angular2",
+
+    // ── NestJS ──
+    "nestjs.snippets",
+
+    // ── Prisma ──
+    "prisma.prisma",
+
+    // ── TypeScript ──
+    "dbaeumer.vscode-typescript",
+
+    // ── Formatter / Linter ──
+    "esbenp.prettier-vscode",
+    "oxc.oxc-vscode",
+
+    // ── Testing ──
+    "vitest.explorer",
+    "ms-playwright.playwright",
+
+    // ── Docker ──
+    "ms-azuretools.vscode-docker",
+
+    // ── Database ──
+    "mtxr.sqltools",
+    "mtxr.sqltools-driver-pg",
+
+    // ── Git ──
+    "eamodio.gitlens",
+
+    // ── Editor helpers ──
+    "editorconfig.editorconfig",
+    "christian-kohler.path-intellisense",
+    "christian-kohler.npm-intellisense",
+    "usernamehw.errorlens",
+    "yoavbls.pretty-ts-errors",
+
+    // ── PM2 ──
+    "june07.pm2-explorer"
+  ],
+  "unwantedRecommendations": []
+}

@@ -1,0 +1,77 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Backend: Debug NestJS",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "start:debug", "--prefix", "backend"],
+      "console": "integratedTerminal",
+      "restart": true,
+      "env": {
+        "NODE_ENV": "development"
+      },
+      "skipFiles": ["<node_internals>/**"]
+    },
+    {
+      "name": "Backend: Debug Vitest (current file)",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/backend/node_modules/vitest/vitest.mjs",
+      "args": ["run", "${relativeFile}", "--no-file-parallelism"],
+      "cwd": "${workspaceFolder}/backend",
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"]
+    },
+    {
+      "name": "Backend: Debug E2E",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/backend/node_modules/vitest/vitest.mjs",
+      "args": [
+        "run",
+        "--config",
+        "vitest.config.e2e.ts",
+        "${relativeFile}",
+        "--no-file-parallelism"
+      ],
+      "cwd": "${workspaceFolder}/backend",
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"]
+    },
+    {
+      "name": "Frontend: Debug Angular (Chrome)",
+      "type": "chrome",
+      "request": "launch",
+      "preLaunchTask": "npm: start - frontend",
+      "url": "http://localhost:4200/",
+      "webRoot": "${workspaceFolder}/frontend/src"
+    },
+    {
+      "name": "Frontend: Debug Angular Tests",
+      "type": "chrome",
+      "request": "launch",
+      "preLaunchTask": "npm: test - frontend",
+      "url": "http://localhost:9876/debug.html"
+    },
+    {
+      "name": "Attach to Backend (port 9229)",
+      "type": "node",
+      "request": "attach",
+      "port": 9229,
+      "restart": true,
+      "skipFiles": ["<node_internals>/**"]
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Full Stack: Backend + Frontend",
+      "configurations": [
+        "Backend: Debug NestJS",
+        "Frontend: Debug Angular (Chrome)"
+      ],
+      "stopAll": true
+    }
+  ]
+}

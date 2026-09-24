@@ -1,0 +1,214 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    // ── Infrastructure ──
+    {
+      "label": "docker: up",
+      "type": "shell",
+      "command": "docker compose up -d",
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "docker: down",
+      "type": "shell",
+      "command": "docker compose down",
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "docker: logs (follow)",
+      "type": "shell",
+      "command": "docker compose logs -f",
+      "isBackground": true,
+      "problemMatcher": []
+    },
+
+    // ── Prisma ──
+    {
+      "label": "prisma: generate",
+      "type": "shell",
+      "command": "npm run generate",
+      "options": { "cwd": "${workspaceFolder}" },
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "prisma: migrate deploy",
+      "type": "shell",
+      "command": "npm run prisma:migrate",
+      "options": { "cwd": "${workspaceFolder}" },
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "prisma: migrate dev (create)",
+      "type": "shell",
+      "command": "npx prisma migrate dev --name",
+      "options": { "cwd": "${workspaceFolder}/backend" },
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "prisma: studio",
+      "type": "shell",
+      "command": "npx prisma studio",
+      "options": { "cwd": "${workspaceFolder}/backend" },
+      "isBackground": true,
+      "problemMatcher": []
+    },
+
+    // ── Backend ──
+    {
+      "label": "backend: start:dev",
+      "type": "npm",
+      "script": "start:dev",
+      "options": { "cwd": "${workspaceFolder}/backend" },
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "typescript",
+        "pattern": "$tsc",
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": { "regexp": "Starting Nest application" },
+          "endsPattern": { "regexp": "Nest application successfully started" }
+        }
+      }
+    },
+    {
+      "label": "backend: test (vitest)",
+      "type": "shell",
+      "command": "npx vitest run",
+      "options": { "cwd": "${workspaceFolder}/backend" },
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "backend: test:watch",
+      "type": "shell",
+      "command": "npx vitest",
+      "options": { "cwd": "${workspaceFolder}/backend" },
+      "isBackground": true,
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "backend: test:e2e",
+      "type": "shell",
+      "command": "npx vitest run --config vitest.config.e2e.ts",
+      "options": { "cwd": "${workspaceFolder}/backend" },
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "backend: lint (oxlint)",
+      "type": "shell",
+      "command": "npx oxlint src/ test/",
+      "options": { "cwd": "${workspaceFolder}/backend" },
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "backend: format",
+      "type": "shell",
+      "command": "npx prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
+      "options": { "cwd": "${workspaceFolder}/backend" },
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "backend: tsc --noEmit",
+      "type": "shell",
+      "command": "npx tsc --noEmit --skipLibCheck",
+      "options": { "cwd": "${workspaceFolder}/backend" },
+      "group": "build",
+      "problemMatcher": ["$tsc"]
+    },
+
+    // ── Frontend ──
+    {
+      "label": "frontend: start (ng serve)",
+      "type": "npm",
+      "script": "start",
+      "options": { "cwd": "${workspaceFolder}/frontend" },
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "typescript",
+        "pattern": "$tsc",
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": { "regexp": "(.*?)" },
+          "endsPattern": { "regexp": "bundle generation complete|Compiled successfully" }
+        }
+      }
+    },
+    {
+      "label": "frontend: build",
+      "type": "npm",
+      "script": "build",
+      "options": { "cwd": "${workspaceFolder}/frontend" },
+      "group": "build",
+      "problemMatcher": ["$tsc"]
+    },
+    {
+      "label": "frontend: test (karma)",
+      "type": "npm",
+      "script": "test",
+      "options": { "cwd": "${workspaceFolder}/frontend" },
+      "isBackground": true,
+      "group": "test",
+      "problemMatcher": {
+        "owner": "typescript",
+        "pattern": "$tsc",
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": { "regexp": "(.*?)" },
+          "endsPattern": { "regexp": "bundle generation complete" }
+        }
+      }
+    },
+    {
+      "label": "frontend: tsc --noEmit",
+      "type": "shell",
+      "command": "npx tsc --noEmit --project tsconfig.app.json",
+      "options": { "cwd": "${workspaceFolder}/frontend" },
+      "group": "build",
+      "problemMatcher": ["$tsc"]
+    },
+
+    // ── PM2 ──
+    {
+      "label": "pm2: start dev",
+      "type": "shell",
+      "command": "./start-dev.sh",
+      "options": { "cwd": "${workspaceFolder}" },
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "pm2: stop dev",
+      "type": "shell",
+      "command": "./stop-dev.sh",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+
+    // ── Full Stack ──
+    {
+      "label": "full: install all",
+      "type": "shell",
+      "command": "npm run install:all",
+      "options": { "cwd": "${workspaceFolder}" },
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "full: format all",
+      "type": "shell",
+      "command": "npm run format",
+      "options": { "cwd": "${workspaceFolder}" },
+      "group": "build",
+      "problemMatcher": []
+    }
+  ]
+}

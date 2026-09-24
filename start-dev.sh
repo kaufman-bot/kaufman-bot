@@ -17,6 +17,13 @@ while [ "$(docker inspect --format='{{json .State.Health}}' kaufman-bot-db 2>/de
 done
 echo "PostgreSQL is healthy"
 
+# Wait for MinIO health check to pass
+echo "Waiting for MinIO to be healthy..."
+while [ "$(docker inspect --format='{{json .State.Health}}' kaufman-bot-minio 2>/dev/null | grep -o '"Status":"healthy"')" != '"Status":"healthy"' ]; do
+  sleep 2
+done
+echo "MinIO is healthy"
+
 echo "▶ Running Prisma migrations..."
 cd ./backend
 npx prisma migrate deploy
