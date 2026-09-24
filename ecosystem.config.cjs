@@ -20,5 +20,14 @@ module.exports = {
         NODE_ENV: 'development',
       },
     },
+    {
+      name: 'kaufman-bot-tunnel',
+      script: 'tuna',
+      args: 'http 4200 --subdomain kaufman-bot',
+      watch: false,
+      env: {
+        NODE_ENV: 'development',
+      },
+    },
   ],
 };

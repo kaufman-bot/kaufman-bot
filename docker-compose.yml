@@ -7,10 +7,17 @@ services:
       POSTGRES_USER: kaufman
       POSTGRES_PASSWORD: kaufman
       POSTGRES_DB: kaufman_bot
+      PGDATA: /var/lib/postgresql/data/pgdata
     ports:
       - "5432:5432"
     volumes:
       - kaufman_bot_postgres_volume:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kaufman -d kaufman_bot"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
 volumes:
   kaufman_bot_postgres_volume:

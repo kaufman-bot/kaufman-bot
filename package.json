@@ -4,10 +4,18 @@
   "private": true,
   "scripts": {
     "install:all": "npm --prefix backend install && npm --prefix frontend install",
-    "infra:up": "docker compose up -d",
-    "infra:down": "docker compose down",
-    "infra:logs": "docker compose logs -f",
-    "dev": "npx pm2 start ecosystem.config.cjs && npx pm2 logs",
-    "dev:stop": "npx pm2 delete all"
+    "start:dev": "./start-dev.sh",
+    "stop:dev": "./stop-dev.sh",
+    "start:prod": "./start-prod.sh",
+    "stop:prod": "./stop-prod.sh",
+    "format": "npm run format --prefix backend && npm run format --prefix frontend",
+    "generate": "npm run generate --prefix backend",
+    "prisma:migrate": "npm run prisma:migrate --prefix backend",
+    "prisma:create": "npm run prisma:create --prefix backend",
+    "prisma:reset": "npm run prisma:reset --prefix backend",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7"
   }
 }

@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+
+# Generated Prisma client
+backend/src/generated/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# PM2 logs
+logs/
+*.log
+
+# Coverage
+coverage/
+
+# Temp files
+tmp/
+temp/
