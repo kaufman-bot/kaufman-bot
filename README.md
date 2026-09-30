@@ -184,11 +184,22 @@ new-kaufman-bot/
 │   │   ├── schema.prisma # Схема базы данных
 │   │   └── migrations/   # Prisma-миграции
 │   ├── src/
-│   │   ├── controllers/  # REST-контроллеры
+│   │   ├── constants/    # Общие константы (X_API_KEY)
+│   │   ├── controllers/  # REST-контроллеры (time, health, auth, api-keys, admin)
+│   │   ├── dto/          # DTO-классы со Swagger-декораторами
+│   │   ├── guards/       # ApiKeyGuard (x-api-key) и AdminGuard (роль ADMIN)
+│   │   ├── interfaces/   # SseMessageEvent и др. типы
+│   │   ├── services/     # AuthService, UsersService, ApiKeysService
+│   │   ├── utils/        # Хелперы (хеширование, генерация ключей и т.п.)
 │   │   ├── prisma/       # PrismaService и PrismaModule
 │   │   ├── seed/         # Seed-сервисы (начальные данные)
-│   │   ├── generated/    # Сгенерированный Prisma Client
-│   │   └── main.ts       # Точка входа
+│   │   ├── generated/    # Сгенерированный Prisma Client (в .gitignore)
+│   │   └── main.ts       # Точка входа (Swagger + swagger.json)
+│   ├── test/
+│   │   ├── generated/    # OpenAPI SDK для e2e-тестов (npm run generate:openapi-ts)
+│   │   ├── utils/        # ActivityHelper, HTTP-фикстуры, проверка доступности backend
+│   │   └── *.e2e-spec.ts # E2E-тесты (бьют в уже запущенный backend)
+│   ├── openapi-ts.config.ts  # Генерация SDK из swagger.json
 │   └── package.json
 ├── frontend/             # Angular frontend
 │   ├── src/
@@ -215,12 +226,29 @@ Backend использует URI-версионирование. Все эндп
 
 ### Основные эндпоинты
 
-| Метод | Путь                  | Описание                                                 |
-| ----- | --------------------- | -------------------------------------------------------- |
-| GET   | `/api/v1`             | Приветственное сообщение                                 |
-| GET   | `/api/v1/time`        | Текущее время сервера (JSON)                             |
-| GET   | `/api/v1/time/stream` | SSE-поток с обновлением времени каждую секунду           |
-| GET   | `/api/v1/health`      | Проверка состояния системы (БД, память, CPU, статистика) |
+| Метод  | Путь                       | Описание                                                            |
+| ------ | -------------------------- | ------------------------------------------------------------------- |
+| GET    | `/api/v1/time`             | Текущее время сервера (JSON)                                        |
+| GET    | `/api/v1/time/stream`      | SSE-поток с обновлением времени каждую секунду                      |
+| GET    | `/api/v1/health`           | Проверка состояния системы (БД, память, CPU, статистика)            |
+| POST   | `/api/v1/auth/register`    | Регистрация USER-аккаунта, выдаёт первый API-ключ (секрет один раз) |
+| GET    | `/api/v1/auth/me`          | Профиль пользователя за предъявленным API-ключом                    |
+| GET    | `/api/v1/api-keys`         | Список ключей текущего аккаунта (секреты замаскированы)             |
+| POST   | `/api/v1/api-keys`         | Выпустить новый ключ для текущего аккаунта                          |
+| PATCH  | `/api/v1/api-keys/{id}`    | Переименовать / включить-выключить / продлить ключ                  |
+| DELETE | `/api/v1/api-keys/{id}`    | Отозвать и удалить ключ                                             |
+| GET    | `/api/v1/admin/users`      | Список всех аккаунтов с их ключами (только ADMIN)                   |
+| GET    | `/api/v1/admin/users/{id}` | Один аккаунт (только ADMIN)                                         |
+| PATCH  | `/api/v1/admin/users/{id}` | Деактивация/активация аккаунта, смена роли (только ADMIN)           |
+| DELETE | `/api/v1/admin/users/{id}` | Удаление аккаунта, ключи каскадно (только ADMIN)                    |
+| GET    | `/swagger`                 | Swagger UI (без глобального префикса `/api`)                        |
+
+Эндпоинты времени и здоровья публичные; `auth/me`, `api-keys/*` защищены
+`ApiKeyGuard`, а `admin/users/*` дополнительно `AdminGuard` (роль `ADMIN`,
+иначе `403`). Ключ передаётся заголовком `x-api-key` или параметром `?apiKey=`
+(для клиентов вроде `EventSource`, которые не могут задать заголовок); заголовок
+имеет приоритет. Секрет ключа показывается только в ответе создания —
+в остальных чтениях он маскируется (`sk-3f9c1…`).
 
 ### Примеры запросов
 
@@ -228,6 +256,39 @@ Backend использует URI-версионирование. Все эндп
 
 ```bash
 curl http://localhost:3000/api/v1/time
+```
+
+**Проверить API-ключ:**
+
+```bash
+curl -H "x-api-key: $ADMIN_API_KEY" http://localhost:3000/api/v1/auth/me
+```
+
+**Зарегистрировать аккаунт (в ответе — первый API-ключ):**
+
+```bash
+curl -X POST http://localhost:3000/api/v1/auth/register \
+  -H "content-type: application/json" \
+  -d '{ "email": "user@example.com", "password": "super-secret-123" }'
+```
+
+**Выпустить и отозвать ключ:**
+
+```bash
+curl -X POST http://localhost:3000/api/v1/api-keys \
+  -H "x-api-key: sk-..." -H "content-type: application/json" \
+  -d '{ "name": "CI pipeline", "expiresAt": "2026-12-31T23:59:59.000Z" }'
+
+curl -X DELETE http://localhost:3000/api/v1/api-keys/<id> -H "x-api-key: sk-..."
+```
+
+**Админ-операции (ключ аккаунта с ролью ADMIN):**
+
+```bash
+curl -H "x-api-key: $ADMIN_API_KEY" http://localhost:3000/api/v1/admin/users
+curl -X PATCH http://localhost:3000/api/v1/admin/users/<id> \
+  -H "x-api-key: $ADMIN_API_KEY" -H "content-type: application/json" \
+  -d '{ "isActive": false }'
 ```
 
 **Health check:**
@@ -279,8 +340,11 @@ curl http://localhost:3000/api/v1/health
 **Основные команды:**
 
 ```bash
-# Генерация Prisma Client
+# Генерация SDK для тестов + Prisma Client
 npm run generate
+
+# Только Prisma Client
+npm run generate:prisma
 
 # Применение миграций
 npm run prisma:migrate
@@ -482,23 +546,26 @@ MCP-серверы автоматически доступны AI-ассисте
 | `npm run start:prod`              | Запуск prod-окружения                     |
 | `npm run stop:prod`               | Остановка prod-окружения                  |
 | `npm run format`                  | Форматирование backend и frontend         |
-| `npm run generate`                | Генерация Prisma Client                   |
+| `npm run generate`                | Генерация OpenAPI SDK + Prisma Client     |
 | `npm run prisma:migrate`          | Применение миграций                       |
 | `npm run prisma:create -- <name>` | Создание новой миграции                   |
 | `npm run prisma:reset`            | Сброс базы данных                         |
 
 ### Backend скрипты
 
-| Команда              | Описание                            |
-| -------------------- | ----------------------------------- |
-| `npm run build`      | Сборка backend                      |
-| `npm run start`      | Запуск backend                      |
-| `npm run start:dev`  | Запуск backend в dev-режиме с watch |
-| `npm run start:prod` | Запуск backend в prod-режиме        |
-| `npm run lint`       | Запуск Oxlint                       |
-| `npm run test`       | Запуск unit-тестов (Vitest)         |
-| `npm run test:e2e`   | Запуск E2E-тестов                   |
-| `npm run format`     | Форматирование Prettier             |
+| Команда                       | Описание                                |
+| ----------------------------- | --------------------------------------- |
+| `npm run build`               | Сборка backend                          |
+| `npm run start`               | Запуск backend                          |
+| `npm run start:dev`           | Запуск backend в dev-режиме с watch     |
+| `npm run start:prod`          | Запуск backend в prod-режиме            |
+| `npm run lint`                | Запуск Oxlint                           |
+| `npm run test`                | Запуск unit-тестов (Vitest)             |
+| `npm run test:e2e`            | E2E-тесты против запущенного backend    |
+| `npm run generate`            | `openapi-ts` + `prisma generate`        |
+| `npm run generate:openapi-ts` | Генерация SDK для e2e из `swagger.json` |
+| `npm run generate:prisma`     | Только генерация Prisma Client          |
+| `npm run format`              | Форматирование Prettier                 |
 
 ### Frontend скрипты
 
@@ -521,6 +588,34 @@ npm run test          # Unit-тесты
 npm run test:e2e      # E2E-тесты
 npm run test:cov      # Покрытие кода
 ```
+
+**E2E-тесты не поднимают приложение.** Они работают с реально запущенным
+backend (по умолчанию `http://localhost:3000`) через типизированный SDK,
+сгенерированный из OpenAPI-спецификации.
+
+Порядок подготовки (выполняется один раз после изменений API):
+
+```bash
+cd backend
+npm run start:dev                 # backend writes ./swagger.json at boot
+npm run generate:openapi-ts       # swagger.json → test/generated/client
+npm run test:e2e                  # tests hit the running backend
+```
+
+- Адрес backend переопределяется: `E2E_BASE_URL=http://localhost:3001 npm run test:e2e`
+- `test/utils/activity-helper.ts` — обёртка над SDK (адаптация утилиты из
+  opwork): хранит API-ключ в заголовке `x-api-key` клиента и читает SSE через
+  `client.sse.get`
+- **Тесты не подключаются к базе.** Все фикстуры готовятся только через HTTP:
+  `POST /auth/register` создаёт аккаунт, `POST /api-keys` — ключи с нужными
+  свойствами (просроченный, отключённый, с будущим сроком), `PATCH /admin/users/:id`
+  деактивирует аккаунт, `DELETE /admin/users/:id` убирает за собой (рецепты —
+  `test/utils/fixtures.ts`)
+- `ADMIN_API_KEY` из `backend/.env` (сид-ключ администратора) обязателен для
+  teardown; `test/utils/api-result.ts` — чтение `message`/`status` ответов; а
+  `test/utils/ensure-backend.ts` падает с понятным сообщением, если backend не запущен
+- `test/generated/client` — сгенерированный SDK; не форматируется Prettier-ом
+  (см. `backend/.prettierignore`) и обновляется командой `generate:openapi-ts`
 
 ### Frontend (Karma + Jasmine)
 
@@ -565,6 +660,13 @@ npm run lint
 
 - **Не коммитьте** файл `backend/.env` (содержит секреты)
 - Измените `ADMIN_PASSWORD` и `ADMIN_API_KEY` в продакшене
+- Защищённые эндпоинты требуют действующий API-ключ (`ApiKeyGuard`): ключ
+  проверяется по заголовку `x-api-key`, затем по `?apiKey=`; отключённый или
+  просроченный ключ, а также неактивный пользователь дают `401`
+- В ответах секрет ключа маскируется (первые 8 символов + `…`)
+- `admin/users/*` доступны только роли `ADMIN` (`AdminGuard`, иначе `403`);
+  удалить собственный аккаунт нельзя, а ключи другого владельца редактируются
+  только им самим (`403`)
 - Используйте HTTPS в продакшене
 - Регулярно обновляйте зависимости (`npm audit`)
 
