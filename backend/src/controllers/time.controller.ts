@@ -20,7 +20,8 @@ export class TimeController {
   @ApiOperation({
     summary: 'Stream current server time every second (SSE)',
     description:
-      'Server-Sent Events stream; connects from the browser via EventSource.',
+      'Server-Sent Events stream; connects from the browser via EventSource. ' +
+      'Public like GET /time, so it takes no API key at all.',
   })
   @ApiOkResponse({
     description:

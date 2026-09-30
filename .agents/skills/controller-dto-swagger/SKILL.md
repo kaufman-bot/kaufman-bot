@@ -102,6 +102,9 @@ npm run test:e2e             # hits the running backend (E2E_BASE_URL override)
 Contract details that leak into the SDK, so declare them explicitly:
 
 - `@ApiHeader`/`@ApiQuery` decide whether the generated operation requires headers/query.
+- Declare auth channels (`x-api-key`, `?apiKey=`) **only on guarded handlers**. Anything
+  annotated here becomes part of the generated client, so documenting a key on a public
+  endpoint (e.g. `GET /time/stream`) advertises a credential the code never reads.
 - Error bodies need a DTO (`@ApiUnauthorizedResponse({ type: ApiErrorDto })`),
   otherwise the SDK types them as `unknown`.
 - Time/other scalars keep the DTO rule (`ServerTimeDto { time: string }`).

@@ -4,9 +4,9 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { writeFileSync } from 'fs';
 import { API_VERSION_V1 } from './api-version.js';
 import { AppModule, ObserveInstrument } from './app.module.js';
+import { X_API_KEY } from './constants/api-key.constants.js';
 
-/** Header name used to pass the API key (see the future auth guard). */
-export const X_API_KEY = 'x-api-key';
+export { X_API_KEY };
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
