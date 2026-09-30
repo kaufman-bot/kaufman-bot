@@ -116,7 +116,8 @@ scenario needs a user, an expired key or a deactivated account, there must be a
 controller method that creates that state over HTTP — add the missing endpoint instead
 of writing to the tables.
 
-The current surface used by fixtures (see `backend/test/utils/fixtures.ts`):
+The current surface used by fixtures (they are methods of `ActivityHelper`, see
+`backend/test/utils/activity-helper.ts`):
 
 | Need                             | Endpoint                                          |
 | -------------------------------- | ------------------------------------------------- |
@@ -134,6 +135,9 @@ Rules followed by those endpoints:
 - Secrets are revealed only in the create/registration response; every read masks them.
 - Teardown uses the ADMIN key from `ADMIN_API_KEY` (environment), so the suite leaves
   no rows behind.
+- Fixture recipes are not a separate module: `ActivityHelper` owns them —
+  `ensureBackendRunning()`, `loginAsAdmin()`, `registerAccount()`, `issueKey()`,
+  `removeAccountAsAdmin()`, plus the statics `adminApiKey()` / `isoFromNow()`.
 
 ## File Locations
 
@@ -146,4 +150,4 @@ Rules followed by those endpoints:
 | `backend/src/services/*.service.ts`           | Business logic + validation behind the handlers      |
 | `backend/openapi-ts.config.ts`                | Generates the e2e SDK from `swagger.json`            |
 | `backend/test/generated/client/`              | Generated SDK used by `ActivityHelper`               |
-| `backend/test/utils/fixtures.ts`              | HTTP-only test data recipes (no DB access)           |
+| `backend/test/utils/activity-helper.ts`       | SDK session + HTTP-only fixture recipes (no DB)      |

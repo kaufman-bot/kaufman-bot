@@ -607,15 +607,16 @@ npm run test:e2e                  # tests hit the running backend
 - Адрес backend переопределяется: `E2E_BASE_URL=http://localhost:3001 npm run test:e2e`
 - `test/utils/activity-helper.ts` — обёртка над SDK (адаптация утилиты из
   opwork): хранит API-ключ в заголовке `x-api-key` клиента и читает SSE через
-  `client.sse.get`
+  `client.sse.get`. Там же живут HTTP-фикстуры: `ensureBackendRunning()`
+  (падает с понятным сообщением, если backend не запущен), `loginAsAdmin()`,
+  `registerAccount(email)`, `issueKey(body)`, `removeAccountAsAdmin(id)` и
+  статики `adminApiKey()` / `isoFromNow(ms)`
 - **Тесты не подключаются к базе.** Все фикстуры готовятся только через HTTP:
   `POST /auth/register` создаёт аккаунт, `POST /api-keys` — ключи с нужными
   свойствами (просроченный, отключённый, с будущим сроком), `PATCH /admin/users/:id`
-  деактивирует аккаунт, `DELETE /admin/users/:id` убирает за собой (рецепты —
-  `test/utils/fixtures.ts`)
+  деактивирует аккаунт, `DELETE /admin/users/:id` убирает за собой
 - `ADMIN_API_KEY` из `backend/.env` (сид-ключ администратора) обязателен для
-  teardown; `test/utils/api-result.ts` — чтение `message`/`status` ответов; а
-  `test/utils/ensure-backend.ts` падает с понятным сообщением, если backend не запущен
+  teardown; `test/utils/api-result.ts` — чтение `message`/`status` ответов
 - `test/generated/client` — сгенерированный SDK; не форматируется Prettier-ом
   (см. `backend/.prettierignore`) и обновляется командой `generate:openapi-ts`
 
