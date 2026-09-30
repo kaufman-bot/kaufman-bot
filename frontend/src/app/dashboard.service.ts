@@ -1,12 +1,12 @@
-import {
-  Injectable,
-  signal,
-  DestroyRef,
-  inject,
-  PLATFORM_ID,
-} from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
+import {
+  DestroyRef,
+  inject,
+  Injectable,
+  PLATFORM_ID,
+  signal,
+} from '@angular/core';
 
 // Через dev-server proxy (proxy.conf.json) — запросы /api проксируются на бэкенд.
 const API_BASE = '/api';
@@ -85,9 +85,9 @@ export class DashboardService {
   }
 
   fetchRestTime() {
-    // GET /time returns a JSON-encoded ISO date string, e.g. "2026-...Z".
-    this.http.get<string>(`${API_V1}/time`).subscribe({
-      next: (data) => this.restTime.set(new Date(data).toLocaleString()),
+    // GET /time returns a ServerTimeDto: { time: ISO string }.
+    this.http.get<{ time: string }>(`${API_V1}/time`).subscribe({
+      next: (data) => this.restTime.set(new Date(data.time).toLocaleString()),
       error: () => this.restTime.set('нет данных'),
     });
   }

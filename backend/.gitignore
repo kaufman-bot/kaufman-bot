@@ -3,6 +3,9 @@
 /node_modules
 /build
 
+# generated swagger document
+/swagger.json
+
 # TypeScript build cache
 *.tsbuildinfo
 
