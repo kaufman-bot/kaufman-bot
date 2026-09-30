@@ -318,12 +318,7 @@ export type TimeControllerTimeV1Response = TimeControllerTimeV1Responses[keyof T
 export type TimeControllerStreamV1Data = {
     body?: never;
     path?: never;
-    query?: {
-        /**
-         * API key alternative for clients that cannot set headers (EventSource). Ignored when the x-api-key header is present.
-         */
-        apiKey?: string;
-    };
+    query?: never;
     url: '/api/v1/time/stream';
 };
 

@@ -67,7 +67,7 @@ export class Sdk extends HeyApiClient {
     /**
      * Stream current server time every second (SSE)
      *
-     * Server-Sent Events stream; connects from the browser via EventSource.
+     * Server-Sent Events stream; connects from the browser via EventSource. Public like GET /time, so it takes no API key at all.
      */
     public timeControllerStreamV1<ThrowOnError extends boolean = false>(options?: Options<TimeControllerStreamV1Data, ThrowOnError>): RequestResult<TimeControllerStreamV1Responses, unknown, ThrowOnError> {
         return (options?.client ?? this.client).get<TimeControllerStreamV1Responses, unknown, ThrowOnError>({ url: '/api/v1/time/stream', ...options });
