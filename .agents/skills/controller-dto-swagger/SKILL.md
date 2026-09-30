@@ -42,7 +42,10 @@ For each handler:
 
 ### Simple DTOs (single value / payload)
 
-Use a class with an explicit constructor: `new ServerTimeDto(new Date())`.
+Use a class with an explicit constructor: `new ServerTimeDto(new Date())`. Keep one
+unified value format across REST and SSE endpoints of the same feature (e.g. server time
+is always an ISO-8601 `string` field, serialized in the DTO constructor via
+`toISOString()`).
 
 ### Aggregate DTOs (nested data from many sources)
 
@@ -54,10 +57,11 @@ constructor.
 ### SSE handlers
 
 `@nestjs/common`'s `MessageEvent` is **not generic**. Use
-`SseMessageEvent<T>` from `backend/src/interfaces/sse-message-event.ts`. Register the
-event payload DTO with `@ApiExtraModels(<EventDto>)` on the controller and document the
-stream with `@ApiOkResponse({ content: { 'text/event-stream': { schema: { $ref:
-getSchemaPath(<EventDto>) } } } })` so the payload schema lands in `components.schemas`.
+`SseMessageEvent<T>` from `backend/src/interfaces/sse-message-event.ts` as the observable
+payload: `Observable<SseMessageEvent<EventDto>>`. Document the stream with
+`@ApiOkResponse({ type: EventDto })` (the event payload schema then appears in
+`components.schemas` via `$ref`); if the payload DTO is not referenced by any other
+handler, register it with `@ApiExtraModels(EventDto)` on the controller.
 
 ## Verification
 

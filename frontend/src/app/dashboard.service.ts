@@ -85,7 +85,7 @@ export class DashboardService {
   }
 
   fetchRestTime() {
-    // GET /time returns a ServerTimeDto: { time: ISO string }.
+    // GET /time returns a ServerTimeDto: { time: ISO-8601 string }.
     this.http.get<{ time: string }>(`${API_V1}/time`).subscribe({
       next: (data) => this.restTime.set(new Date(data.time).toLocaleString()),
       error: () => this.restTime.set('нет данных'),

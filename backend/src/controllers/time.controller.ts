@@ -1,17 +1,10 @@
 import { Controller, Get, Header, Logger, Sse } from '@nestjs/common';
-import {
-  ApiExtraModels,
-  ApiOkResponse,
-  ApiOperation,
-  ApiTags,
-  getSchemaPath,
-} from '@nestjs/swagger';
+import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { interval, map, Observable } from 'rxjs';
-import { ServerTimeDto, TimeStreamEventDto } from '../dto/time.dto.js';
+import { ServerTimeDto } from '../dto/time.dto.js';
 import { SseMessageEvent } from '../interfaces/sse-message-event.js';
 
 @ApiTags('time')
-@ApiExtraModels(TimeStreamEventDto)
 @Controller('time')
 export class TimeController {
   private logger = new Logger(TimeController.name);
@@ -30,23 +23,21 @@ export class TimeController {
       'Server-Sent Events stream; connects from the browser via EventSource.',
   })
   @ApiOkResponse({
-    description: 'SSE stream; each event data payload is a TimeStreamEventDto.',
-    content: {
-      'text/event-stream': {
-        schema: { $ref: getSchemaPath(TimeStreamEventDto) },
-      },
-    },
+    description:
+      'SSE stream; each event data payload is a ServerTimeDto — the same ' +
+      'ISO-8601 string format as GET /time.',
+    type: ServerTimeDto,
   })
   @Header('Content-Type', 'text/event-stream')
   @Header('Cache-Control', 'no-cache')
-  stream(): Observable<SseMessageEvent<TimeStreamEventDto>> {
+  stream(): Observable<SseMessageEvent<ServerTimeDto>> {
     this.logger.log('Streaming started');
     return interval(1000).pipe(
       map(
         () =>
           ({
-            data: new TimeStreamEventDto(new Date().toISOString()),
-          }) satisfies SseMessageEvent<TimeStreamEventDto>,
+            data: new ServerTimeDto(new Date()),
+          }) satisfies SseMessageEvent<ServerTimeDto>,
       ),
     );
   }
