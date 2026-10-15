@@ -27,7 +27,10 @@ jobs:
           cache-dependency-path: backend/package-lock.json
 
       - name: Install dependencies
-        run: npm ci
+        # --legacy-peer-deps: openapi-typescript@7 requires typescript@^5.x,
+        # but the project uses typescript@^6.0.3. The package is not actively
+        # used (only @hey-api/openapi-ts is), so we bypass the peer check.
+        run: npm ci --legacy-peer-deps
 
       - name: Prepare Prisma config
         # prisma.config.ts loads DATABASE_URL via dotenv; a dummy value is
