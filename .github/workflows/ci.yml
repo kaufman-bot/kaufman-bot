@@ -13,6 +13,10 @@ jobs:
   backend:
     name: Backend (NestJS)
     runs-on: ubuntu-latest
+    # dorny/test-reporter publishes results as check runs
+    permissions:
+      contents: read
+      checks: write
     defaults:
       run:
         working-directory: backend
@@ -55,11 +59,16 @@ jobs:
         with:
           name: Vitest Test Report
           path: backend/test-results/junit.xml
-          reporter: junit
+          # There is no plain 'junit' reporter: 'jest-junit' is the parser for
+          # generic JUnit XML (vitest's junit reporter emits the same schema).
+          reporter: jest-junit
 
   frontend:
     name: Frontend (Angular)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
     defaults:
       run:
         working-directory: frontend
@@ -91,4 +100,4 @@ jobs:
         with:
           name: Jest Test Report
           path: frontend/test-results/junit.xml
-          reporter: junit
+          reporter: jest-junit
