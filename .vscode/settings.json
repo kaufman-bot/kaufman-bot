@@ -82,10 +82,10 @@
     "NODE_ENV": "test"
   },
 
-  // ── MCP Servers ──
+  // ── MCP Servers (для VS Code; проектная конфигурация для Qoder/Claude Code/Cursor — в .mcp.json) ──
   "mcp": {
     "servers": {
-      "postgres-kaufman": {
+      "postgres": {
         "command": "npx",
         "args": [
           "-y",
@@ -103,11 +103,11 @@
       },
       "playwright": {
         "command": "npx",
-        "args": ["@playwright/mcp@latest"]
+        "args": ["-y", "@playwright/mcp@latest"]
       },
       "minio-storage": {
         "command": "npx",
-        "args": ["@pickstar-2002/minio-storage-mcp@latest"],
+        "args": ["-y", "@pickstar-2002/minio-storage-mcp@latest"],
         "env": {
           "MINIO_ACCESS_KEY": "minioadmin",
           "MINIO_ENDPOINT": "localhost",
@@ -115,6 +115,13 @@
           "MINIO_SECRET_KEY": "minioadmin123",
           "MINIO_USE_SSL": "false"
         }
+      },
+      "github": {
+        "command": "bash",
+        "args": [
+          "-c",
+          "T=\"$GITHUB_PERSONAL_ACCESS_TOKEN\"; [ -n \"$T\" ] || T=\"$(gh auth token)\"; exec docker run -i --rm -e GITHUB_PERSONAL_ACCESS_TOKEN=\"$T\" ghcr.io/github/github-mcp-server stdio --toolsets=default,actions,notifications"
+        ]
       }
     }
   }

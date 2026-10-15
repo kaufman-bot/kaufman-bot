@@ -1,0 +1,48 @@
+{
+  "mcpServers": {
+    "postgres": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-postgres",
+        "postgresql://kaufman:kaufman@localhost:5432/kaufman_bot?schema=public"
+      ],
+      "description": "PostgreSQL kaufman_bot — SQL-запросы для отладки и анализа (только чтение)"
+    },
+    "minio-storage": {
+      "command": "npx",
+      "args": ["-y", "@pickstar-2002/minio-storage-mcp@latest"],
+      "env": {
+        "MINIO_ENDPOINT": "localhost",
+        "MINIO_PORT": "29000",
+        "MINIO_ACCESS_KEY": "minioadmin",
+        "MINIO_SECRET_KEY": "minioadmin123",
+        "MINIO_USE_SSL": "false"
+      },
+      "description": "MinIO (localhost:29000) — файлы, бакеты, presigned URLs"
+    },
+    "github": {
+      "command": "bash",
+      "args": [
+        "-c",
+        "T=\"$GITHUB_PERSONAL_ACCESS_TOKEN\"; [ -n \"$T\" ] || T=\"$(gh auth token)\"; exec docker run -i --rm -e GITHUB_PERSONAL_ACCESS_TOKEN=\"$T\" ghcr.io/github/github-mcp-server stdio --toolsets=default,actions,notifications"
+      ],
+      "description": "GitHub — репозитории, issues, pull requests, Actions CI, уведомления. Токен: env GITHUB_PERSONAL_ACCESS_TOKEN либо gh auth token"
+    },
+    "context7": {
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp@latest"],
+      "description": "Актуальная документация библиотек и фреймворков"
+    },
+    "sequential-thinking": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"],
+      "description": "Пошаговое структурированное решение сложных задач"
+    },
+    "playwright": {
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@latest"],
+      "description": "Браузерная автоматизация и E2E-тестирование"
+    }
+  }
+}
