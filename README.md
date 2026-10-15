@@ -75,8 +75,9 @@ npm run start:dev
 
 | MCP-сервер            | Подключение                  | Статус                                |
 | --------------------- | ---------------------------- | ------------------------------------- |
-| `postgres-kaufman`    | `localhost:5432/kaufman_bot` | ✅ готов после `docker compose up -d` |
+| `postgres`            | `localhost:5432/kaufman_bot` | ✅ готов после `docker compose up -d` |
 | `minio-storage`       | `localhost:29000`            | ✅ готов после `docker compose up -d` |
+| `github`              | GitHub API через Docker      | ✅ готов после `gh auth login`        |
 | `context7`            | интернет                     | ✅ всегда доступен                    |
 | `sequential-thinking` | —                            | ✅ всегда доступен                    |
 | `playwright`          | —                            | ✅ всегда доступен                    |
@@ -174,9 +175,10 @@ npm run stop:prod
 
 ```
 new-kaufman-bot/
+├── .mcp.json               # Проектные MCP-серверы (Qoder, Claude Code, Cursor)
 ├── .vscode/                # VS Code конфигурация
 │   ├── extensions.json     # Рекомендуемые расширения
-│   ├── settings.json       # Настройки редактора + MCP-серверы
+│   ├── settings.json       # Настройки редактора + MCP-серверы (для VS Code)
 │   ├── launch.json         # Конфигурации отладки
 │   └── tasks.json          # Задачи сборки/тестирования
 ├── backend/              # NestJS backend
@@ -434,6 +436,13 @@ code --install-extension prisma.prisma
 
 Проект интегрирован с MCP-серверами для расширения возможностей AI-ассистента.
 
+**Где хранится конфигурация:**
+
+- `.mcp.json` (корень проекта) — для Qoder, Claude Code и Cursor; при первом открытии проекта Qoder запросит подтверждение проектных MCP-серверов
+- `.vscode/settings.json` (блок `mcp`) — для VS Code
+
+Серверы `browser-use` и `genui` встроены в IDE (уровень пользователя) и в конфигурации проекта не нуждаются.
+
 ### Доступные MCP-серверы
 
 #### 1. **postgres** — Работа с PostgreSQL
@@ -523,6 +532,26 @@ AI выполнит: SELECT * FROM users LIMIT 10;
 - Пошаговое решение
 - Анализ проблем
 
+#### 8. **github** — GitHub API
+
+Официальный GitHub MCP Server (`ghcr.io/github/github-mcp-server`, запускается в Docker) для работы с репозиторием из AI-ассистента.
+
+**Возможности:**
+
+- Репозитории, ветки, файлы и коммиты (`search_repositories`, `get_file_contents`, `create_branch`, `push_files`)
+- Issues: поиск, комментарии, обновления (`search_issues`, `list_issues`, `add_issue_comment`)
+- Pull requests: создание, ревью, мерж (`create_pull_request`, `merge_pull_request`)
+- GitHub Actions: статусы запусков, логи джобов, триггер воркфлоу (`actions_list`, `get_job_logs`, `actions_run_trigger`)
+- Уведомления (`list_notifications`, `dismiss_notification`)
+
+**Токен доступа** берётся из переменной окружения `GITHUB_PERSONAL_ACCESS_TOKEN`, а если она не задана — из GitHub CLI:
+
+```bash
+gh auth login   # однократная авторизация; проверить: gh auth status
+```
+
+Токен в репозитории не хранится.
+
 ### Как использовать MCP
 
 MCP-серверы автоматически доступны AI-ассистенту при работе с проектом. Просто опишите задачу на естественном языке:
@@ -533,6 +562,7 @@ MCP-серверы автоматически доступны AI-ассисте
 - "Сделай скриншот главной страницы"
 - "Загрузи файл в MinIO"
 - "Проверь состояние API через браузер"
+- "Покажи упавшие шаги в последнем запуске GitHub Actions"
 
 ---
 
