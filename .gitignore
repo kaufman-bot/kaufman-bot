@@ -30,6 +30,9 @@ logs/
 # Coverage
 coverage/
 
+# Test results
+test-results/
+
 # Temp files
 tmp/
 temp/

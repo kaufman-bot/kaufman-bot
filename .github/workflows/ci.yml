@@ -49,6 +49,14 @@ jobs:
       - name: Unit tests
         run: npm test
 
+      - name: Publish test results
+        if: always()
+        uses: dorny/test-reporter@v1
+        with:
+          name: Vitest Test Report
+          path: backend/test-results/junit.xml
+          reporter: junit
+
   frontend:
     name: Frontend (Angular)
     runs-on: ubuntu-latest
@@ -76,3 +84,11 @@ jobs:
 
       - name: Unit tests
         run: npm test
+
+      - name: Publish test results
+        if: always()
+        uses: dorny/test-reporter@v1
+        with:
+          name: Jest Test Report
+          path: frontend/test-results/junit.xml
+          reporter: junit
