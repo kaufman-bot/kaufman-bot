@@ -22,9 +22,10 @@ services:
   minio:
     # Официальные образы MinIO сняты с публичной раздачи: анонимный pull
     # minio/minio с Docker Hub и с quay.io даёт «pull access denied», репозиторий
-    # заархивирован. Взяты последний общедоступный build MinIO 2025.5.24 из
-    # legacy-каталога Bitnami (тот же бинарь minio, проверено: health + S3 put/get).
-    image: docker.io/bitnamilegacy/minio:2025.5.24-debian-12-r5
+    # заархивирован. Взят последний публично тянущийся (в том числе анонимно)
+    # build того же minio из legacy-каталога Bitnami — 2025.7.23, он свежее,
+    # чем их `latest` (2025.5.24). Проверено: /minio/health/live, консоль и S3 put/get.
+    image: docker.io/bitnamilegacy/minio:2025.7.23-debian-12-r0
     container_name: kaufman-bot-minio
     # Образ по умолчанию работает под uid 1001, а /data в томе создан владельцем
     # root (его записывал предыдущий образ): без user: root minio не может

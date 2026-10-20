@@ -116,6 +116,25 @@ jobs:
           echo "::error::backend did not answer GET /api/v1/health within 120s"
           exit 1
 
+      - name: Dump stack diagnostics on failure
+        if: failure()
+        # start:prod падает задолго до тестов, поэтому при любой ошибке до e2e
+        # печатаем состояние PM2/docker/портов — иначе на разбор нужен ещё один прогон.
+        run: |
+          set +e
+          echo '--- pm2 processes ---'
+          npx -y pm2 list
+          echo '--- pm2 logs (tail 80) ---'
+          npx -y pm2 logs --nostream --lines 80
+          echo '--- docker compose ps ---'
+          docker compose ps
+          echo '--- docker compose logs (tail 60) ---'
+          docker compose logs --tail 60
+          echo '--- listeners on :3000 / :5432 ---'
+          ss -ltnp | grep -E ':(3000|5432)' || echo 'nothing listening'
+          echo '--- backend/.env keys (значения не печатаем) ---'
+          cut -d= -f1 backend/.env
+
       - name: Backend e2e (generated SDK against the running prod backend)
         id: backend_e2e
         working-directory: backend

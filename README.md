@@ -192,6 +192,8 @@ npm run stop:prod
 ```
 new-kaufman-bot/
 ├── .mcp.json               # Проектные MCP-серверы (Qoder, Claude Code, Cursor)
+├── .gitmodules             # Маппинг gitlink'а opwork/ на URL (без него любые
+│                           # `git submodule …` падают с exit 128)
 ├── .github/workflows/
 │   ├── ci.yml              # Линт + сборка + unit-тесты backend/frontend на push в main
 │   └── e2e-prod.yml        # Ручной прогон: start:prod + e2e фронта и бэка + stop:prod
@@ -239,6 +241,9 @@ new-kaufman-bot/
 ├── stop-dev.sh           # Скрипт остановки dev
 ├── start-prod.sh         # Скрипт запуска prod
 ├── stop-prod.sh          # Скрипт остановки prod
+├── opwork/               # Справочный проект: gitlink на site15/opwork, в .gitignore;
+│                         # инициализируется только по запросу (`git submodule update
+│                         # --init opwork`), CI его не трогает
 └── package.json          # Корневые скрипты
 ```
 
@@ -345,11 +350,32 @@ curl http://localhost:3000/api/v1/health
 - User: `kaufman`
 - Password: `kaufman`
 
-**Том данных:** `kaufman_bot_postgres_volume` (монтируется в `/var/lib/postgresql`)
+**Том данных:** `new-kaufman-bot_kaufman_bot_postgres_volume` (монтируется в `/var/lib/postgresql`;
+префикс — имя compose-проекта, то есть имя каталога репозитория)
 
 ### MinIO (S3-совместимое хранилище)
 
-Проект включает MinIO для хранения файлов и медиа-объектов.
+Проект включает MinIO как S3-совместимое хранилище: сервис поднимается
+`docker compose up -d` и подключается из MCP `minio-storage`, но бэкенд пока
+не пишет в него (в `backend/src` нет S3-клиента и `MINIO_*` переменных).
+
+**Образ:** `docker.io/bitnamilegacy/minio:2025.7.23-debian-12-r0`. Официальные
+образы MinIO (`minio/minio` на Docker Hub и quay.io) сняты с публичной раздачи —
+анонимный pull даёт `pull access denied`, из-за чего `npm run start:prod` падал
+на `docker compose up -d` на чистом раннере. Взята последняя общедоступная
+(в том числе анонимно) сборка того же `minio` из legacy-каталога Bitnami —
+обратите внимание: её тег `latest` завис на 2025.5.24, поэтому фиксируем явный
+`2025.7.23-debian-12-r0`. Образ по умолчанию работает под uid 1001, а том
+`/data` записан root'ом, поэтому в compose явно указан `user: root` (иначе
+`file access denied` при инициализации `.minio.sys`).
+
+⚠️ Локальный том, созданный более новым официальным билдом (например
+`RELEASE.2025-09-07`), при пересоздании контейнера на 2025.7.23 может быть
+отклонён как «из будущей версии». Пока бэкенд в MinIO ничего не пишет, это
+некритично: поможет пересоздание тома (`docker compose down` +
+`docker volume rm new-kaufman-bot_kaufman_bot_minio_volume`). Действующий
+контейнер с закэшированным старым образом продолжает работать как раньше —
+смена образа применяется только при следующем `docker compose up -d`.
 
 **Параметры подключения:**
 
@@ -357,7 +383,7 @@ curl http://localhost:3000/api/v1/health
 - Web Console: http://localhost:29001
 - Login: `minioadmin` / `minioadmin123`
 
-**Том данных:** `kaufman_bot_minio_volume`
+**Том данных:** `new-kaufman-bot_kaufman_bot_minio_volume` (монтируется в `/data`)
 
 ### Prisma ORM
 
@@ -729,7 +755,10 @@ JUnit-отчёты публикуются шагом `dorny/test-reporter` (`rep
 
 Шаги джоба (один раннер, поэтому стек живёт внутри одного джоба):
 
-1. два `actions/checkout` и сборка рабочего дерева из двух refs;
+1. checkout `backend_branch` + наложение `frontend/` из `frontend_branch` через
+   `git archive` — второй `actions/checkout` на вложенный путь запускает
+   `git submodule foreach` и падает (exit 128) на ref'ах, где gitlink `opwork/`
+   не описан в `.gitmodules` (старые ветки/теги);
 2. `npm ci` обоих проектов, `prisma generate`, `backend/.env` из `.env.example`;
 3. `npm run start:prod` — docker compose (PostgreSQL/MinIO) → миграции → сборка
    фронта и бэка → PM2; далее ожидание `GET /api/v1/health`;
