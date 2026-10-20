@@ -154,12 +154,28 @@ npm run start:prod
 Скрипт выполнит:
 
 1. Создание `backend/.env` из `.env.example` (если отсутствует)
-2. Запуск PostgreSQL в Docker
-3. Ожидание healthcheck базы данных
-4. Сборку frontend (`npm run build`)
-5. Применение Prisma-миграций
-6. Сборку backend (`npm run build`)
+2. Сборку frontend (`npm run build`)
+3. Сборку backend (`npm run build`)
+4. Запуск PostgreSQL в Docker
+5. Ожидание healthcheck базы данных
+6. Применение Prisma-миграций
 7. Запуск backend в cluster mode через PM2 (с ограничением памяти 1GB)
+
+После запуска backend сам раздаёт собранный фронтенд как статику
+(`@nestjs/serve-static`, путь `backend/client/browser`): фронтенд,
+API и Swagger UI работают на одном порту 3000. Отдельный сервер для фронта в
+prod не нужен; Angular SSR-сервер не запускается — страницы отдаются
+пререндеренными и гидрируются на клиенте.
+
+В dev-режиме (`npm run start:dev`) `ServeStaticModule` не подключается —
+фронтенд живёт на отдельном dev-сервере Angular (порт 4200) с прокси `/api`
+на backend. Статика раздаётся только при `NODE_ENV=production`.
+
+**Доступ (prod):**
+
+- Frontend: http://localhost:3000 (статика из `backend/client/browser`)
+- Backend API: http://localhost:3000/api/v1
+- Swagger UI: http://localhost:3000/swagger
 
 **Остановка:**
 
@@ -585,19 +601,19 @@ MCP-серверы автоматически доступны AI-ассисте
 
 ### Backend скрипты
 
-| Команда                       | Описание                                |
-| ----------------------------- | --------------------------------------- |
-| `npm run build`               | Сборка backend                          |
-| `npm run start`               | Запуск backend                          |
-| `npm run start:dev`           | Запуск backend в dev-режиме с watch     |
-| `npm run start:prod`          | Запуск backend в prod-режиме            |
-| `npm run lint`                | Запуск Oxlint                           |
-| `npm run test`                | Запуск unit-тестов (Vitest)             |
-| `npm run test:e2e`            | E2E-тесты против запущенного backend    |
-| `npm run generate`            | `openapi-ts` + `prisma generate`        |
-| `npm run generate:openapi-ts` | Генерация SDK для e2e из `swagger.json` |
-| `npm run generate:prisma`     | Только генерация Prisma Client          |
-| `npm run format`              | Форматирование Prettier                 |
+| Команда                       | Описание                                                                               |
+| ----------------------------- | -------------------------------------------------------------------------------------- |
+| `npm run build`               | Сборка backend                                                                         |
+| `npm run start`               | Запуск backend                                                                         |
+| `npm run start:dev`           | Запуск backend в dev-режиме с watch                                                    |
+| `npm run start:prod`          | Запуск backend в prod-режиме (`NODE_ENV=production`, со статикой собранного фронтенда) |
+| `npm run lint`                | Запуск Oxlint                                                                          |
+| `npm run test`                | Запуск unit-тестов (Vitest)                                                            |
+| `npm run test:e2e`            | E2E-тесты против запущенного backend                                                   |
+| `npm run generate`            | `openapi-ts` + `prisma generate`                                                       |
+| `npm run generate:openapi-ts` | Генерация SDK для e2e из `swagger.json`                                                |
+| `npm run generate:prisma`     | Только генерация Prisma Client                                                         |
+| `npm run format`              | Форматирование Prettier                                                                |
 
 ### Frontend скрипты
 
@@ -710,6 +726,7 @@ npm run lint
 ### Backend
 
 - **NestJS 12** — Node.js framework
+- **@nestjs/serve-static** — Раздача собранного Angular-фронтенда из backend в prod
 - **Prisma 7** — ORM с типобезопасностью
 - **PostgreSQL 18** — Реляционная БД
 - **pgvector** — Векторные типы для AI/ML
@@ -770,6 +787,12 @@ rm -rf ~/.npm/_npx/*
 **Причина:** Angular dev-server блокирует неизвестные хосты
 
 **Решение:** Проверьте `frontend/angular.json` — секция `serve.options.allowedHosts` должна содержать хост туннеля.
+
+### В dev-режиме на http://localhost:3000 открывается страница фронтенда
+
+**Причина:** `NODE_ENV=production` установлен явно или через `.env`
+
+**Решение:** Убедитесь, что `NODE_ENV` не установлен в dev-окружении. В `start:dev` скрипте `NODE_ENV` не задаётся — фронтенд живёт на порту 4200.
 
 ---
 
