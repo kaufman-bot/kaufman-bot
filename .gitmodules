@@ -1,0 +1,3 @@
+[submodule "opwork"]
+	path = opwork
+	url = https://github.com/site15/opwork.git

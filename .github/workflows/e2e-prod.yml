@@ -39,28 +39,35 @@ jobs:
         with:
           ref: ${{ inputs.backend_branch }}
 
-      - name: Checkout frontend branch (${{ inputs.frontend_branch }})
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.frontend_branch }}
-          path: .branch-frontend
-          fetch-depth: 1
-          persist-credentials: false
-
-      - name: Assemble the workspace from the two branches
+      - name: Overlay frontend/ from ${{ inputs.frontend_branch }}
+        # Второй actions/checkout на вложенный путь запускает `git submodule foreach`
+        # и падает (exit 128) на любом ref, где gitlink opwork/ не описан в .gitmodules
+        # — а такие ветки/теги тут selectable. Поэтому frontend/ накладывается из того
+        # же уже склонированного репозитория через git archive: без вложенного .git,
+        # без submodule-обходов и одной network-операцией меньше.
         run: |
           set -euo pipefail
-          if [ ! -d .branch-frontend/frontend ]; then
-            echo "::error::Branch '${{ inputs.frontend_branch }}' does not contain frontend/"
+          fe='${{ inputs.frontend_branch }}'
+          ref=refs/remotes/e2e-frontend
+
+          if ! git fetch --no-tags --depth=1 origin "+refs/heads/${fe}:${ref}" &&
+             ! git fetch --no-tags --depth=1 origin "+refs/tags/${fe}:${ref}"; then
+            echo "::error::Ref '${fe}' is not found in the repository (as a branch or as a tag)"
             exit 1
           fi
+
+          if ! git ls-tree --name-only "${ref}" -- frontend | grep -qx frontend; then
+            echo "::error::Ref '${fe}' does not contain frontend/"
+            exit 1
+          fi
+
           rm -rf frontend
-          mv .branch-frontend/frontend ./frontend
-          rm -rf .branch-frontend
+          git archive "${ref}" frontend | tar -x
+
           {
             echo "## E2E Prod"
-            echo "- backend/  ← \`${{ inputs.backend_branch }}\`"
-            echo "- frontend/ ← \`${{ inputs.frontend_branch }}\`"
+            echo "- backend/  ← \`${{ inputs.backend_branch }}\` ($(git rev-parse --short HEAD))"
+            echo "- frontend/ ← \`${fe}\` ($(git rev-parse --short "${ref}"))"
           } >>"$GITHUB_STEP_SUMMARY"
 
       - uses: actions/setup-node@v4
@@ -164,6 +171,9 @@ jobs:
 
       - name: Stop production stack
         if: always()
+        # Cleanup-шаг не должен красить джоб сам по себе: если start:prod не
+        # состоялся, `pm2 delete all` возвращает 1 («No process found»).
+        continue-on-error: true
         # pm2 delete all + docker compose down (именованные тома остаются).
         run: npm run stop:prod
 

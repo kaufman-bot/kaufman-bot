@@ -36,6 +36,11 @@ playwright-report/
 # Test results
 test-results/
 
+# Справочный проект opwork: в индексе он gitlink (160000), а на диске —
+# независимый клон со своей историей, поэтому его содержимое не должно
+# попадать в status этого репозитория.
+opwork/
+
 # Temp files
 tmp/
 temp/
