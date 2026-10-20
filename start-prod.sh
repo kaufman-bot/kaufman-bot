@@ -7,6 +7,16 @@ if [ ! -f ./backend/.env ]; then
   cp ./backend/.env.example ./backend/.env
 fi
 
+echo "▶ Building frontend..."
+cd ./frontend
+npm run build
+cd ..
+
+echo "▶ Building backend..."
+cd ./backend
+npm run build
+cd ..
+
 echo "▶ Starting infrastructure (Docker)..."
 docker compose up -d
 
@@ -17,15 +27,9 @@ while [ "$(docker inspect --format='{{json .State.Health}}' kaufman-bot-db 2>/de
 done
 echo "PostgreSQL is healthy"
 
-echo "▶ Building frontend..."
-cd ./frontend
-npm run build
-cd ..
-
 echo "▶ Running Prisma migrations..."
 cd ./backend
 npx prisma migrate deploy
-npm run build
 cd ..
 
 echo "▶ Starting production services via PM2..."
