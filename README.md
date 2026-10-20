@@ -192,6 +192,9 @@ npm run stop:prod
 ```
 new-kaufman-bot/
 ├── .mcp.json               # Проектные MCP-серверы (Qoder, Claude Code, Cursor)
+├── .github/workflows/
+│   ├── ci.yml              # Линт + сборка + unit-тесты backend/frontend на push в main
+│   └── e2e-prod.yml        # Ручной прогон: start:prod + e2e фронта и бэка + stop:prod
 ├── .vscode/                # VS Code конфигурация
 │   ├── extensions.json     # Рекомендуемые расширения
 │   ├── settings.json       # Настройки редактора + MCP-серверы (для VS Code)
@@ -225,6 +228,9 @@ new-kaufman-bot/
 │   │   │   ├── dashboard.service.ts  # Сервис дашборда
 │   │   │   └── app.component.ts      # Главный компонент
 │   │   └── proxy.conf.json  # Прокси /api на backend
+│   ├── e2e/                # Playwright-спеки (e2e против живого прод-стека)
+│   ├── playwright.config.ts # Конфиг Playwright + JUnit-отчёт в test-results/
+│   ├── jest.config.js      # Конфиг Jest + jest-junit отчёт
 │   └── package.json
 ├── docker-compose.yml    # PostgreSQL + MinIO
 ├── ecosystem.config.cjs  # PM2 config для dev
@@ -617,12 +623,15 @@ MCP-серверы автоматически доступны AI-ассисте
 
 ### Frontend скрипты
 
-| Команда         | Описание                        |
-| --------------- | ------------------------------- |
-| `npm run start` | Запуск Angular dev-server       |
-| `npm run build` | Сборка frontend                 |
-| `npm run watch` | Сборка в watch-режиме           |
-| `npm run test`  | Запуск тестов (Karma + Jasmine) |
+| Команда                    | Описание                                      |
+| -------------------------- | --------------------------------------------- |
+| `npm run start`            | Запуск Angular dev-server                     |
+| `npm run build`            | Сборка frontend                               |
+| `npm run watch`            | Сборка в watch-режиме                         |
+| `npm run lint`             | Angular ESLint (ng lint)                      |
+| `npm run test`             | Unit-тесты (Jest + jest-preset-angular)       |
+| `npm run test:e2e`         | E2E-тесты Playwright против запущенного стека |
+| `npm run test:e2e:install` | Скачивание браузера Chromium для Playwright   |
 
 ---
 
@@ -666,12 +675,72 @@ npm run test:e2e                  # tests hit the running backend
 - `test/generated/client` — сгенерированный SDK; не форматируется Prettier-ом
   (см. `backend/.prettierignore`) и обновляется командой `generate:openapi-ts`
 
-### Frontend (Karma + Jasmine)
+### Frontend (Jest + Playwright)
 
 ```bash
 cd frontend
-npm run test
+npm run test              # Unit-тесты (Jest, jsdom)
+npm run test:e2e:install  # один раз: скачать Chromium
+npm run test:e2e          # E2E-тесты (Playwright)
 ```
+
+**E2E-набор тоже ничего не запускает.** `e2e/dashboard.spec.ts` открывает реальный
+Chromium на `http://localhost:3000` — туда `npm run start:prod` поднимает backend,
+который в prod раздаёт собранный фронтенд (ServeStaticModule). Поэтому перед
+прогоном нужен живой стек (`npm run start:prod` из корня). Для dev-цикла
+подходит и `ng serve` с прокси `/api`:
+`E2E_BASE_URL=http://localhost:4200 npm run test:e2e`.
+
+Проверяется контракт UI и API: отдача собранного фронтенда, `GET /api/v1/health`
+(карточки статуса и статистики), `EventSource` на `/api/v1/time/stream`, кнопка
+«Обновить по REST» (`GET /api/v1/time`).
+
+### JUnit-отчёты
+
+Оба проекта пишут JUnit XML — их забирает GitHub Actions и публикует как чеки:
+
+| Отчёт                                 | Кто генерирует                          |
+| ------------------------------------- | --------------------------------------- |
+| `backend/test-results/junit.xml`      | `vitest.config.ts` (unit)               |
+| `backend/test-results/e2e-junit.xml`  | `vitest.config.e2e.ts` (e2e)            |
+| `frontend/test-results/junit.xml`     | `jest.config.js` (jest-junit)           |
+| `frontend/test-results/e2e-junit.xml` | `playwright.config.ts` (reporter junit) |
+
+---
+
+## ⚙️ GitHub Actions
+
+### `ci.yml` — автоматически на каждый push в main
+
+Два параллельных джоба: backend (`npm ci --legacy-peer-deps` → prisma generate →
+oxlint → nest build → Vitest) и frontend (`npm ci` → ng lint → ng build → Jest).
+JUnit-отчёты публикуются шагом `dorny/test-reporter` (`reporter: jest-junit` —
+у экшена нет значения `junit`, generic JUnit XML читает парсер jest-junit).
+
+### `e2e-prod.yml` — ручной прогон живого прод-стека
+
+Запускается из вкладки **Actions → E2E Prod → Run workflow**; в форме выбираются
+две ветки одного монорепозитория:
+
+| Поле              | Что берётся из ветки                                                                      |
+| ----------------- | ----------------------------------------------------------------------------------------- |
+| `backend_branch`  | `backend/` и корневая инфраструктура (docker-compose, ecosystem-prod, start/stop-скрипты) |
+| `frontend_branch` | `frontend/`                                                                               |
+
+Шаги джоба (один раннер, поэтому стек живёт внутри одного джоба):
+
+1. два `actions/checkout` и сборка рабочего дерева из двух refs;
+2. `npm ci` обоих проектов, `prisma generate`, `backend/.env` из `.env.example`;
+3. `npm run start:prod` — docker compose (PostgreSQL/MinIO) → миграции → сборка
+   фронта и бэка → PM2; далее ожидание `GET /api/v1/health`;
+4. `npm run test:e2e` в backend (SDK по реальному API) и в frontend (Playwright);
+5. публикация обоих JUnit-отчётов в чеки (`dorny/test-reporter`) и загрузка
+   артефактов (HTML-отчёт Playwright, трейсы, XML);
+6. `npm run stop:prod` — всегда (`if: always()`), даже если тесты упали;
+7. финальный шаг красит джоб, если любая из e2e-подводок провалилась.
+
+Прогоны не параллелятся (`concurrency.group: e2e-prod`), потому что занимают
+порты 3000/5432/29000 на хосте раннера.
 
 ---
 

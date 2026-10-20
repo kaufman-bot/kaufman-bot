@@ -30,6 +30,9 @@ logs/
 # Coverage
 coverage/
 
+# Playwright e2e-отчёты (junit/xml, html-репорт, трейсы)
+playwright-report/
+
 # Test results
 test-results/
 

@@ -9,5 +9,11 @@ export default defineConfig({
     setupFiles: ['test/setup-env.ts'],
     include: ['**/*.e2e-spec.ts'],
     passWithNoTests: true,
+    // Отдельный JUnit-отчёт (юниты пишут test-results/junit.xml): CI публикует
+    // его в чеки GitHub Actions через dorny/test-reporter.
+    reporters: ['default', 'junit'],
+    outputFile: {
+      junit: './test-results/e2e-junit.xml',
+    },
   },
 });

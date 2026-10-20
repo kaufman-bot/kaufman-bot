@@ -1,0 +1,176 @@
+name: E2E Prod
+
+# Ручной прогон прод-стека вместе с инфраструктурой и e2e-тестами фронта и бэка.
+# Ветки для backend/ и frontend/ выбираются в форме запуска: монорепозиторий,
+# поэтому рабочее дерево собирается из двух refs — инфраструктура корня
+# (docker-compose, ecosystem-prod, start/stop-скрипты) берётся из backend-ветки.
+on:
+  workflow_dispatch:
+    inputs:
+      backend_branch:
+        description: 'Ветка для backend/ и корневой инфраструктуры'
+        type: string
+        required: false
+        default: main
+      frontend_branch:
+        description: 'Ветка для frontend/'
+        type: string
+        required: false
+        default: main
+
+# Прод-стек занимает порты 3000/5432/29000 на хосте раннера — прогоны не
+# параллелим, и отмену по push не включаем (иначе стек останется без остановки).
+concurrency:
+  group: e2e-prod
+  cancel-in-progress: false
+
+jobs:
+  e2e-prod:
+    name: start:prod + e2e (backend, frontend)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    # dorny/test-reporter создаёт check-runs, upload-artifact пишет артефакты.
+    permissions:
+      contents: read
+      checks: write
+    steps:
+      - name: Checkout backend branch (${{ inputs.backend_branch }})
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.backend_branch }}
+
+      - name: Checkout frontend branch (${{ inputs.frontend_branch }})
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.frontend_branch }}
+          path: .branch-frontend
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Assemble the workspace from the two branches
+        run: |
+          set -euo pipefail
+          if [ ! -d .branch-frontend/frontend ]; then
+            echo "::error::Branch '${{ inputs.frontend_branch }}' does not contain frontend/"
+            exit 1
+          fi
+          rm -rf frontend
+          mv .branch-frontend/frontend ./frontend
+          rm -rf .branch-frontend
+          {
+            echo "## E2E Prod"
+            echo "- backend/  ← \`${{ inputs.backend_branch }}\`"
+            echo "- frontend/ ← \`${{ inputs.frontend_branch }}\`"
+          } >>"$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: backend
+        # --legacy-peer-deps: openapi-typescript@7 требует typescript@^5.x,
+        # а в проекте typescript@^6 (тот же приём, что и в ci.yml).
+        run: npm ci --legacy-peer-deps
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Prepare backend/.env
+        # start-prod.sh создаёт его сам, но Prisma Client генерируется раньше —
+        # prisma.config.ts читает DATABASE_URL через dotenv.
+        run: |
+          [ -f backend/.env ] || cp backend/.env.example backend/.env
+
+      - name: Generate Prisma client
+        working-directory: backend
+        run: npm run generate:prisma
+
+      - name: Start production stack (infra + PM2)
+        # docker compose up (PostgreSQL/MinIO) → migrate deploy → сборка фронта и
+        # бэка → pm2 start; фронт раздаётся бэкендом на :3000 (ServeStaticModule).
+        run: npm run start:prod
+
+      - name: Wait for the backend to answer
+        run: |
+          set -euo pipefail
+          for _ in $(seq 1 60); do
+            if curl -fsS http://localhost:3000/api/v1/health >/dev/null 2>&1; then
+              echo "Backend is up on :3000"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::backend did not answer GET /api/v1/health within 120s"
+          exit 1
+
+      - name: Backend e2e (generated SDK against the running prod backend)
+        id: backend_e2e
+        working-directory: backend
+        # continue-on-error: второй набор и публикация отчётов должны отработать
+        # в любом случае, а итог подведёт шаб «Fail when e2e suites failed».
+        continue-on-error: true
+        run: npm run test:e2e
+
+      - name: Install Playwright browser
+        working-directory: frontend
+        # --with-deps ставит системные библиотеки через sudo — на GitHub-раннере
+        # это passwordless, локально же лучше `npm run test:e2e:install`.
+        run: npx playwright install --with-deps chromium
+
+      - name: Frontend e2e (Playwright against the prod UI on :3000)
+        id: frontend_e2e
+        working-directory: frontend
+        continue-on-error: true
+        env:
+          E2E_BASE_URL: http://localhost:3000
+        run: npm run test:e2e
+
+      - name: Publish backend e2e results to checks
+        if: always() && hashFiles('backend/test-results/e2e-junit.xml') != ''
+        uses: dorny/test-reporter@v1
+        with:
+          name: Backend E2E (Vitest)
+          path: backend/test-results/e2e-junit.xml
+          # У dorny/test-reporter нет reporter: junit — generic JUnit XML читает
+          # парсер jest-junit (он же подходит и для отчёта vitest).
+          reporter: jest-junit
+
+      - name: Publish frontend e2e results to checks
+        if: always() && hashFiles('frontend/test-results/e2e-junit.xml') != ''
+        uses: dorny/test-reporter@v1
+        with:
+          name: Frontend E2E (Playwright)
+          path: frontend/test-results/e2e-junit.xml
+          reporter: jest-junit
+
+      - name: Upload e2e reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-reports-${{ github.run_attempt }}
+          path: |
+            backend/test-results/e2e-junit.xml
+            frontend/test-results/e2e-junit.xml
+            frontend/test-results/playwright-report/
+            frontend/test-results/e2e-artifacts/
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Stop production stack
+        if: always()
+        # pm2 delete all + docker compose down (именованные тома остаются).
+        run: npm run stop:prod
+
+      - name: Fail when e2e suites failed
+        if: >-
+          always() &&
+          (steps.backend_e2e.outcome == 'failure' || steps.frontend_e2e.outcome == 'failure')
+        run: |
+          echo "::error::e2e failed — backend: ${{ steps.backend_e2e.outcome }}, frontend: ${{ steps.frontend_e2e.outcome }}"
+          exit 1
