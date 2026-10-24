@@ -80,9 +80,7 @@ jobs:
 
       - name: Install backend dependencies
         working-directory: backend
-        # --legacy-peer-deps: openapi-typescript@7 требует typescript@^5.x,
-        # а в проекте typescript@^6 (тот же приём, что и в ci.yml).
-        run: npm ci --legacy-peer-deps
+        run: npm ci
 
       - name: Install frontend dependencies
         working-directory: frontend

@@ -1,29 +1,193 @@
-# kaufman-bot
+# KaufmanBot
 
-Монорепозиторий проекта kaufman-bot: бэкенд на NestJS + фронтенд на Angular + PostgreSQL с pgvector.
+**Fullstack-проект с AI с нуля до продакшена: NestJS + Angular + Prisma + PostgreSQL.**
 
-## 📋 Описание проекта
+![NestJS](https://img.shields.io/badge/NestJS-12-e0234e)
+![Angular](https://img.shields.io/badge/Angular-19-DD0031)
+![Prisma](https://img.shields.io/badge/Prisma-7-2D3748)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18-4169E1)
+![TypeScript](https://img.shields.io/badge/TypeScript-6-3178C6)
 
-**kaufman-bot** — это платформа для управления ботами с API-ключами. Проект предоставляет:
+**KaufmanBot** — учебно-демонстрационный fullstack-проект и публичный дневник
+разработки. С одной стороны это рабочая платформа для управления ботами с
+API-ключами: регистрация, выпуск и отзыв ключей, роли, админ-панель и мониторинг.
+С другой — полигон, на котором шаг за шагом показывается полный цикл создания
+production-приложения с AI-ассистентом в Qoder IDE: от пустого репозитория до
+CI/CD, e2e-тестов и продакшена.
 
-- REST API для управления пользователями и API-ключами
-- Административную панель для мониторинга состояния системы
-- Систему ролей (USER, ADMIN, GUEST)
-- SSE (Server-Sent Events) для получения обновлений в реальном времени
+- 🎬 **Видео-серия** — [4 части](#-видео-серия-fullstack-проект-с-ai) на YouTube, Rutube и VK Видео
+- 💻 **Код** — [github.com/kaufman-bot/kaufman-bot](https://github.com/kaufman-bot/kaufman-bot)
+- 📝 **Серия на сайте автора** — [site15.ru/#videos](https://site15.ru/#videos)
+- 👤 **Автор** — Ильшат Хамитов, [site15.ru](https://site15.ru)
 
-### Бизнес-логика
+## 📚 Оглавление
 
-**Модель данных:**
+- [О проекте](#-о-проекте)
+- [Видео-серия «Fullstack-проект с AI»](#-видео-серия-fullstack-проект-с-ai)
+- [Возможности](#-возможности)
+- [Технологии](#-технологии)
+- [Архитектура](#-архитектура)
+- [Структура проекта](#-структура-проекта)
+- [Быстрый старт](#-быстрый-старт)
+- [Запуск и остановка](#-запуск-и-остановка)
+- [API](#-api)
+- [База данных](#-база-данных)
+- [VS Code расширения](#-vs-code-расширения)
+- [MCP-серверы](#-mcp-model-context-protocol-серверы)
+- [NPM-скрипты](#-npm-скрипты)
+- [Тестирование](#-тестирование)
+- [CI/CD на GitHub Actions](#-cicd-на-github-actions)
+- [Форматирование и линтинг](#-форматирование-и-линтинг)
+- [Безопасность](#-безопасность)
+- [Решение проблем](#-решение-проблем)
+- [Участие в проекте](#-участие-в-проекте)
+- [Лицензия](#-лицензия)
+- [Автор](#-автор)
 
-- **User** — пользователь системы (email, пароль, роль, статус активности)
-- **ApiKey** — API-ключи для доступа к ботам (привязаны к пользователю, с сроком действия)
+## 🎯 О проекте
 
-**Основные возможности:**
+**KaufmanBot** — платформа для управления ботами с API-ключами. Пользователь
+регистрируется, получает первый ключ и дальше управляет ими: выпускает новые,
+переименовывает, продлевает, отключает и отзывает. Администратор видит все
+аккаунты вместе с ключами, может менять роли и деактивировать пользователей.
+Дашборд показывает состояние системы в реальном времени: health-check с метриками
+БД, памяти и CPU и SSE-поток времени сервера.
 
-- Регистрация и аутентификация пользователей
-- Генерация и управление API-ключами
-- Мониторинг состояния системы (health check)
-- Административная панель с дашбордом
+Проект задуман как **учебный полигон и референс полного цикла**: на нём
+отрабатываются подходы, которые обычно остаются за кадром — AI-assisted
+development, типизированный контракт API, два разных окружения и CI/CD с
+e2e-прогоном живого стека. Часть решений здесь намеренно «показательная»:
+важнее продемонстрировать инструмент и объяснить выбор, чем сократить код.
+
+Что отрабатывается на проекте:
+
+- **AI-assisted development** — работа с LLM в Qoder IDE, проектные MCP-серверы и skills для агента;
+- **контракт API** — DTO со Swagger-декораторами → `swagger.json` → SDK → e2e-тесты;
+- **два окружения** — dev с Angular dev-server и прокси, prod с фронтендом внутри бэкенда;
+- **CI/CD** — GitHub Actions с отчётами о тестах и ручным прогоном e2e на прод-сборке;
+- **инфраструктура** — Docker Compose, Prisma-миграции, PM2 и S3-совместимое хранилище MinIO.
+
+Статус: проект в активной разработке и развивается публично — новые части серии
+добавляют функциональность и новые инженерные практики.
+
+## 🎬 Видео-серия «Fullstack-проект с AI»
+
+Публичный дневник разработки KaufmanBot: в каждой части проект прирастает новой
+production-функциональностью, а вместе с ней разбирается очередной слой
+инструментов — от миграций и Swagger до CI/CD и e2e-тестов. Записи выходят на
+трёх площадках, а развёрнутые описания с таймкодами — на сайте автора.
+
+| Часть                    | О чём                                                                                                                              | Смотреть                                                                                                                                                                                                                    |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **1. Создание проекта**  | NestJS + Angular без монорепо, Docker Compose и PostgreSQL, Prisma-миграции, health-check, SSE, версионирование API, туннель и PM2 | [YouTube](https://youtu.be/1MSIm8Te-QY) · [Rutube](https://rutube.ru/video/5f0217394026e166e7a224fc12f5c748/) · [VK Видео](https://vkvideo.ru/video-241775994_456239017) · [таймкоды](https://site15.ru/videos/part-1.html) |
+| **2. Тестирование с AI** | Unit, интеграционные и e2e-тесты, Swagger/OpenAPI, генерация SDK через HeyAPI, постепенная генерация кода LLM                      | [YouTube](https://youtu.be/6pSWtGoyS6I) · [Rutube](https://rutube.ru/video/c70facc53f796801d96b6850f360a618/) · [VK Видео](https://vkvideo.ru/video-241775994_456239022) · [таймкоды](https://site15.ru/videos/part-2.html) |
+| **3. CI/CD с AI**        | GitHub Actions для бэкенда и фронтенда, линты и сборки, JUnit-отчёты, MCP для GitHub, скилл онбординга коммитов                    | [YouTube](https://youtu.be/-VUl5p5xe3I) · [Rutube](https://rutube.ru/video/8af7bfb3b9e759ca6732dbc8011293d9/) · [VK Видео](https://vkvideo.ru/video-241775994_456239023) · [таймкоды](https://site15.ru/videos/part-3.html) |
+| **4. Прод с AI**         | `start:prod`, логи PM2, фронтенд внутри бэкенда через ServeStatic, e2e-workflow с выбором веток бэкенда и фронтенда                | [YouTube](https://youtu.be/ceL0qmeQe84) · [Rutube](https://rutube.ru/video/70858b2775dffb17c2e9c203937788ea/) · [VK Видео](https://vkvideo.ru/video-241775994_456239038) · [таймкоды](https://site15.ru/videos/part-4.html) |
+
+Отдельная линия серии — **как работать с кодом, который пишет AI**: постановка
+задачи, проверка сгенерированного, движение от простого к сложному и разбор
+изменений на небольшие логичные коммиты.
+
+## ✨ Возможности
+
+| Блок               | Что уже работает                                                                                                      |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| **Аутентификация** | Регистрация USER-аккаунта, профиль по API-ключу (`/auth/me`), пароли — `scrypt` из `node:crypto`                      |
+| **API-ключи**      | Выпуск (секрет показывается один раз), переименование, включение/отключение, продление, отзыв; чужие ключи недоступны |
+| **Роли**           | `USER`, `ADMIN`, `GUEST`; админ-эндпоинты закрыты `AdminGuard`                                                        |
+| **Админ-панель**   | Список аккаунтов с ключами, деактивация, смена роли, удаление аккаунта с каскадом ключей                              |
+| **Мониторинг**     | Health-check: статус и задержка БД, память, CPU, счётчики пользователей и ключей                                      |
+| **Реальное время** | SSE-поток времени сервера и обновление дашборда без перезагрузки                                                      |
+| **Контракт API**   | Swagger UI на `/swagger`, `swagger.json` при старте, SDK из OpenAPI для e2e                                           |
+| **Инфраструктура** | PostgreSQL + MinIO в Docker Compose, Prisma-миграции, PM2, раздача фронтенда бэкендом в prod                          |
+| **CI/CD**          | GitHub Actions: линт, сборка и unit-тесты; ручной e2e-прогон прод-стека с отчётами                                    |
+| **AI-инструменты** | Проектные MCP-серверы, skills для агента, генерация тестов и кода                                                     |
+
+## 🧱 Технологии
+
+| Слой               | Стек                                                                                                |
+| ------------------ | --------------------------------------------------------------------------------------------------- |
+| **Backend**        | NestJS 12, TypeScript 6, Prisma 7 (ESM), PostgreSQL 18 + pgvector, Swagger/OpenAPI                  |
+| **Frontend**       | Angular 19, RxJS, SSR-сборка с prerender и hydration, Jest, Playwright                              |
+| **Инфраструктура** | Docker Compose (PostgreSQL, MinIO), PM2, GitHub Actions, tuna.am                                    |
+| **AI-разработка**  | Qoder IDE, MCP (postgres, github, minio-storage, playwright, context7, sequential-thinking), skills |
+| **Качество**       | Vitest + JUnit (backend), Jest + Playwright (frontend), Oxlint, Prettier, Husky                     |
+
+## 🏗 Архитектура
+
+```text
+Angular SPA ──HTTP──▶ /api/v1 (NestJS) ──Prisma──▶ PostgreSQL 18 (pgvector)
+     ▲                       │
+     └────── SSE /time/stream┘
+```
+
+- **Backend** — NestJS: URI-версионирование `/api/v1`, Swagger, guards (`x-api-key`, роль `ADMIN`), сервисы и Prisma; при старте пишет `backend/swagger.json`.
+- **Frontend** — Angular с дашбордом; в dev ходит в API через прокси `/api` (`frontend/proxy.conf.json`).
+- **Dev** — backend `:3000`, `ng serve` `:4200` и tuna-туннель под управлением PM2.
+- **Prod** — бэкенд раздаёт собранный фронтенд через `ServeStaticModule`: приложение, API и Swagger живут на одном порту `:3000`.
+- **Контракт** — DTO со Swagger-декораторами → `swagger.json` → типизированный SDK (`@hey-api/openapi-ts`) → e2e-тесты.
+
+## 📦 Структура проекта
+
+```
+kaufman-bot/
+├── .mcp.json               # Проектные MCP-серверы (Qoder, Claude Code, Cursor)
+├── .gitmodules             # Маппинг gitlink'а opwork/ на URL (без него любые
+│                           # `git submodule …` падают с exit 128)
+├── .agents/skills/         # Skills для AI-агента: контракт API, миграции, коммиты, README
+├── .github/workflows/
+│   ├── ci.yml              # Линт + сборка + unit-тесты backend/frontend на push в main
+│   └── e2e-prod.yml        # Ручной прогон: start:prod + e2e фронта и бэка + stop:prod
+├── .vscode/                # VS Code конфигурация
+│   ├── extensions.json     # Рекомендуемые расширения
+│   ├── settings.json       # Настройки редактора + MCP-серверы (для VS Code)
+│   ├── launch.json         # Конфигурации отладки
+│   └── tasks.json          # Задачи сборки/тестирования
+├── backend/              # NestJS backend
+│   ├── client/           # Собранный frontend для prod (ng build, в .gitignore)
+│   ├── prisma/
+│   │   ├── schema.prisma # Схема базы данных
+│   │   └── migrations/   # Prisma-миграции
+│   ├── src/
+│   │   ├── constants/    # Общие константы (X_API_KEY)
+│   │   ├── controllers/  # REST-контроллеры (time, health, auth, api-keys, admin)
+│   │   ├── dto/          # DTO-классы со Swagger-декораторами
+│   │   ├── guards/       # ApiKeyGuard (x-api-key) и AdminGuard (роль ADMIN)
+│   │   ├── interfaces/   # SseMessageEvent и др. типы
+│   │   ├── services/     # AuthService, UsersService, ApiKeysService
+│   │   ├── utils/        # Хелперы (хеширование, генерация ключей и т.п.)
+│   │   ├── prisma/       # PrismaService и PrismaModule
+│   │   ├── seed/         # Seed-сервисы (начальные данные)
+│   │   ├── generated/    # Сгенерированный Prisma Client (в .gitignore)
+│   │   └── main.ts       # Точка входа (Swagger + swagger.json)
+│   ├── test/
+│   │   ├── generated/    # OpenAPI SDK для e2e-тестов (npm run generate:openapi-ts)
+│   │   ├── utils/        # ActivityHelper, HTTP-фикстуры, проверка доступности backend
+│   │   └── *.e2e-spec.ts # E2E-тесты (бьют в уже запущенный backend)
+│   ├── openapi-ts.config.ts  # Генерация SDK из swagger.json
+│   └── package.json
+├── frontend/             # Angular frontend
+│   ├── src/
+│   │   ├── app/
+│   │   │   ├── dashboard.service.ts  # Сервис дашборда
+│   │   │   └── app.component.ts      # Главный компонент
+│   │   └── proxy.conf.json  # Прокси /api на backend
+│   ├── e2e/                # Playwright-спеки (e2e против живого прод-стека)
+│   ├── playwright.config.ts # Конфиг Playwright + JUnit-отчёт в test-results/
+│   ├── jest.config.js      # Конфиг Jest + jest-junit отчёт
+│   └── package.json
+├── docker-compose.yml    # PostgreSQL + MinIO
+├── ecosystem.config.cjs  # PM2 config для dev
+├── ecosystem-prod.config.cjs  # PM2 config для prod
+├── start-dev.sh          # Скрипт запуска dev
+├── stop-dev.sh           # Скрипт остановки dev
+├── start-prod.sh         # Скрипт запуска prod
+├── stop-prod.sh          # Скрипт остановки prod
+├── opwork/               # Справочный проект: gitlink на site15/opwork, в .gitignore;
+│                         # инициализируется только по запросу (`git submodule update
+│                         # --init opwork`), CI его не трогает
+└── package.json          # Корневые скрипты
+```
 
 ---
 
@@ -34,14 +198,26 @@
 - Node.js 24+ (см. `.nvmrc`)
 - Docker и Docker Compose
 - npm
-- VS Code (рекомендуется)
+- VS Code (рекомендуется); для AI-workflow подойдёт любая IDE с поддержкой MCP,
+  включая Qoder IDE, в которой записана серия
 
 ### 1. Клонирование и установка
 
 ```bash
-git clone <repo-url> && cd new-kaufman-bot
+git clone git@github.com:kaufman-bot/kaufman-bot.git
+cd kaufman-bot
 npm run install:all
+
+# Prisma читает DATABASE_URL из backend/.env даже при генерации клиента
+cp backend/.env.example backend/.env
+
+# Prisma Client создаётся локально и нужен для сборки backend
+cd backend && npm run generate:prisma && cd ..
 ```
+
+SDK для e2e-тестов генерируется из `swagger.json`, который backend пишет при
+старте: после первого `npm run start:dev` выполните
+`cd backend && npm run generate:openapi-ts`.
 
 ### 2. Открыть в VS Code
 
@@ -105,7 +281,7 @@ MINIO_USE_SSL=false
 
 ---
 
-## 🛠 Остановка
+## 🛠 Запуск и остановка
 
 ### Dev-режим (разработка)
 
@@ -120,8 +296,8 @@ npm run start:dev
 Скрипт выполнит:
 
 1. Создание `backend/.env` из `.env.example` (если отсутствует)
-2. Запуск PostgreSQL в Docker (образ `pgvector/pgvector:pg18`)
-3. Ожидание healthcheck базы данных
+2. Запуск PostgreSQL (образ `pgvector/pgvector:pg18`) и MinIO через `docker compose up -d`
+3. Ожидание healthcheck обоих сервисов
 4. Применение Prisma-миграций
 5. Запуск backend (порт 3000), frontend (порт 4200) и tuna-туннеля через PM2
 
@@ -139,7 +315,7 @@ npm run stop:dev
 
 - Frontend: http://localhost:4200
 - Backend API: http://localhost:3000/api/v1
-- Туннель: `kaufman-bot.tuna.io` (проксирует на порт 4200)
+- Туннель: публичный адрес выдаёт tuna при старте (см. `npx pm2 logs kaufman-bot-tunnel`); dev-сервер разрешает хосты `*.ru.tuna.am` и `*.2na.am`
 
 ### Prod-режим (продакшен)
 
@@ -156,7 +332,7 @@ npm run start:prod
 1. Создание `backend/.env` из `.env.example` (если отсутствует)
 2. Сборку frontend (`npm run build`)
 3. Сборку backend (`npm run build`)
-4. Запуск PostgreSQL в Docker
+4. Запуск PostgreSQL и MinIO в Docker
 5. Ожидание healthcheck базы данных
 6. Применение Prisma-миграций
 7. Запуск backend в cluster mode через PM2 (с ограничением памяти 1GB)
@@ -187,69 +363,7 @@ npm run stop:prod
 
 ---
 
-## 📦 Структура проекта
-
-```
-new-kaufman-bot/
-├── .mcp.json               # Проектные MCP-серверы (Qoder, Claude Code, Cursor)
-├── .gitmodules             # Маппинг gitlink'а opwork/ на URL (без него любые
-│                           # `git submodule …` падают с exit 128)
-├── .github/workflows/
-│   ├── ci.yml              # Линт + сборка + unit-тесты backend/frontend на push в main
-│   └── e2e-prod.yml        # Ручной прогон: start:prod + e2e фронта и бэка + stop:prod
-├── .vscode/                # VS Code конфигурация
-│   ├── extensions.json     # Рекомендуемые расширения
-│   ├── settings.json       # Настройки редактора + MCP-серверы (для VS Code)
-│   ├── launch.json         # Конфигурации отладки
-│   └── tasks.json          # Задачи сборки/тестирования
-├── backend/              # NestJS backend
-│   ├── prisma/
-│   │   ├── schema.prisma # Схема базы данных
-│   │   └── migrations/   # Prisma-миграции
-│   ├── src/
-│   │   ├── constants/    # Общие константы (X_API_KEY)
-│   │   ├── controllers/  # REST-контроллеры (time, health, auth, api-keys, admin)
-│   │   ├── dto/          # DTO-классы со Swagger-декораторами
-│   │   ├── guards/       # ApiKeyGuard (x-api-key) и AdminGuard (роль ADMIN)
-│   │   ├── interfaces/   # SseMessageEvent и др. типы
-│   │   ├── services/     # AuthService, UsersService, ApiKeysService
-│   │   ├── utils/        # Хелперы (хеширование, генерация ключей и т.п.)
-│   │   ├── prisma/       # PrismaService и PrismaModule
-│   │   ├── seed/         # Seed-сервисы (начальные данные)
-│   │   ├── generated/    # Сгенерированный Prisma Client (в .gitignore)
-│   │   └── main.ts       # Точка входа (Swagger + swagger.json)
-│   ├── test/
-│   │   ├── generated/    # OpenAPI SDK для e2e-тестов (npm run generate:openapi-ts)
-│   │   ├── utils/        # ActivityHelper, HTTP-фикстуры, проверка доступности backend
-│   │   └── *.e2e-spec.ts # E2E-тесты (бьют в уже запущенный backend)
-│   ├── openapi-ts.config.ts  # Генерация SDK из swagger.json
-│   └── package.json
-├── frontend/             # Angular frontend
-│   ├── src/
-│   │   ├── app/
-│   │   │   ├── dashboard.service.ts  # Сервис дашборда
-│   │   │   └── app.component.ts      # Главный компонент
-│   │   └── proxy.conf.json  # Прокси /api на backend
-│   ├── e2e/                # Playwright-спеки (e2e против живого прод-стека)
-│   ├── playwright.config.ts # Конфиг Playwright + JUnit-отчёт в test-results/
-│   ├── jest.config.js      # Конфиг Jest + jest-junit отчёт
-│   └── package.json
-├── docker-compose.yml    # PostgreSQL + MinIO
-├── ecosystem.config.cjs  # PM2 config для dev
-├── ecosystem-prod.config.cjs  # PM2 config для prod
-├── start-dev.sh          # Скрипт запуска dev
-├── stop-dev.sh           # Скрипт остановки dev
-├── start-prod.sh         # Скрипт запуска prod
-├── stop-prod.sh          # Скрипт остановки prod
-├── opwork/               # Справочный проект: gitlink на site15/opwork, в .gitignore;
-│                         # инициализируется только по запросу (`git submodule update
-│                         # --init opwork`), CI его не трогает
-└── package.json          # Корневые скрипты
-```
-
----
-
-## 🔧 API Endpoints
+## 🔧 API
 
 Backend использует URI-версионирование. Все эндпоинты начинаются с `/api/v1/`.
 
@@ -350,7 +464,7 @@ curl http://localhost:3000/api/v1/health
 - User: `kaufman`
 - Password: `kaufman`
 
-**Том данных:** `new-kaufman-bot_kaufman_bot_postgres_volume` (монтируется в `/var/lib/postgresql`;
+**Том данных:** `<repo-dir>_kaufman_bot_postgres_volume` (монтируется в `/var/lib/postgresql`;
 префикс — имя compose-проекта, то есть имя каталога репозитория)
 
 ### MinIO (S3-совместимое хранилище)
@@ -373,7 +487,7 @@ curl http://localhost:3000/api/v1/health
 `RELEASE.2025-09-07`), при пересоздании контейнера на 2025.7.23 может быть
 отклонён как «из будущей версии». Пока бэкенд в MinIO ничего не пишет, это
 некритично: поможет пересоздание тома (`docker compose down` +
-`docker volume rm new-kaufman-bot_kaufman_bot_minio_volume`). Действующий
+`docker volume rm <repo-dir>_kaufman_bot_minio_volume`). Действующий
 контейнер с закэшированным старым образом продолжает работать как раньше —
 смена образа применяется только при следующем `docker compose up -d`.
 
@@ -383,7 +497,7 @@ curl http://localhost:3000/api/v1/health
 - Web Console: http://localhost:29001
 - Login: `minioadmin` / `minioadmin123`
 
-**Том данных:** `new-kaufman-bot_kaufman_bot_minio_volume` (монтируется в `/data`)
+**Том данных:** `<repo-dir>_kaufman_bot_minio_volume` (монтируется в `/data`)
 
 ### Prisma ORM
 
@@ -600,6 +714,17 @@ gh auth login   # однократная авторизация; провери�
 
 Токен в репозитории не хранится.
 
+### Проектные skills
+
+В `.agents/skills/` лежат правила, которые агент применяет при работе с кодом:
+
+| Skill                    | Что задаёт                                                                        |
+| ------------------------ | --------------------------------------------------------------------------------- |
+| `controller-dto-swagger` | Каждый handler принимает и возвращает DTO-классы со Swagger-декораторами          |
+| `prisma-migrations-only` | Схема БД меняется только через Prisma-миграции, без `db push` и raw SQL           |
+| `git-onboarding-commit`  | Пересборка изменений в последовательность коммитов, удобную для ревью             |
+| `readme-auto-update`     | README синхронизируется с изменениями структуры, конфигурации и поведения проекта |
+
 ### Как использовать MCP
 
 MCP-серверы автоматически доступны AI-ассистенту при работе с проектом. Просто опишите задачу на естественном языке:
@@ -734,12 +859,12 @@ Chromium на `http://localhost:3000` — туда `npm run start:prod` подн
 
 ---
 
-## ⚙️ GitHub Actions
+## ⚙ CI/CD на GitHub Actions
 
 ### `ci.yml` — автоматически на каждый push в main
 
-Два параллельных джоба: backend (`npm ci --legacy-peer-deps` → prisma generate →
-oxlint → nest build → Vitest) и frontend (`npm ci` → ng lint → ng build → Jest).
+Два параллельных джоба: backend (`npm ci` → prisma generate → oxlint → nest build
+→ Vitest) и frontend (`npm ci` → ng lint → ng build → Jest).
 JUnit-отчёты публикуются шагом `dorny/test-reporter` (`reporter: jest-junit` —
 у экшена нет значения `junit`, generic JUnit XML читает парсер jest-junit).
 
@@ -819,36 +944,6 @@ npm run lint
 
 ---
 
-## 📚 Технологии
-
-### Backend
-
-- **NestJS 12** — Node.js framework
-- **@nestjs/serve-static** — Раздача собранного Angular-фронтенда из backend в prod
-- **Prisma 7** — ORM с типобезопасностью
-- **PostgreSQL 18** — Реляционная БД
-- **pgvector** — Векторные типы для AI/ML
-- **Vitest** — Unit/E2E тестирование
-- **Oxlint** — Линтер
-- **Prettier** — Форматирование
-
-### Frontend
-
-- **Angular 19** — TypeScript framework
-- **RxJS** — Reactive extensions
-- **Angular SSR** — Server-side rendering
-- **Karma + Jasmine** — Тестирование
-
-### Инфраструктура
-
-- **Docker** — Контейнеризация
-- **PM2** — Process manager
-- **Tuna** — Туннель для dev-окружения
-- **PostgreSQL 18 + pgvector** — Реляционная БД с векторными типами
-- **MinIO** — S3-совместимое объектное хранилище
-
----
-
 ## 🐛 Решение проблем
 
 ### Ошибка `PrismaConfigEnvError: Cannot resolve environment variable: DATABASE_URL`
@@ -894,12 +989,33 @@ rm -rf ~/.npm/_npx/*
 
 ---
 
+## 🤝 Участие в проекте
+
+Проект открыт для обсуждения и предложений:
+
+- нашли баг или хотите предложить улучшение — создайте
+  [Issue](https://github.com/kaufman-bot/kaufman-bot/issues);
+- хотите обсудить решение из видео — пишите в комментариях на любой площадке
+  или в Issue;
+- перед PR полезно заглянуть в [`.agents/skills/`](.agents/skills) — там правила
+  проекта: DTO со Swagger-декораторами, миграции только через Prisma, атомарные
+  коммиты и синхронизация README.
+
+---
+
 ## 📄 Лицензия
 
 UNLICENSED
 
 ---
 
-## 👥 Контакты
+## 👤 Автор
 
-Если у вас есть вопросы или предложения, создайте Issue в репозитории.
+**Ильшат Хамитов** — fullstack-разработчик, автор видео-серии.
+
+- Сайт и блог: [site15.ru](https://site15.ru)
+- GitHub: [github.com/EndyKaufman](https://github.com/EndyKaufman)
+- Видео-серия: [site15.ru/#videos](https://site15.ru/#videos)
+
+Вопросы и предложения по проекту — через
+[Issues](https://github.com/kaufman-bot/kaufman-bot/issues) в репозитории.
