@@ -14,6 +14,7 @@ import { X_API_KEY } from '../constants/api-key.constants.js';
 import {
   AuthProfileDto,
   AuthRegisterDto,
+  LoginRequestDto,
   RegisterRequestDto,
 } from '../dto/auth.dto.js';
 import { ApiErrorDto } from '../dto/error.dto.js';
@@ -48,6 +49,27 @@ export class AuthController {
   })
   register(@Body() dto: RegisterRequestDto): Promise<AuthRegisterDto> {
     return this.auth.register(dto);
+  }
+
+  @Post('login')
+  @ApiOperation({
+    summary: 'Validate an API key and return the profile behind it',
+  })
+  @ApiOkResponse({
+    type: AuthProfileDto,
+    description: 'Profile of the authenticated user and key metadata',
+  })
+  @ApiBadRequestResponse({
+    type: ApiErrorDto,
+    description: 'API key is missing from the request body',
+  })
+  @ApiUnauthorizedResponse({
+    type: ApiErrorDto,
+    description:
+      'API key is unknown, inactive, expired, or its user is inactive',
+  })
+  login(@Body() dto: LoginRequestDto): Promise<AuthProfileDto> {
+    return this.auth.login(dto);
   }
 
   @Get('me')

@@ -66,6 +66,15 @@ export class RegisterRequestDto {
   password: string;
 }
 
+/** Request body of POST /auth/login. */
+export class LoginRequestDto {
+  @ApiProperty({
+    description: 'API key to authenticate the session',
+    example: 'sk-admin-default-key-change-me',
+  })
+  apiKey: string;
+}
+
 /**
  * Response of POST /auth/register: the created account plus its first API
  * key. The key secret is revealed only here.
