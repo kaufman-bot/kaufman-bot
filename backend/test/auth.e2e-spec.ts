@@ -134,8 +134,115 @@ describe('Registration and auth profile (e2e, running backend)', () => {
         email: registered.user.email,
         role: 'USER',
         isActive: true,
+        timezone: null,
       });
       expect(profile.apiKey.id).toBe(registered.apiKey.id);
+    });
+  });
+
+  describe('PATCH /api/v1/auth/me', () => {
+    it('stores a valid IANA time zone (trimmed) and persists it', async () => {
+      const registered = await activity.registerAccount(
+        `test_${activity.randomSha7}_tz@example.com`,
+      );
+      createdUsers.push(registered.user.id);
+      activity.loginByApiKey(registered.apiKey.key);
+
+      const result = await activity.sdk.authControllerUpdateMeV1({
+        body: { timezone: '  Europe/Moscow  ' },
+      });
+
+      expect(result.response?.status).toBe(200);
+      expect(result.data?.user.timezone).toBe('Europe/Moscow');
+
+      // The stored value survives into a fresh GET /auth/me.
+      const profile = unwrap(
+        await activity.sdk.authControllerMeV1(),
+        'GET /auth/me',
+      );
+      expect(profile.user.timezone).toBe('Europe/Moscow');
+    });
+
+    it('rejects a non-IANA time zone with 400', async () => {
+      const registered = await activity.registerAccount(
+        `test_${activity.randomSha7}_tzbad@example.com`,
+      );
+      createdUsers.push(registered.user.id);
+      activity.loginByApiKey(registered.apiKey.key);
+
+      const result = await activity.sdk.authControllerUpdateMeV1({
+        body: { timezone: 'Mars/Olympus' },
+      });
+
+      expect(result.response?.status).toBe(400);
+      expect(messageOf(result.error)).toMatch(/IANA time zone/i);
+    });
+
+    it('rejects requests without an API key', async () => {
+      activity.logout();
+      const result = await activity.sdk.authControllerUpdateMeV1({
+        body: { timezone: 'Europe/Moscow' },
+      });
+
+      expect(result.response?.status).toBe(401);
+      expect(messageOf(result.error)).toMatch(/API key is required/i);
+    });
+
+    it('clears the stored time zone when null is sent', async () => {
+      const registered = await activity.registerAccount(
+        `test_${activity.randomSha7}_tzclear@example.com`,
+      );
+      createdUsers.push(registered.user.id);
+      activity.loginByApiKey(registered.apiKey.key);
+
+      unwrap(
+        await activity.sdk.authControllerUpdateMeV1({
+          body: { timezone: 'Europe/Moscow' },
+        }),
+        'PATCH /auth/me (set)',
+      );
+      const cleared = unwrap(
+        await activity.sdk.authControllerUpdateMeV1({
+          body: { timezone: null },
+        }),
+        'PATCH /auth/me (clear)',
+      );
+      expect(cleared.user.timezone).toBeNull();
+
+      const profile = unwrap(
+        await activity.sdk.authControllerMeV1(),
+        'GET /auth/me',
+      );
+      expect(profile.user.timezone).toBeNull();
+    });
+
+    it('reports the time zone in login and me responses', async () => {
+      const registered = await activity.registerAccount(
+        `test_${activity.randomSha7}_tzlogin@example.com`,
+      );
+      createdUsers.push(registered.user.id);
+      activity.loginByApiKey(registered.apiKey.key);
+
+      unwrap(
+        await activity.sdk.authControllerUpdateMeV1({
+          body: { timezone: 'Europe/Paris' },
+        }),
+        'PATCH /auth/me',
+      );
+
+      const login = unwrap(
+        await activity.sdk.authControllerLoginV1({
+          body: { apiKey: registered.apiKey.key },
+        }),
+        'POST /auth/login',
+      );
+      expect(login.user.timezone).toBe('Europe/Paris');
+
+      const profile = unwrap(
+        await activity.sdk.authControllerMeV1(),
+        'GET /auth/me',
+      );
+      expect(profile.user.timezone).toBe('Europe/Paris');
     });
   });
 
@@ -154,6 +261,7 @@ describe('Registration and auth profile (e2e, running backend)', () => {
       const profile = result.data as AuthProfileDto;
       expect(profile.user.id).toBe(registered.user.id);
       expect(profile.user.email).toBe(registered.user.email);
+      expect(profile.user.timezone).toBeNull();
       expect(profile.apiKey.id).toBe(registered.apiKey.id);
     });
 
