@@ -2,7 +2,7 @@
 
 import { client } from './client.gen.js';
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client/index.js';
-import type { AdminUsersControllerGetV1Data, AdminUsersControllerGetV1Errors, AdminUsersControllerGetV1Responses, AdminUsersControllerListV1Data, AdminUsersControllerListV1Errors, AdminUsersControllerListV1Responses, AdminUsersControllerRemoveV1Data, AdminUsersControllerRemoveV1Errors, AdminUsersControllerRemoveV1Responses, AdminUsersControllerUpdateV1Data, AdminUsersControllerUpdateV1Errors, AdminUsersControllerUpdateV1Responses, ApiKeysControllerCreateV1Data, ApiKeysControllerCreateV1Errors, ApiKeysControllerCreateV1Responses, ApiKeysControllerListV1Data, ApiKeysControllerListV1Errors, ApiKeysControllerListV1Responses, ApiKeysControllerRemoveV1Data, ApiKeysControllerRemoveV1Errors, ApiKeysControllerRemoveV1Responses, ApiKeysControllerUpdateV1Data, ApiKeysControllerUpdateV1Errors, ApiKeysControllerUpdateV1Responses, AuthControllerMeV1Data, AuthControllerMeV1Errors, AuthControllerMeV1Responses, AuthControllerRegisterV1Data, AuthControllerRegisterV1Errors, AuthControllerRegisterV1Responses, HealthControllerCheckV1Data, HealthControllerCheckV1Errors, HealthControllerCheckV1Responses, TimeControllerStreamV1Data, TimeControllerStreamV1Responses, TimeControllerTimeV1Data, TimeControllerTimeV1Responses } from './types.gen.js';
+import type { AdminUsersControllerGetV1Data, AdminUsersControllerGetV1Errors, AdminUsersControllerGetV1Responses, AdminUsersControllerListV1Data, AdminUsersControllerListV1Errors, AdminUsersControllerListV1Responses, AdminUsersControllerRemoveV1Data, AdminUsersControllerRemoveV1Errors, AdminUsersControllerRemoveV1Responses, AdminUsersControllerUpdateV1Data, AdminUsersControllerUpdateV1Errors, AdminUsersControllerUpdateV1Responses, ApiKeysControllerCreateV1Data, ApiKeysControllerCreateV1Errors, ApiKeysControllerCreateV1Responses, ApiKeysControllerListV1Data, ApiKeysControllerListV1Errors, ApiKeysControllerListV1Responses, ApiKeysControllerRemoveV1Data, ApiKeysControllerRemoveV1Errors, ApiKeysControllerRemoveV1Responses, ApiKeysControllerUpdateV1Data, ApiKeysControllerUpdateV1Errors, ApiKeysControllerUpdateV1Responses, AuthControllerLoginV1Data, AuthControllerLoginV1Errors, AuthControllerLoginV1Responses, AuthControllerMeV1Data, AuthControllerMeV1Errors, AuthControllerMeV1Responses, AuthControllerRegisterV1Data, AuthControllerRegisterV1Errors, AuthControllerRegisterV1Responses, ChatControllerGetMessagesV1Data, ChatControllerGetMessagesV1Errors, ChatControllerGetMessagesV1Responses, ChatControllerSendMessageV1Data, ChatControllerSendMessageV1Errors, ChatControllerSendMessageV1Responses, ChatControllerStreamEventsV1Data, ChatControllerStreamEventsV1Errors, ChatControllerStreamEventsV1Responses, HealthControllerCheckV1Data, HealthControllerCheckV1Errors, HealthControllerCheckV1Responses, MockBotControllerGetConversationMessagesV1Data, MockBotControllerGetConversationMessagesV1Errors, MockBotControllerGetConversationMessagesV1Responses, MockBotControllerListConversationsV1Data, MockBotControllerListConversationsV1Errors, MockBotControllerListConversationsV1Responses, MockBotControllerReplyAsBotV1Data, MockBotControllerReplyAsBotV1Errors, MockBotControllerReplyAsBotV1Responses, MockBotControllerStreamEventsV1Data, MockBotControllerStreamEventsV1Errors, MockBotControllerStreamEventsV1Responses, TimeControllerStreamV1Data, TimeControllerStreamV1Responses, TimeControllerTimeV1Data, TimeControllerTimeV1Responses } from './types.gen.js';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -97,6 +97,20 @@ export class Sdk extends HeyApiClient {
     }
     
     /**
+     * Validate an API key and return the profile behind it
+     */
+    public authControllerLoginV1<ThrowOnError extends boolean = false>(options: Options<AuthControllerLoginV1Data, ThrowOnError>): RequestResult<AuthControllerLoginV1Responses, AuthControllerLoginV1Errors, ThrowOnError> {
+        return (options.client ?? this.client).post<AuthControllerLoginV1Responses, AuthControllerLoginV1Errors, ThrowOnError>({
+            url: '/api/v1/auth/login',
+            ...options,
+            headers: {
+                'Content-Type': 'application/json',
+                ...options.headers
+            }
+        });
+    }
+    
+    /**
      * Get the profile behind the presented API key
      */
     public authControllerMeV1<ThrowOnError extends boolean = false>(options?: Options<AuthControllerMeV1Data, ThrowOnError>): RequestResult<AuthControllerMeV1Responses, AuthControllerMeV1Errors, ThrowOnError> {
@@ -178,5 +192,68 @@ export class Sdk extends HeyApiClient {
                 ...options.headers
             }
         });
+    }
+    
+    /**
+     * Retrieve the full message history of the authenticated user
+     */
+    public chatControllerGetMessagesV1<ThrowOnError extends boolean = false>(options: Options<ChatControllerGetMessagesV1Data, ThrowOnError>): RequestResult<ChatControllerGetMessagesV1Responses, ChatControllerGetMessagesV1Errors, ThrowOnError> {
+        return (options.client ?? this.client).get<ChatControllerGetMessagesV1Responses, ChatControllerGetMessagesV1Errors, ThrowOnError>({ url: '/api/v1/chat/messages', ...options });
+    }
+    
+    /**
+     * Send a message to the bot
+     */
+    public chatControllerSendMessageV1<ThrowOnError extends boolean = false>(options: Options<ChatControllerSendMessageV1Data, ThrowOnError>): RequestResult<ChatControllerSendMessageV1Responses, ChatControllerSendMessageV1Errors, ThrowOnError> {
+        return (options.client ?? this.client).post<ChatControllerSendMessageV1Responses, ChatControllerSendMessageV1Errors, ThrowOnError>({
+            url: '/api/v1/chat/messages',
+            ...options,
+            headers: {
+                'Content-Type': 'application/json',
+                ...options.headers
+            }
+        });
+    }
+    
+    /**
+     * Stream real-time chat events via Server-Sent Events
+     */
+    public chatControllerStreamEventsV1<ThrowOnError extends boolean = false>(options: Options<ChatControllerStreamEventsV1Data, ThrowOnError>): RequestResult<ChatControllerStreamEventsV1Responses, ChatControllerStreamEventsV1Errors, ThrowOnError> {
+        return (options.client ?? this.client).get<ChatControllerStreamEventsV1Responses, ChatControllerStreamEventsV1Errors, ThrowOnError>({ url: '/api/v1/chat/stream', ...options });
+    }
+    
+    /**
+     * List all conversations with last message preview and unread count
+     */
+    public mockBotControllerListConversationsV1<ThrowOnError extends boolean = false>(options: Options<MockBotControllerListConversationsV1Data, ThrowOnError>): RequestResult<MockBotControllerListConversationsV1Responses, MockBotControllerListConversationsV1Errors, ThrowOnError> {
+        return (options.client ?? this.client).get<MockBotControllerListConversationsV1Responses, MockBotControllerListConversationsV1Errors, ThrowOnError>({ url: '/api/v1/mock-bot/conversations', ...options });
+    }
+    
+    /**
+     * Retrieve all messages for a specific user conversation
+     */
+    public mockBotControllerGetConversationMessagesV1<ThrowOnError extends boolean = false>(options: Options<MockBotControllerGetConversationMessagesV1Data, ThrowOnError>): RequestResult<MockBotControllerGetConversationMessagesV1Responses, MockBotControllerGetConversationMessagesV1Errors, ThrowOnError> {
+        return (options.client ?? this.client).get<MockBotControllerGetConversationMessagesV1Responses, MockBotControllerGetConversationMessagesV1Errors, ThrowOnError>({ url: '/api/v1/mock-bot/conversations/{userId}/messages', ...options });
+    }
+    
+    /**
+     * Send a reply on behalf of the bot to a user
+     */
+    public mockBotControllerReplyAsBotV1<ThrowOnError extends boolean = false>(options: Options<MockBotControllerReplyAsBotV1Data, ThrowOnError>): RequestResult<MockBotControllerReplyAsBotV1Responses, MockBotControllerReplyAsBotV1Errors, ThrowOnError> {
+        return (options.client ?? this.client).post<MockBotControllerReplyAsBotV1Responses, MockBotControllerReplyAsBotV1Errors, ThrowOnError>({
+            url: '/api/v1/mock-bot/conversations/{userId}/messages',
+            ...options,
+            headers: {
+                'Content-Type': 'application/json',
+                ...options.headers
+            }
+        });
+    }
+    
+    /**
+     * Stream real-time chat events from all users via Server-Sent Events
+     */
+    public mockBotControllerStreamEventsV1<ThrowOnError extends boolean = false>(options: Options<MockBotControllerStreamEventsV1Data, ThrowOnError>): RequestResult<MockBotControllerStreamEventsV1Responses, MockBotControllerStreamEventsV1Errors, ThrowOnError> {
+        return (options.client ?? this.client).get<MockBotControllerStreamEventsV1Responses, MockBotControllerStreamEventsV1Errors, ThrowOnError>({ url: '/api/v1/mock-bot/stream', ...options });
     }
 }

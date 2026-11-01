@@ -1,4 +1,7 @@
-import type { AuthRegisterDto } from './generated/client/types.gen.js';
+import type {
+  AuthProfileDto,
+  AuthRegisterDto,
+} from './generated/client/types.gen.js';
 import { ActivityHelper } from './utils/activity-helper.js';
 import { messageOf, unwrap } from './utils/api-result.js';
 
@@ -133,6 +136,73 @@ describe('Registration and auth profile (e2e, running backend)', () => {
         isActive: true,
       });
       expect(profile.apiKey.id).toBe(registered.apiKey.id);
+    });
+  });
+
+  describe('POST /api/v1/auth/login', () => {
+    it('returns the profile for a valid API key', async () => {
+      const registered = await activity.registerAccount(
+        `test_${activity.randomSha7}_login@example.com`,
+      );
+      createdUsers.push(registered.user.id);
+
+      const result = await activity.sdk.authControllerLoginV1({
+        body: { apiKey: registered.apiKey.key },
+      });
+
+      expect(result.response?.status).toBe(201);
+      const profile = result.data as AuthProfileDto;
+      expect(profile.user.id).toBe(registered.user.id);
+      expect(profile.user.email).toBe(registered.user.email);
+      expect(profile.apiKey.id).toBe(registered.apiKey.id);
+    });
+
+    it('rejects an unknown API key with 401', async () => {
+      const result = await activity.sdk.authControllerLoginV1({
+        body: { apiKey: 'sk-unknown-key-that-does-not-exist' },
+      });
+
+      expect(result.response?.status).toBe(401);
+      expect(messageOf(result.error)).toMatch(/Invalid API key/i);
+    });
+
+    it('rejects an empty API key with 400', async () => {
+      const result = await activity.sdk.authControllerLoginV1({
+        body: { apiKey: '' },
+      });
+
+      expect(result.response?.status).toBe(400);
+      expect(messageOf(result.error)).toMatch(/API key is required/i);
+    });
+
+    it('rejects a missing apiKey field with 400', async () => {
+      const result = await activity.sdk.authControllerLoginV1({
+        body: {} as { apiKey: string },
+      });
+
+      expect(result.response?.status).toBe(400);
+      expect(messageOf(result.error)).toMatch(/API key is required/i);
+    });
+
+    it('rejects an inactive API key with 401', async () => {
+      const registered = await activity.registerAccount(
+        `test_${activity.randomSha7}_inactive@example.com`,
+      );
+      createdUsers.push(registered.user.id);
+
+      // Deactivate the user via admin endpoint (keys inherit user status)
+      admin.loginAsAdmin();
+      await admin.sdk.adminUsersControllerUpdateV1({
+        path: { id: registered.user.id },
+        body: { isActive: false },
+      });
+
+      const result = await activity.sdk.authControllerLoginV1({
+        body: { apiKey: registered.apiKey.key },
+      });
+
+      expect(result.response?.status).toBe(401);
+      expect(messageOf(result.error)).toMatch(/Invalid API key/i);
     });
   });
 });

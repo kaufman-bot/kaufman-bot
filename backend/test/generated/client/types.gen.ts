@@ -170,6 +170,13 @@ export type ApiErrorDto = {
     statusCode: number;
 };
 
+export type LoginRequestDto = {
+    /**
+     * API key to authenticate the session
+     */
+    apiKey: string;
+};
+
 export type AuthProfileApiKeyDto = {
     /**
      * API key id
@@ -302,6 +309,142 @@ export type UpdateAdminUserRequestDto = {
     role?: 'USER' | 'ADMIN' | 'GUEST';
 };
 
+export type ChatMessageDto = {
+    /**
+     * Unique message identifier
+     */
+    id: string;
+    /**
+     * Conversation this message belongs to
+     */
+    conversationId: string;
+    /**
+     * Who sent the message
+     */
+    senderRole: 'USER' | 'BOT';
+    /**
+     * Message text content
+     */
+    content: string;
+    /**
+     * When the opposite side read the message (null if unread)
+     */
+    readAt: {
+        [key: string]: unknown;
+    } | null;
+    /**
+     * When the message was created
+     */
+    createdAt: string;
+};
+
+export type SendMessageRequestDto = {
+    /**
+     * Message text (non-empty, max 4000 characters after trimming)
+     */
+    content: string;
+};
+
+export type ChatStreamEventDto = {
+    /**
+     * Unique message identifier
+     */
+    messageId: string;
+    /**
+     * Conversation this message belongs to
+     */
+    conversationId: string;
+    /**
+     * Who sent the message
+     */
+    senderRole: 'USER' | 'BOT';
+    /**
+     * Message text content
+     */
+    content: string;
+    /**
+     * When the message was created
+     */
+    createdAt: string;
+};
+
+export type ConversationSummaryDto = {
+    /**
+     * Unique conversation identifier
+     */
+    id: string;
+    /**
+     * User ID this conversation belongs to
+     */
+    userId: string;
+    /**
+     * User email for display
+     */
+    userEmail: string;
+    /**
+     * Preview of the last message (truncated to 100 chars)
+     */
+    lastMessage: {
+        [key: string]: unknown;
+    } | null;
+    /**
+     * Who sent the last message
+     */
+    lastMessageSenderRole: 'USER' | 'BOT';
+    /**
+     * When the last message was sent
+     */
+    lastMessageAt: {
+        [key: string]: unknown;
+    } | null;
+    /**
+     * Number of unread user messages (not yet marked as read)
+     */
+    unreadCount: number;
+    /**
+     * When the conversation was created
+     */
+    createdAt: string;
+    /**
+     * When the conversation was last updated
+     */
+    updatedAt: string;
+};
+
+export type MockBotReplyRequestDto = {
+    /**
+     * Reply text (non-empty, max 4000 characters after trimming)
+     */
+    content: string;
+};
+
+export type MockBotStreamEventDto = {
+    /**
+     * Unique message identifier
+     */
+    messageId: string;
+    /**
+     * Conversation this message belongs to
+     */
+    conversationId: string;
+    /**
+     * User ID for routing to the correct panel
+     */
+    userId: string;
+    /**
+     * Who sent the message
+     */
+    senderRole: 'USER' | 'BOT';
+    /**
+     * Message text content
+     */
+    content: string;
+    /**
+     * When the message was created
+     */
+    createdAt: string;
+};
+
 export type TimeControllerTimeV1Data = {
     body?: never;
     path?: never;
@@ -378,6 +521,35 @@ export type AuthControllerRegisterV1Responses = {
 };
 
 export type AuthControllerRegisterV1Response = AuthControllerRegisterV1Responses[keyof AuthControllerRegisterV1Responses];
+
+export type AuthControllerLoginV1Data = {
+    body: LoginRequestDto;
+    path?: never;
+    query?: never;
+    url: '/api/v1/auth/login';
+};
+
+export type AuthControllerLoginV1Errors = {
+    /**
+     * API key is missing from the request body
+     */
+    400: ApiErrorDto;
+    /**
+     * API key is unknown, inactive, expired, or its user is inactive
+     */
+    401: ApiErrorDto;
+};
+
+export type AuthControllerLoginV1Error = AuthControllerLoginV1Errors[keyof AuthControllerLoginV1Errors];
+
+export type AuthControllerLoginV1Responses = {
+    /**
+     * Profile of the authenticated user and key metadata
+     */
+    200: AuthProfileDto;
+};
+
+export type AuthControllerLoginV1Response = AuthControllerLoginV1Responses[keyof AuthControllerLoginV1Responses];
 
 export type AuthControllerMeV1Data = {
     body?: never;
@@ -725,3 +897,258 @@ export type AdminUsersControllerUpdateV1Responses = {
 };
 
 export type AdminUsersControllerUpdateV1Response = AdminUsersControllerUpdateV1Responses[keyof AdminUsersControllerUpdateV1Responses];
+
+export type ChatControllerGetMessagesV1Data = {
+    body?: never;
+    headers: {
+        /**
+         * API key of the authenticated user
+         */
+        'x-api-key': string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/chat/messages';
+};
+
+export type ChatControllerGetMessagesV1Errors = {
+    /**
+     * No valid API key provided
+     */
+    401: ApiErrorDto;
+};
+
+export type ChatControllerGetMessagesV1Error = ChatControllerGetMessagesV1Errors[keyof ChatControllerGetMessagesV1Errors];
+
+export type ChatControllerGetMessagesV1Responses = {
+    /**
+     * Array of messages ordered by creation time (ascending). Empty array when no conversation exists yet.
+     */
+    200: Array<ChatMessageDto>;
+};
+
+export type ChatControllerGetMessagesV1Response = ChatControllerGetMessagesV1Responses[keyof ChatControllerGetMessagesV1Responses];
+
+export type ChatControllerSendMessageV1Data = {
+    body: SendMessageRequestDto;
+    headers: {
+        /**
+         * API key of the authenticated user
+         */
+        'x-api-key': string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/chat/messages';
+};
+
+export type ChatControllerSendMessageV1Errors = {
+    /**
+     * Message content is empty or exceeds 4000 characters
+     */
+    400: ApiErrorDto;
+    /**
+     * No valid API key provided
+     */
+    401: ApiErrorDto;
+};
+
+export type ChatControllerSendMessageV1Error = ChatControllerSendMessageV1Errors[keyof ChatControllerSendMessageV1Errors];
+
+export type ChatControllerSendMessageV1Responses = {
+    /**
+     * The persisted message with its server-generated fields
+     */
+    201: ChatMessageDto;
+};
+
+export type ChatControllerSendMessageV1Response = ChatControllerSendMessageV1Responses[keyof ChatControllerSendMessageV1Responses];
+
+export type ChatControllerStreamEventsV1Data = {
+    body?: never;
+    headers: {
+        /**
+         * API key of the authenticated user
+         */
+        'x-api-key': string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/chat/stream';
+};
+
+export type ChatControllerStreamEventsV1Errors = {
+    /**
+     * No valid API key provided
+     */
+    401: ApiErrorDto;
+};
+
+export type ChatControllerStreamEventsV1Error = ChatControllerStreamEventsV1Errors[keyof ChatControllerStreamEventsV1Errors];
+
+export type ChatControllerStreamEventsV1Responses = {
+    /**
+     * SSE stream of chat events. Each event uses the default "message" type (no explicit type field) so browser EventSource.onmessage receives it.
+     */
+    200: ChatStreamEventDto;
+};
+
+export type ChatControllerStreamEventsV1Response = ChatControllerStreamEventsV1Responses[keyof ChatControllerStreamEventsV1Responses];
+
+export type MockBotControllerListConversationsV1Data = {
+    body?: never;
+    headers: {
+        /**
+         * API key of an ADMIN account
+         */
+        'x-api-key': string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/mock-bot/conversations';
+};
+
+export type MockBotControllerListConversationsV1Errors = {
+    /**
+     * No valid API key provided
+     */
+    401: ApiErrorDto;
+    /**
+     * Authenticated account is not an admin
+     */
+    403: ApiErrorDto;
+};
+
+export type MockBotControllerListConversationsV1Error = MockBotControllerListConversationsV1Errors[keyof MockBotControllerListConversationsV1Errors];
+
+export type MockBotControllerListConversationsV1Responses = {
+    /**
+     * Array of conversation summaries sorted by latest activity (most recent first)
+     */
+    200: Array<ConversationSummaryDto>;
+};
+
+export type MockBotControllerListConversationsV1Response = MockBotControllerListConversationsV1Responses[keyof MockBotControllerListConversationsV1Responses];
+
+export type MockBotControllerGetConversationMessagesV1Data = {
+    body?: never;
+    headers: {
+        /**
+         * API key of an ADMIN account
+         */
+        'x-api-key': string;
+    };
+    path: {
+        /**
+         * User ID whose conversation to read
+         */
+        userId: string;
+    };
+    query?: never;
+    url: '/api/v1/mock-bot/conversations/{userId}/messages';
+};
+
+export type MockBotControllerGetConversationMessagesV1Errors = {
+    /**
+     * No valid API key provided
+     */
+    401: ApiErrorDto;
+    /**
+     * Authenticated account is not an admin
+     */
+    403: ApiErrorDto;
+    /**
+     * Conversation not found for this user
+     */
+    404: ApiErrorDto;
+};
+
+export type MockBotControllerGetConversationMessagesV1Error = MockBotControllerGetConversationMessagesV1Errors[keyof MockBotControllerGetConversationMessagesV1Errors];
+
+export type MockBotControllerGetConversationMessagesV1Responses = {
+    /**
+     * Array of messages ordered by creation time (ascending). Marks user messages as read.
+     */
+    200: Array<ChatMessageDto>;
+};
+
+export type MockBotControllerGetConversationMessagesV1Response = MockBotControllerGetConversationMessagesV1Responses[keyof MockBotControllerGetConversationMessagesV1Responses];
+
+export type MockBotControllerReplyAsBotV1Data = {
+    body: MockBotReplyRequestDto;
+    headers: {
+        /**
+         * API key of an ADMIN account
+         */
+        'x-api-key': string;
+    };
+    path: {
+        /**
+         * User ID to reply to
+         */
+        userId: string;
+    };
+    query?: never;
+    url: '/api/v1/mock-bot/conversations/{userId}/messages';
+};
+
+export type MockBotControllerReplyAsBotV1Errors = {
+    /**
+     * Reply content is empty or exceeds 4000 characters
+     */
+    400: ApiErrorDto;
+    /**
+     * No valid API key provided
+     */
+    401: ApiErrorDto;
+    /**
+     * Authenticated account is not an admin
+     */
+    403: ApiErrorDto;
+};
+
+export type MockBotControllerReplyAsBotV1Error = MockBotControllerReplyAsBotV1Errors[keyof MockBotControllerReplyAsBotV1Errors];
+
+export type MockBotControllerReplyAsBotV1Responses = {
+    /**
+     * The persisted bot message with its server-generated fields
+     */
+    201: ChatMessageDto;
+};
+
+export type MockBotControllerReplyAsBotV1Response = MockBotControllerReplyAsBotV1Responses[keyof MockBotControllerReplyAsBotV1Responses];
+
+export type MockBotControllerStreamEventsV1Data = {
+    body?: never;
+    headers: {
+        /**
+         * API key of an ADMIN account
+         */
+        'x-api-key': string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/mock-bot/stream';
+};
+
+export type MockBotControllerStreamEventsV1Errors = {
+    /**
+     * No valid API key provided
+     */
+    401: ApiErrorDto;
+    /**
+     * Authenticated account is not an admin
+     */
+    403: ApiErrorDto;
+};
+
+export type MockBotControllerStreamEventsV1Error = MockBotControllerStreamEventsV1Errors[keyof MockBotControllerStreamEventsV1Errors];
+
+export type MockBotControllerStreamEventsV1Responses = {
+    /**
+     * SSE stream of all chat events. Each event uses the default "message" type (no explicit type field) so browser EventSource.onmessage receives it.
+     */
+    200: MockBotStreamEventDto;
+};
+
+export type MockBotControllerStreamEventsV1Response = MockBotControllerStreamEventsV1Responses[keyof MockBotControllerStreamEventsV1Responses];
