@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Patch,
+  Post,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import {
   ApiBadRequestResponse,
   ApiConflictResponse,
@@ -16,6 +24,7 @@ import {
   AuthRegisterDto,
   LoginRequestDto,
   RegisterRequestDto,
+  UpdateProfileRequestDto,
 } from '../dto/auth.dto.js';
 import { ApiErrorDto } from '../dto/error.dto.js';
 import type { AuthenticatedRequest } from '../guards/api-key.guard.js';
@@ -25,6 +34,26 @@ import {
   requireAuthUser,
 } from '../guards/api-key.guard.js';
 import { AuthService } from '../services/auth.service.js';
+
+/** Swagger doc of the x-api-key header shared by guarded endpoints. */
+const KEY_HEADER_DOC = {
+  name: X_API_KEY,
+  description:
+    'API key. Optional in the schema because ?apiKey= is accepted as an ' +
+    'alternative (header-less SSE clients); the guard rejects requests that ' +
+    'carry neither.',
+  required: false,
+} as const;
+
+/** Swagger doc of the ?apiKey= fallback shared by guarded endpoints. */
+const KEY_QUERY_DOC = {
+  name: 'apiKey',
+  type: String,
+  required: false,
+  description:
+    'API key alternative for clients that cannot set headers (EventSource). ' +
+    'Ignored when the x-api-key header is present.',
+} as const;
 
 @ApiTags('auth')
 @Controller('auth')
@@ -75,22 +104,8 @@ export class AuthController {
   @Get('me')
   @UseGuards(ApiKeyGuard)
   @ApiOperation({ summary: 'Get the profile behind the presented API key' })
-  @ApiHeader({
-    name: X_API_KEY,
-    description:
-      'API key. Optional in the schema because ?apiKey= is accepted as an ' +
-      'alternative (header-less SSE clients); the guard rejects requests that ' +
-      'carry neither.',
-    required: false,
-  })
-  @ApiQuery({
-    name: 'apiKey',
-    type: String,
-    required: false,
-    description:
-      'API key alternative for clients that cannot set headers (EventSource). ' +
-      'Ignored when the x-api-key header is present.',
-  })
+  @ApiHeader(KEY_HEADER_DOC)
+  @ApiQuery(KEY_QUERY_DOC)
   @ApiOkResponse({ type: AuthProfileDto })
   @ApiUnauthorizedResponse({
     description: 'Missing or invalid API key',
@@ -98,5 +113,33 @@ export class AuthController {
   })
   me(@Req() req: AuthenticatedRequest): AuthProfileDto {
     return this.auth.profile(requireAuthUser(req), requireAuthApiKey(req));
+  }
+
+  @Patch('me')
+  @UseGuards(ApiKeyGuard)
+  @ApiOperation({ summary: 'Update the profile behind the presented API key' })
+  @ApiHeader(KEY_HEADER_DOC)
+  @ApiQuery(KEY_QUERY_DOC)
+  @ApiOkResponse({
+    type: AuthProfileDto,
+    description: 'Updated profile of the authenticated user and key metadata',
+  })
+  @ApiBadRequestResponse({
+    type: ApiErrorDto,
+    description: 'timezone is present but is not a valid IANA time zone',
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Missing or invalid API key',
+    type: ApiErrorDto,
+  })
+  updateMe(
+    @Req() req: AuthenticatedRequest,
+    @Body() dto: UpdateProfileRequestDto,
+  ): Promise<AuthProfileDto> {
+    return this.auth.updateProfile(
+      requireAuthUser(req),
+      requireAuthApiKey(req),
+      dto,
+    );
   }
 }

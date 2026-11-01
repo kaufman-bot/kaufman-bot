@@ -14,6 +14,14 @@ export class AuthProfileUserDto {
 
   @ApiProperty({ description: 'Whether the user account is active' })
   isActive: boolean;
+
+  @ApiProperty({
+    description:
+      'IANA time zone of the user (e.g. Europe/Moscow), null when not set',
+    nullable: true,
+    type: String,
+  })
+  timezone: string | null;
 }
 
 /** API-key part of the auth profile response (the secret itself is masked). */
@@ -73,6 +81,19 @@ export class LoginRequestDto {
     example: 'sk-admin-default-key-change-me',
   })
   apiKey: string;
+}
+
+/** Request body of PATCH /auth/me — self-service profile update. */
+export class UpdateProfileRequestDto {
+  @ApiProperty({
+    required: false,
+    description:
+      'IANA time zone (e.g. Europe/Moscow) or null to clear the stored one',
+    nullable: true,
+    type: String,
+    example: 'Europe/Moscow',
+  })
+  timezone?: string | null;
 }
 
 /**

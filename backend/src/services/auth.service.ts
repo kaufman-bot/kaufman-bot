@@ -10,6 +10,7 @@ import {
   AuthRegisterDto,
   LoginRequestDto,
   RegisterRequestDto,
+  UpdateProfileRequestDto,
 } from '../dto/auth.dto.js';
 import type { ApiKey, User } from '../generated/prisma/client.js';
 import { Role } from '../generated/prisma/client.js';
@@ -87,13 +88,56 @@ export class AuthService {
     } satisfies AuthProfileDto;
   }
 
+  /**
+   * Self-service profile update for the owner of the presented API key.
+   * Currently supports the optional IANA time zone: a non-empty string is
+   * validated and stored, null clears it, an absent field leaves it as is.
+   */
+  async updateProfile(
+    user: User,
+    apiKey: ApiKey,
+    dto: UpdateProfileRequestDto,
+  ): Promise<AuthProfileDto> {
+    const timezone =
+      dto.timezone === undefined
+        ? user.timezone
+        : dto.timezone === null
+          ? null
+          : this.normalizeTimezone(dto.timezone);
+
+    const updated = await this.prisma.user.update({
+      where: { id: user.id },
+      data: { timezone },
+    });
+
+    return this.profile(updated, apiKey);
+  }
+
   private toProfile(user: User): AuthProfileUserDto {
     return {
       id: user.id,
       email: user.email,
       role: user.role,
       isActive: user.isActive,
+      timezone: user.timezone,
     } satisfies AuthProfileUserDto;
+  }
+
+  private normalizeTimezone(value: string): string {
+    const trimmed = typeof value === 'string' ? value.trim() : '';
+    if (!trimmed) {
+      throw new BadRequestException(
+        'timezone must be a non-empty IANA time zone or null',
+      );
+    }
+    try {
+      new Intl.DateTimeFormat('en-US', { timeZone: trimmed });
+    } catch {
+      throw new BadRequestException(
+        `timezone must be a valid IANA time zone, received "${trimmed}"`,
+      );
+    }
+    return trimmed;
   }
 
   private normalizeEmail(value?: string): string {
