@@ -2,11 +2,13 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  UnauthorizedException,
 } from '@nestjs/common';
 import {
   AuthProfileDto,
   AuthProfileUserDto,
   AuthRegisterDto,
+  LoginRequestDto,
   RegisterRequestDto,
 } from '../dto/auth.dto.js';
 import type { ApiKey, User } from '../generated/prisma/client.js';
@@ -53,6 +55,25 @@ export class AuthService {
     });
 
     return { user: this.toProfile(user), apiKey } satisfies AuthRegisterDto;
+  }
+
+  /**
+   * Validates the supplied API key and returns the same profile contract as
+   * GET /auth/me. Throws 401 when the key is missing, unknown, inactive,
+   * expired, or owned by an inactive user.
+   */
+  async login(dto: LoginRequestDto): Promise<AuthProfileDto> {
+    const key = typeof dto.apiKey === 'string' ? dto.apiKey.trim() : '';
+    if (!key) {
+      throw new BadRequestException('API key is required');
+    }
+
+    const result = await this.apiKeys.findActiveByKey(key);
+    if (result.status === 'rejected') {
+      throw new UnauthorizedException('Invalid API key');
+    }
+
+    return this.profile(result.value.user, result.value.apiKey);
   }
 
   /**

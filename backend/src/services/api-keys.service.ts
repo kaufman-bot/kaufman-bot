@@ -11,7 +11,7 @@ import {
   CreateApiKeyRequestDto,
   UpdateApiKeyRequestDto,
 } from '../dto/api-key.dto.js';
-import type { ApiKey } from '../generated/prisma/client.js';
+import type { ApiKey, User } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { generateApiKey } from '../utils/generateApiKey.js';
 
@@ -22,6 +22,21 @@ const MASK_LENGTH = 8;
 const ISO_8601 =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?(Z|[+-]\d{2}:\d{2})?$/;
 
+/** Reason why a key lookup failed (null = some check failed). */
+export type KeyRejectionReason =
+  'not_found' | 'inactive_key' | 'expired_key' | 'inactive_user';
+
+/** Result of a successful active-key lookup (key + owning user). */
+export interface ActiveApiKey {
+  apiKey: ApiKey;
+  user: User;
+}
+
+/** Result of a key lookup: either success or the reason it failed. */
+export type KeyLookupResult =
+  | { status: 'active'; value: ActiveApiKey }
+  | { status: 'rejected'; reason: KeyRejectionReason };
+
 /**
  * Issues and manages the API keys of a user. The secret is generated
  * server-side and revealed only in the create response.
@@ -29,6 +44,33 @@ const ISO_8601 =
 @Injectable()
 export class ApiKeysService {
   constructor(private readonly prisma: PrismaService) {}
+
+  /**
+   * Looks up an API key by its secret and validates that it is active,
+   * not expired, and owned by an active user. Returns a result that
+   * distinguishes success from each rejection reason.
+   */
+  async findActiveByKey(key: string): Promise<KeyLookupResult> {
+    const apiKey = await this.prisma.apiKey.findUnique({
+      where: { key },
+      include: { user: true },
+    });
+
+    if (!apiKey) {
+      return { status: 'rejected', reason: 'not_found' };
+    }
+    if (!apiKey.isActive) {
+      return { status: 'rejected', reason: 'inactive_key' };
+    }
+    if (apiKey.expiresAt && apiKey.expiresAt.getTime() <= Date.now()) {
+      return { status: 'rejected', reason: 'expired_key' };
+    }
+    if (!apiKey.user.isActive) {
+      return { status: 'rejected', reason: 'inactive_user' };
+    }
+
+    return { status: 'active', value: { apiKey, user: apiKey.user } };
+  }
 
   /** Creates a key for the user and returns it with the secret revealed. */
   async createForUser(

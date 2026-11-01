@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { X_API_KEY } from '../constants/api-key.constants.js';
 import { ApiKey, User } from '../generated/prisma/client.js';
-import { PrismaService } from '../prisma/prisma.service.js';
+import { ApiKeysService } from '../services/api-keys.service.js';
 
 /** Request payload attached by the ApiKeyGuard after successful validation. */
 export interface AuthenticatedRequest {
@@ -43,7 +43,7 @@ export function requireAuthApiKey(req: AuthenticatedRequest): ApiKey {
  */
 @Injectable()
 export class ApiKeyGuard implements CanActivate {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly apiKeys: ApiKeysService) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const req = context.switchToHttp().getRequest<AuthenticatedRequest>();
@@ -57,24 +57,29 @@ export class ApiKeyGuard implements CanActivate {
       throw new UnauthorizedException('API key is required');
     }
 
-    const apiKey = await this.prisma.apiKey.findUnique({
-      where: { key: provided },
-      include: { user: true },
-    });
-
-    if (!apiKey || !apiKey.isActive) {
-      throw new UnauthorizedException('Invalid API key');
-    }
-    if (apiKey.expiresAt && apiKey.expiresAt.getTime() <= Date.now()) {
-      throw new UnauthorizedException('API key expired');
-    }
-    if (!apiKey.user.isActive) {
-      throw new UnauthorizedException('User is inactive');
+    const result = await this.apiKeys.findActiveByKey(provided);
+    if (result.status === 'rejected') {
+      const message = this.rejectionMessage(result.reason);
+      throw new UnauthorizedException(message);
     }
 
-    req.authUser = apiKey.user;
-    req.authApiKey = apiKey;
+    req.authUser = result.value.user;
+    req.authApiKey = result.value.apiKey;
     return true;
+  }
+
+  private rejectionMessage(reason: string): string {
+    switch (reason) {
+      case 'expired_key':
+        return 'API key expired';
+      case 'inactive_key':
+        return 'Invalid API key';
+      case 'inactive_user':
+        return 'User is inactive';
+      case 'not_found':
+      default:
+        return 'Invalid API key';
+    }
   }
 
   private getRequestUrl(req: AuthenticatedRequest): string {
