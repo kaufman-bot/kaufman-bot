@@ -21,12 +21,19 @@ enum MessageSenderRole {
   BOT
 }
 
+enum BotPluginTaskStatus {
+  PENDING
+  PROCESSING
+  DONE
+}
+
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
   password  String
   role      Role     @default(USER)
   isActive  Boolean  @default(true)
+  timezone  String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -71,8 +78,28 @@ model Message {
   readAt         DateTime?
   createdAt      DateTime          @default(now())
 
-  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  conversation Conversation   @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  pluginTask   BotPluginTask?
 
   @@index([conversationId, createdAt])
   @@map("messages")
+}
+
+/**
+ * Outbox row for bot-plugin dispatch: created in the same transaction as the
+ * user message, completed in the same transaction as the plugin reply. Lets
+ * the app finish (exactly once) the processing of any message whose dispatch
+ * was interrupted by a restart.
+ */
+model BotPluginTask {
+  id        String              @id @default(cuid())
+  messageId String              @unique
+  status    BotPluginTaskStatus @default(PENDING)
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([status, updatedAt])
+  @@map("bot_plugin_tasks")
 }
