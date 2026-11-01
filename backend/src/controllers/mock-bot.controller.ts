@@ -44,8 +44,11 @@ import { MockBotService } from '../services/mock-bot.service.js';
 @UseGuards(ApiKeyGuard, AdminGuard)
 @ApiHeader({
   name: X_API_KEY,
-  required: true,
-  description: 'API key of an ADMIN account',
+  required: false,
+  description:
+    'API key of an ADMIN account. Optional in the schema because ' +
+    '?apiKey= is accepted as an alternative (header-less SSE clients); ' +
+    'the guard rejects requests that carry neither.',
 })
 @ApiUnauthorizedResponse({
   type: ApiErrorDto,

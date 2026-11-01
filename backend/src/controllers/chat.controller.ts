@@ -39,8 +39,11 @@ import { ChatService } from '../services/chat.service.js';
 @UseGuards(ApiKeyGuard)
 @ApiHeader({
   name: X_API_KEY,
-  required: true,
-  description: 'API key of the authenticated user',
+  required: false,
+  description:
+    'API key of the authenticated user. Optional in the schema because ' +
+    '?apiKey= is accepted as an alternative (header-less SSE clients); ' +
+    'the guard rejects requests that carry neither.',
 })
 @ApiUnauthorizedResponse({
   type: ApiErrorDto,
