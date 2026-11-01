@@ -1,0 +1,69 @@
+import { Injectable, OnModuleDestroy } from '@nestjs/common';
+import { Observable, Subject } from 'rxjs';
+import { filter, map } from 'rxjs/operators';
+
+/**
+ * Shape of a chat event published through the bus. The `conversationId`
+ * identifies the dialogue the message belongs to; consumers filter by it.
+ */
+export interface ChatEvent {
+  conversationId: string;
+  messageId: string;
+  senderRole: 'USER' | 'BOT';
+  content: string;
+  createdAt: string;
+}
+
+/**
+ * In-memory event bus for real-time chat message delivery. Both ChatService
+ * (user sends a message) and MockBotService (operator replies) publish events
+ * here after writing to the database; SSE endpoints subscribe to filtered
+ * observables.
+ *
+ * The Subject is hot — subscribers only receive events published after they
+ * subscribe. This is intentional: SSE clients reconnect and reload history
+ * via REST, so missed events during disconnection are recovered.
+ */
+@Injectable()
+export class ChatEventsService implements OnModuleDestroy {
+  private readonly subject = new Subject<ChatEvent>();
+
+  /**
+   * Publishes a new chat event. Called by use-case services after persisting
+   * the message to the database.
+   */
+  publish(event: ChatEvent): void {
+    this.subject.next(event);
+  }
+
+  /**
+   * Returns an Observable that emits only events for the given conversation.
+   * Used by SSE endpoints to stream messages to connected clients.
+   */
+  streamByConversation(conversationId: string): Observable<ChatEvent> {
+    return this.subject
+      .asObservable()
+      .pipe(filter((event) => event.conversationId === conversationId));
+  }
+
+  /**
+   * Returns an Observable that emits all chat events regardless of
+   * conversation. Used by the mock-bot console SSE endpoint to stream
+   * messages from all users.
+   */
+  streamAll(): Observable<ChatEvent> {
+    return this.subject.asObservable();
+  }
+
+  /**
+   * Maps a chat event to a different shape before emitting. Useful for
+   * SSE endpoints that need to wrap events in SseMessageEvent<T>.
+   */
+  streamMapped<T>(mapFn: (event: ChatEvent) => T): Observable<T> {
+    return this.subject.asObservable().pipe(map(mapFn));
+  }
+
+  onModuleDestroy(): void {
+    this.subject.complete();
+  }
+}
