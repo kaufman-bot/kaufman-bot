@@ -102,7 +102,7 @@ export class SessionService {
           }
           this.syncTimezone();
         }),
-        catchError((err) => {
+        catchError(() => {
           this.logout();
           return of(null);
         }),

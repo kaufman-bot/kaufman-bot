@@ -46,7 +46,7 @@ describe('SessionService', () => {
     try {
       const req = httpMock.expectOne('/api/v1/auth/me');
       req.flush(null, { status: 401, statusText: 'Unauthorized' });
-    } catch (e) {
+    } catch {
       // No pending request, that's fine
     }
   });

@@ -169,7 +169,7 @@ export class LoginComponent {
           this.error.set('Неверный API-ключ');
         }
       },
-      error: (err) => {
+      error: () => {
         this.loading.set(false);
         this.error.set('Ошибка входа. Попробуйте позже.');
       },
