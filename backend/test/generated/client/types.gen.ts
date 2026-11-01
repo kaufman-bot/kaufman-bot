@@ -125,6 +125,10 @@ export type AuthProfileUserDto = {
      * Whether the user account is active
      */
     isActive: boolean;
+    /**
+     * IANA time zone of the user (e.g. Europe/Moscow), null when not set
+     */
+    timezone: string | null;
 };
 
 export type ApiKeySecretDto = {
@@ -203,6 +207,13 @@ export type AuthProfileApiKeyDto = {
 export type AuthProfileDto = {
     user: AuthProfileUserDto;
     apiKey: AuthProfileApiKeyDto;
+};
+
+export type UpdateProfileRequestDto = {
+    /**
+     * IANA time zone (e.g. Europe/Moscow) or null to clear the stored one
+     */
+    timezone?: string | null;
 };
 
 export type ApiKeyDto = {
@@ -584,6 +595,46 @@ export type AuthControllerMeV1Responses = {
 
 export type AuthControllerMeV1Response = AuthControllerMeV1Responses[keyof AuthControllerMeV1Responses];
 
+export type AuthControllerUpdateMeV1Data = {
+    body: UpdateProfileRequestDto;
+    headers?: {
+        /**
+         * API key. Optional in the schema because ?apiKey= is accepted as an alternative (header-less SSE clients); the guard rejects requests that carry neither.
+         */
+        'x-api-key'?: string;
+    };
+    path?: never;
+    query?: {
+        /**
+         * API key alternative for clients that cannot set headers (EventSource). Ignored when the x-api-key header is present.
+         */
+        apiKey?: string;
+    };
+    url: '/api/v1/auth/me';
+};
+
+export type AuthControllerUpdateMeV1Errors = {
+    /**
+     * timezone is present but is not a valid IANA time zone
+     */
+    400: ApiErrorDto;
+    /**
+     * Missing or invalid API key
+     */
+    401: ApiErrorDto;
+};
+
+export type AuthControllerUpdateMeV1Error = AuthControllerUpdateMeV1Errors[keyof AuthControllerUpdateMeV1Errors];
+
+export type AuthControllerUpdateMeV1Responses = {
+    /**
+     * Updated profile of the authenticated user and key metadata
+     */
+    200: AuthProfileDto;
+};
+
+export type AuthControllerUpdateMeV1Response = AuthControllerUpdateMeV1Responses[keyof AuthControllerUpdateMeV1Responses];
+
 export type ApiKeysControllerListV1Data = {
     body?: never;
     headers?: {
@@ -900,11 +951,11 @@ export type AdminUsersControllerUpdateV1Response = AdminUsersControllerUpdateV1R
 
 export type ChatControllerGetMessagesV1Data = {
     body?: never;
-    headers: {
+    headers?: {
         /**
-         * API key of the authenticated user
+         * API key of the authenticated user. Optional in the schema because ?apiKey= is accepted as an alternative (header-less SSE clients); the guard rejects requests that carry neither.
          */
-        'x-api-key': string;
+        'x-api-key'?: string;
     };
     path?: never;
     query?: never;
@@ -931,11 +982,11 @@ export type ChatControllerGetMessagesV1Response = ChatControllerGetMessagesV1Res
 
 export type ChatControllerSendMessageV1Data = {
     body: SendMessageRequestDto;
-    headers: {
+    headers?: {
         /**
-         * API key of the authenticated user
+         * API key of the authenticated user. Optional in the schema because ?apiKey= is accepted as an alternative (header-less SSE clients); the guard rejects requests that carry neither.
          */
-        'x-api-key': string;
+        'x-api-key'?: string;
     };
     path?: never;
     query?: never;
@@ -966,11 +1017,11 @@ export type ChatControllerSendMessageV1Response = ChatControllerSendMessageV1Res
 
 export type ChatControllerStreamEventsV1Data = {
     body?: never;
-    headers: {
+    headers?: {
         /**
-         * API key of the authenticated user
+         * API key of the authenticated user. Optional in the schema because ?apiKey= is accepted as an alternative (header-less SSE clients); the guard rejects requests that carry neither.
          */
-        'x-api-key': string;
+        'x-api-key'?: string;
     };
     path?: never;
     query?: never;
@@ -997,11 +1048,11 @@ export type ChatControllerStreamEventsV1Response = ChatControllerStreamEventsV1R
 
 export type MockBotControllerListConversationsV1Data = {
     body?: never;
-    headers: {
+    headers?: {
         /**
-         * API key of an ADMIN account
+         * API key of an ADMIN account. Optional in the schema because ?apiKey= is accepted as an alternative (header-less SSE clients); the guard rejects requests that carry neither.
          */
-        'x-api-key': string;
+        'x-api-key'?: string;
     };
     path?: never;
     query?: never;
@@ -1032,11 +1083,11 @@ export type MockBotControllerListConversationsV1Response = MockBotControllerList
 
 export type MockBotControllerGetConversationMessagesV1Data = {
     body?: never;
-    headers: {
+    headers?: {
         /**
-         * API key of an ADMIN account
+         * API key of an ADMIN account. Optional in the schema because ?apiKey= is accepted as an alternative (header-less SSE clients); the guard rejects requests that carry neither.
          */
-        'x-api-key': string;
+        'x-api-key'?: string;
     };
     path: {
         /**
@@ -1076,11 +1127,11 @@ export type MockBotControllerGetConversationMessagesV1Response = MockBotControll
 
 export type MockBotControllerReplyAsBotV1Data = {
     body: MockBotReplyRequestDto;
-    headers: {
+    headers?: {
         /**
-         * API key of an ADMIN account
+         * API key of an ADMIN account. Optional in the schema because ?apiKey= is accepted as an alternative (header-less SSE clients); the guard rejects requests that carry neither.
          */
-        'x-api-key': string;
+        'x-api-key'?: string;
     };
     path: {
         /**
@@ -1120,11 +1171,11 @@ export type MockBotControllerReplyAsBotV1Response = MockBotControllerReplyAsBotV
 
 export type MockBotControllerStreamEventsV1Data = {
     body?: never;
-    headers: {
+    headers?: {
         /**
-         * API key of an ADMIN account
+         * API key of an ADMIN account. Optional in the schema because ?apiKey= is accepted as an alternative (header-less SSE clients); the guard rejects requests that carry neither.
          */
-        'x-api-key': string;
+        'x-api-key'?: string;
     };
     path?: never;
     query?: never;
