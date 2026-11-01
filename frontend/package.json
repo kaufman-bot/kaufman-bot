@@ -8,6 +8,8 @@
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
     "test:e2e": "playwright test",
+    "test:e2e:dev": "E2E_BASE_URL=http://localhost:4200 playwright test",
+    "test:e2e:prod": "E2E_BASE_URL=http://localhost:3000 playwright test",
     "test:e2e:install": "playwright install chromium",
     "lint": "ng lint",
     "serve:ssr:kaufamn-bot": "node dist/kaufamn-bot/server/server.mjs"

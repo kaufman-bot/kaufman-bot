@@ -25,6 +25,54 @@
 
 [Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
 
+## Web Chat with Mock Bot
+
+This project includes a web chat system where users can communicate with a mock bot through a web interface, and operators can manage conversations through a console.
+
+### Features
+
+- **User Chat** (`/chat`): Web interface for users to send messages to the bot and receive real-time responses via SSE (Server-Sent Events)
+- **Mock Bot Console** (`/mock-bot`): Operator interface to view all conversations, read messages, and reply on behalf of the bot
+- **API Key Authentication**: Secure access using API keys with role-based permissions (USER/ADMIN)
+- **Real-time Updates**: SSE streams for instant message delivery without page reloads
+
+### API Endpoints
+
+#### Authentication
+
+- `POST /api/v1/auth/login` — Login with API key, returns user profile
+
+#### User Chat (requires USER or ADMIN role)
+
+- `GET /api/v1/chat/messages` — Get message history for the authenticated user's conversation
+- `POST /api/v1/chat/messages` — Send a message to the bot (body: `{ content: string }`)
+- `GET /api/v1/chat/stream` — SSE stream for real-time messages (use `?apiKey=` query param)
+
+#### Mock Bot Console (requires ADMIN role)
+
+- `GET /api/v1/mock-bot/conversations` — List all user conversations with unread counts
+- `GET /api/v1/mock-bot/conversations/:userId/messages` — Get messages for a specific user's conversation
+- `POST /api/v1/mock-bot/conversations/:userId/messages` — Reply as bot (body: `{ content: string }`)
+- `GET /api/v1/mock-bot/stream` — SSE stream for all conversation events (use `?apiKey=` query param)
+
+### Environment Variables
+
+Add these to `backend/.env` to seed default users on startup:
+
+```bash
+# User 1 (regular USER role)
+USER1_EMAIL=user1@example.com
+USER1_PASSWORD=password123
+USER1_API_KEY=sk-user1-key-here
+
+# User 2 (regular USER role)
+USER2_EMAIL=user2@example.com
+USER2_PASSWORD=password456
+USER2_API_KEY=sk-user2-key-here
+```
+
+The `SeedService` will automatically create these users and their API keys on application startup. If variables are missing, a warning is logged and the user is skipped.
+
 ## Project setup
 
 ```bash

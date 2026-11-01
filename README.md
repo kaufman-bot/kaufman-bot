@@ -832,15 +832,32 @@ npm run test:e2e                  # tests hit the running backend
 cd frontend
 npm run test              # Unit-тесты (Jest, jsdom)
 npm run test:e2e:install  # один раз: скачать Chromium
-npm run test:e2e          # E2E-тесты (Playwright)
+npm run test:e2e          # E2E-тесты (Playwright, по умолчанию на :3000)
+npm run test:e2e:prod     # E2E против прод-стека (backend на :3000)
+npm run test:e2e:dev      # E2E против dev-стека (Angular на :4200 + backend на :3000)
 ```
 
-**E2E-набор тоже ничего не запускает.** `e2e/dashboard.spec.ts` открывает реальный
-Chromium на `http://localhost:3000` — туда `npm run start:prod` поднимает backend,
-который в prod раздаёт собранный фронтенд (ServeStaticModule). Поэтому перед
-прогоном нужен живой стек (`npm run start:prod` из корня). Для dev-цикла
-подходит и `ng serve` с прокси `/api`:
-`E2E_BASE_URL=http://localhost:4200 npm run test:e2e`.
+**E2E-набор ничего не запускает.** Тесты открывают реальный Chromium и работают
+с живым стеком. Поддерживаются два режима:
+
+**Prod-режим** (`npm run test:e2e:prod` или просто `npm run test:e2e`):
+backend на `:3000` раздаёт собранный фронтенд через `ServeStaticModule`.
+Нужно запустить: `npm run start:prod` из корня.
+
+**Dev-режим** (`npm run test:e2e:dev`):
+Angular dev-server на `:4200` с прокси `/api` на backend `:3000`.
+Нужно запустить оба:
+
+```bash
+# Терминал 1: backend
+cd backend && npm run start:dev
+
+# Терминал 2: frontend
+cd frontend && npm run start
+
+# Терминал 3: тесты
+cd frontend && npm run test:e2e:dev
+```
 
 Проверяется контракт UI и API: отдача собранного фронтенда, `GET /api/v1/health`
 (карточки статуса и статистики), `EventSource` на `/api/v1/time/stream`, кнопка
