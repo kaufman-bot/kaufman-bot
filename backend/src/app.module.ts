@@ -5,12 +5,17 @@ import { join } from 'path';
 import { AdminUsersController } from './controllers/admin-users.controller.js';
 import { ApiKeysController } from './controllers/api-keys.controller.js';
 import { AuthController } from './controllers/auth.controller.js';
+import { ChatController } from './controllers/chat.controller.js';
 import { HealthController } from './controllers/health.controller.js';
+import { MockBotController } from './controllers/mock-bot.controller.js';
 import { TimeController } from './controllers/time.controller.js';
 import { PrismaModule } from './prisma/index.js';
 import { SeedModule } from './seed/seed.module.js';
 import { ApiKeysService } from './services/api-keys.service.js';
 import { AuthService } from './services/auth.service.js';
+import { ChatEventsService } from './services/chat-events.service.js';
+import { ChatService } from './services/chat.service.js';
+import { MockBotService } from './services/mock-bot.service.js';
 import { UsersService } from './services/users.service.js';
 
 export const { ObserveModule, ObserveInstrument } = createObserveModule();
@@ -51,7 +56,16 @@ const isProd = process.env.NODE_ENV === 'production';
     AuthController,
     ApiKeysController,
     AdminUsersController,
+    ChatController,
+    MockBotController,
   ],
-  providers: [ApiKeysService, AuthService, UsersService],
+  providers: [
+    ApiKeysService,
+    AuthService,
+    ChatEventsService,
+    ChatService,
+    MockBotService,
+    UsersService,
+  ],
 })
 export class AppModule {}
