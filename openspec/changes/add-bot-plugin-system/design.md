@@ -67,6 +67,8 @@ TimePlugin,
 
 > Поправка по итогам реализации: изначально предполагалось, что NestJS, как Angular, склеивает несколько провайдеров одного токена в массив (`useClass`-multi-provider). На живом бэкенде это не так — Nest перезаписывает привязку, и в `@Inject(BOT_PLUGINS)` попадает единственный (последний) экземпляр, что проявилось в e2e ошибкой `this.plugins.find is not a function`. Юнит-тесты этого не ловили, так как конструируют сервис вручную с массивом в первом аргументе. Канонический механизм Nest для такого случая — ровно один провайдер токена через `useFactory` + `inject`; контракт токена (массив `BotPlugin`) и порядок приоритета сохранены без изменений.
 
+Долг: подключение нового плагина требует правки AppModule (провайдер + запись в `inject` фабрики). Декларативное самоподключение без правок AppModule (декоратор `@BotPlugin()` + discovery) отложено — см. BACKLOG.md.
+
 ### D2. Диспетчер — `BotPluginsService` в `backend/src/plugins/`
 
 `BotPluginsService.dispatchAndReply(conversationId, user, content, messageId)`:

@@ -74,7 +74,9 @@ const isProd = process.env.NODE_ENV === 'production';
     // aggregated once under the shared BOT_PLUGINS token. Nest does not merge
     // several providers of one token into an array (the last one would win),
     // so the token is provided via a factory — the inject list order below is
-    // the dispatch priority (first match wins).
+    // the dispatch priority (first match wins). Registering a new plugin
+    // today means editing this factory; decoupled auto-registration
+    // (decorator + discovery, no AppModule edits) is deferred — see BACKLOG.md.
     BotPluginsService,
     PingPongPlugin,
     TimePlugin,
