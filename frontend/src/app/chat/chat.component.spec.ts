@@ -212,6 +212,43 @@ describe('ChatComponent', () => {
     expect(chatService.messages().length).toBe(1);
   }));
 
+  it('should reload history after the SSE stream reconnects', fakeAsync(() => {
+    const streamSubject = new Subject<ChatStreamEvent>();
+    jest
+      .spyOn(chatService, 'connectStream')
+      .mockReturnValue(streamSubject.asObservable());
+
+    fixture.detectChanges();
+    httpMock.expectOne('/api/v1/chat/messages').flush(mockMessages);
+    tick();
+    fixture.detectChanges();
+    expect(chatService.messages().length).toBe(2);
+
+    // The stream dropped and successfully reopened (e.g. backend restart);
+    // a reply delivered during the gap must appear via the history reload.
+    const recoveredMsg: ChatMessage = {
+      id: 'recovered-1',
+      conversationId: 'conv1',
+      senderRole: 'BOT',
+      content: 'Recovered reply',
+      readAt: null,
+      createdAt: '2026-01-01T00:05:00Z',
+    };
+    chatService.reconnected.set(1);
+    tick();
+    // Signal-driven effects are flushed by change detection
+    fixture.detectChanges();
+
+    const reloadReq = httpMock.expectOne('/api/v1/chat/messages');
+    expect(reloadReq.request.method).toBe('GET');
+    reloadReq.flush([...mockMessages, recoveredMsg]);
+    tick();
+    fixture.detectChanges();
+
+    expect(chatService.messages().length).toBe(3);
+    expect(chatService.messages()[2].content).toBe('Recovered reply');
+  }));
+
   it('should format time correctly', () => {
     const formatted = component.formatTime('2026-01-01T12:30:45Z');
     expect(formatted).toBeTruthy();

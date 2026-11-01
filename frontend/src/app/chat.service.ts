@@ -38,6 +38,13 @@ export class ChatService {
   /** Whether the SSE connection is currently active. */
   readonly connected = signal(false);
 
+  /**
+   * Increments every time the stream successfully reopens after a drop.
+   * Consumers use it to re-fetch the history: messages delivered while the
+   * connection was down (e.g. during a backend restart) must still show up.
+   */
+  readonly reconnected = signal(0);
+
   /** The native EventSource instance (null when not connected). */
   private eventSource: EventSource | null = null;
 
@@ -71,7 +78,7 @@ export class ChatService {
    * to incoming messages. Automatically reconnects on error/close.
    * Returns an Observable that emits stream events.
    */
-  connectStream(): Observable<ChatStreamEvent> {
+  connectStream(isReconnect = false): Observable<ChatStreamEvent> {
     // Close existing connection if any
     this.disconnectStream();
 
@@ -84,7 +91,15 @@ export class ChatService {
       const url = `${API_V1}/chat/stream?apiKey=${encodeURIComponent(apiKey)}`;
       const es = new EventSource(url);
       this.eventSource = es;
-      this.connected.set(true);
+
+      // Mark as connected only on a successful open; a reopen after a drop
+      // also counts as a reconnect so consumers can reload the history.
+      es.onopen = () => {
+        this.connected.set(true);
+        if (isReconnect) {
+          this.reconnected.update((count) => count + 1);
+        }
+      };
 
       es.onmessage = (event) => {
         try {
@@ -106,7 +121,7 @@ export class ChatService {
             switchMap(() => {
               // Only reconnect if still authenticated
               if (this.session.apiKey()) {
-                return this.connectStream();
+                return this.connectStream(true);
               }
               return of();
             }),

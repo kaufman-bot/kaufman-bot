@@ -2,6 +2,7 @@ import { CommonModule } from '@angular/common';
 import {
   AfterViewChecked,
   Component,
+  effect,
   ElementRef,
   inject,
   OnDestroy,
@@ -172,12 +173,20 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
   private streamSub: Subscription | null = null;
   private shouldScroll = true;
 
+  /**
+   * When the SSE stream reconnects after a drop (e.g. a backend restart),
+   * messages delivered while disconnected are missing from the local list —
+   * reload the history so nothing appears lost.
+   */
+  private readonly refreshOnReconnect = effect(() => {
+    if (this.chatService.reconnected() > 0) {
+      this.reloadHistory();
+    }
+  });
+
   ngOnInit(): void {
     // Load history first
-    this.chatService.loadHistory().subscribe((messages) => {
-      this.chatService.messages.set(messages);
-      this.scrollToBottom();
-    });
+    this.reloadHistory();
 
     // Connect to SSE stream for real-time updates
     this.streamSub = this.chatService.connectStream().subscribe({
@@ -250,6 +259,13 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
       this.chatService.messages.set([...current, newMsg]);
       this.shouldScroll = true;
     }
+  }
+
+  private reloadHistory(): void {
+    this.chatService.loadHistory().subscribe((messages) => {
+      this.chatService.messages.set(messages);
+      this.shouldScroll = true;
+    });
   }
 
   private scrollToBottom(): void {
