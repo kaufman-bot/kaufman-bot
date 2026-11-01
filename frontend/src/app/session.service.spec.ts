@@ -5,7 +5,7 @@ import {
 } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
-import { SessionService } from './session.service';
+import { SessionService, type AuthProfile } from './session.service';
 
 describe('SessionService', () => {
   let service: SessionService;
@@ -30,6 +30,15 @@ describe('SessionService', () => {
     httpMock = TestBed.inject(HttpTestingController);
     router = TestBed.inject(Router);
 
+    // Deterministic browser time zone for syncTimezone (jsdom reports the
+    // host one, which is machine-dependent). Profiles below use the same
+    // value so that login does not fire an extra PATCH in unrelated tests.
+    jest
+      .spyOn(Intl.DateTimeFormat.prototype, 'resolvedOptions')
+      .mockReturnValue({
+        timeZone: 'Europe/Moscow',
+      } as Intl.ResolvedDateTimeFormatOptions);
+
     // Clear localStorage before each test
     localStorage.clear();
 
@@ -44,6 +53,7 @@ describe('SessionService', () => {
 
   afterEach(() => {
     httpMock.verify();
+    jest.restoreAllMocks();
   });
 
   it('should be created', () => {
@@ -63,6 +73,7 @@ describe('SessionService', () => {
         email: 'test@example.com',
         role: 'USER' as const,
         isActive: true,
+        timezone: 'Europe/Moscow',
       },
       apiKey: {
         id: 'key-1',
@@ -108,6 +119,7 @@ describe('SessionService', () => {
         email: 'test@example.com',
         role: 'USER' as const,
         isActive: true,
+        timezone: 'Europe/Moscow',
       },
       apiKey: {
         id: 'key-1',
@@ -141,6 +153,7 @@ describe('SessionService', () => {
         email: 'test@example.com',
         role: 'USER' as const,
         isActive: true,
+        timezone: 'Europe/Moscow',
       },
       apiKey: {
         id: 'key-1',
@@ -169,6 +182,7 @@ describe('SessionService', () => {
         email: 'admin@example.com',
         role: 'ADMIN' as const,
         isActive: true,
+        timezone: 'Europe/Moscow',
       },
       apiKey: {
         id: 'key-1',
@@ -193,6 +207,7 @@ describe('SessionService', () => {
         email: 'user@example.com',
         role: 'USER' as const,
         isActive: true,
+        timezone: 'Europe/Moscow',
       },
       apiKey: {
         id: 'key-1',
@@ -208,5 +223,67 @@ describe('SessionService', () => {
     loginReq.flush(userProfile);
 
     expect(service.isAdmin()).toBe(false);
+  });
+
+  describe('syncTimezone', () => {
+    /** Logs in with the given stored zone (browser one is Europe/Moscow). */
+    const loginWithTimezone = (timezone: string | null): AuthProfile => {
+      const mockProfile = {
+        user: {
+          id: 'user-1',
+          email: 'tz@example.com',
+          role: 'USER' as const,
+          isActive: true,
+          timezone,
+        },
+        apiKey: {
+          id: 'key-1',
+          name: 'Test Key',
+          key: 'sk-…',
+          isActive: true,
+          expiresAt: null,
+        },
+      };
+
+      service.login('sk-test-key').subscribe();
+      httpMock.expectOne('/api/v1/auth/login').flush(mockProfile);
+      return mockProfile;
+    };
+
+    it('sends PATCH when the browser time zone differs from the stored one', () => {
+      const profile = loginWithTimezone(null);
+
+      const req = httpMock.expectOne('/api/v1/auth/me');
+      expect(req.request.method).toBe('PATCH');
+      expect(req.request.body).toEqual({ timezone: 'Europe/Moscow' });
+      expect(req.request.headers.get('x-api-key')).toBe('sk-test-key');
+      req.flush({
+        ...profile,
+        user: { ...profile.user, timezone: 'Europe/Moscow' },
+      });
+
+      expect(service.profile()!.user.timezone).toBe('Europe/Moscow');
+    });
+
+    it('does not send PATCH when the time zones already match', () => {
+      loginWithTimezone('Europe/Moscow');
+
+      // The login request was flushed and nothing else is pending.
+      httpMock.verify();
+    });
+
+    it('keeps the session when the PATCH fails', () => {
+      const profile = loginWithTimezone(null);
+
+      httpMock
+        .expectOne('/api/v1/auth/me')
+        .flush(
+          { message: 'boom' },
+          { status: 500, statusText: 'Server Error' },
+        );
+
+      expect(service.isAuthenticated()).toBe(true);
+      expect(service.profile()).toEqual(profile);
+    });
   });
 });

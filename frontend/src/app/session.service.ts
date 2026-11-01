@@ -20,6 +20,7 @@ export interface AuthProfileUser {
   email: string;
   role: 'USER' | 'ADMIN' | 'GUEST';
   isActive: boolean;
+  timezone: string | null;
 }
 
 export interface AuthProfileApiKey {
@@ -99,6 +100,7 @@ export class SessionService {
           if (isPlatformBrowser(this.platformId)) {
             localStorage.setItem(STORAGE_KEY, apiKey.trim());
           }
+          this.syncTimezone();
         }),
         catchError((err) => {
           this.logout();
@@ -134,6 +136,41 @@ export class SessionService {
   }
 
   /**
+   * Keeps the stored user time zone in sync with the browser one: reads the
+   * browser IANA zone and, when it differs from the profile value, PATCHes
+   * the self-service profile endpoint (the same one as the manual update).
+   * Errors are swallowed — a failed sync never breaks the session. Browser
+   * only: under SSR there is no browser time zone to read.
+   */
+  syncTimezone(): void {
+    if (!isPlatformBrowser(this.platformId)) {
+      return;
+    }
+    const current = this.profileSignal();
+    if (!current) {
+      return;
+    }
+    const browserTimezone =
+      Intl.DateTimeFormat().resolvedOptions().timeZone ?? null;
+    if (!browserTimezone || current.user.timezone === browserTimezone) {
+      return;
+    }
+
+    this.http
+      .patch<AuthProfile>(
+        `${API_V1}/auth/me`,
+        { timezone: browserTimezone },
+        { headers: { 'x-api-key': this.apiKeySignal() ?? '' } },
+      )
+      .pipe(catchError(() => of(null)))
+      .subscribe((profile) => {
+        if (profile) {
+          this.profileSignal.set(profile);
+        }
+      });
+  }
+
+  /**
    * Validates a stored key by fetching the profile. If the key is invalid,
    * clears the session.
    */
@@ -143,7 +180,10 @@ export class SessionService {
         headers: { 'x-api-key': apiKey },
       })
       .subscribe({
-        next: (profile) => this.profileSignal.set(profile),
+        next: (profile) => {
+          this.profileSignal.set(profile);
+          this.syncTimezone();
+        },
         error: () => {
           // Stored key is invalid; clear session
           this.apiKeySignal.set(null);
