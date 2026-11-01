@@ -41,6 +41,8 @@ This project includes a web chat system where users can communicate with a mock 
 #### Authentication
 
 - `POST /api/v1/auth/login` — Login with API key, returns user profile
+- `GET /api/v1/auth/me` — Profile behind the presented API key
+- `PATCH /api/v1/auth/me` — Self-service profile update (body: `{ timezone?: string | null }`, an IANA time zone; `null` clears it)
 
 #### User Chat (requires USER or ADMIN role)
 
@@ -72,6 +74,35 @@ USER2_API_KEY=sk-user2-key-here
 ```
 
 The `SeedService` will automatically create these users and their API keys on application startup. If variables are missing, a warning is logged and the user is skipped.
+
+## Bot Plugins
+
+Reactions to user chat messages live in pluggable services (`backend/src/plugins/`), not in the chat core. Every plugin:
+
+- implements the single `BotPlugin` interface from `bot-plugin.interface.ts` — `name`, `canHandle(content)` (exact, trimmed, case-insensitive matching is up to the plugin) and `handle({ user, content })` returning the reply text;
+- is registered in `AppModule` as its own provider and added to the `inject` list of the single `BOT_PLUGINS` factory — Nest does not merge several providers of one token into an array, so the token is aggregated once via `useFactory`; the `inject` order is the dispatch priority.
+
+When a user sends a chat message, `ChatService` hands it to the plugin dispatcher (`BotPluginsService`): the first plugin whose `canHandle` matches produces the reply, which is persisted as a `BOT` message and delivered over the chat SSE stream like any other bot reply. A plugin failure never fails the user's own message; plugin order in `AppModule` is the dispatch priority.
+
+Built-in plugins:
+
+- **PingPongPlugin** — replies `pong` to a `ping` message;
+- **TimePlugin** — replies with the current server time formatted in the user's IANA time zone (falls back to UTC when unset), e.g. `2026-11-01 12:34:56 (Europe/Moscow)`.
+
+The user time zone is stored on the `User` row (`timezone`, nullable). The frontend syncs the browser time zone automatically after login/session restore via `PATCH /api/v1/auth/me`; the value can also be updated manually with the same endpoint.
+
+To add a new plugin: create a class implementing `BotPlugin` in `backend/src/plugins/`, register it as a plain provider in `AppModule` and add it to the `inject` list of the `BOT_PLUGINS` factory (order = priority), and cover its behavior with unit tests next to the file.
+
+### Reliable delivery across restarts
+
+Plugin dispatch is crash-safe — the server may be restarted at any moment (dev watch, deploys, worker crashes) without losing messages or interrupting processing:
+
+- **Acceptance is atomic**: `ChatService.sendMessage` creates the user message and its dispatch task (`BotPluginTask`, outbox table with status `PENDING`/`PROCESSING`/`DONE`) in one DB transaction, so a persisted message can never exist without its task and a failed send can be retried safely.
+- **Completion is atomic**: the dispatcher claims the task (`PENDING → PROCESSING` via a conditional update — safe in prod cluster mode) and commits the `BOT` reply together with the `DONE` status in one transaction, so a message gets at most one reply.
+- **Recovery**: on startup and every 30 seconds `BotPluginsService` sweeps for work left unfinished by a restart: tasks stuck in `PROCESSING` older than 60 s are reopened, then every `PENDING` task is dispatched through the regular path (the reply goes to the DB and the SSE stream). A message sent right before a restart gets its reply shortly after the app is back — no user action needed.
+- **Frontend**: when the chat SSE stream reconnects, the chat reloads the history, so replies delivered while the client was disconnected appear without a page reload.
+
+A plugin error closes the task without a reply (isolation contract — a permanently failing plugin is not retried); only infrastructure failures (e.g. a failed reply transaction) are retried by the sweep.
 
 ## Project setup
 

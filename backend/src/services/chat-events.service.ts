@@ -26,6 +26,10 @@ export interface ChatEvent {
  */
 @Injectable()
 export class ChatEventsService implements OnModuleDestroy {
+  // In-memory only: events do not survive a restart and do not reach other
+  // instances in cluster mode (clients compensate by reloading history on
+  // SSE reconnect). After Redis is adopted, move delivery to a real event
+  // bus / queue — see BACKLOG.md.
   private readonly subject = new Subject<ChatEvent>();
 
   /**
