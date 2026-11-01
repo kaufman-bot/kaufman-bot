@@ -1,0 +1,320 @@
+<style>
+  :host {
+    --bg: #0f172a;
+    --card: #1e293b;
+    --border: #334155;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --accent: #38bdf8;
+    --green: #4ade80;
+    --red: #f87171;
+    --yellow: #facc15;
+
+    font-family:
+      'Inter',
+      -apple-system,
+      BlinkMacSystemFont,
+      'Segoe UI',
+      Roboto,
+      Helvetica,
+      Arial,
+      sans-serif;
+    box-sizing: border-box;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  main {
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--text);
+    padding: 2rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  h1 {
+    font-size: 1.75rem;
+    font-weight: 600;
+    margin: 0 0 2rem;
+    color: var(--accent);
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 1.5rem;
+    width: 100%;
+    max-width: 1100px;
+  }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem;
+  }
+
+  .card h2 {
+    font-size: 1rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+    margin: 0 0 1rem;
+  }
+
+  .row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .row:last-child {
+    border-bottom: none;
+  }
+
+  .label {
+    color: var(--muted);
+    font-size: 0.875rem;
+  }
+  .value {
+    font-weight: 500;
+    font-size: 0.95rem;
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 0.2rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+
+  .badge.ok {
+    background: rgba(74, 222, 128, 0.15);
+    color: var(--green);
+  }
+  .badge.err {
+    background: rgba(248, 113, 113, 0.15);
+    color: var(--red);
+  }
+
+  .time-display {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--accent);
+    text-align: center;
+    padding: 1rem 0;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .mem-bar {
+    height: 8px;
+    background: var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-top: 0.5rem;
+  }
+
+  .mem-bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.3s;
+  }
+
+  .loading {
+    color: var(--muted);
+    text-align: center;
+    padding: 3rem;
+    font-size: 1.1rem;
+  }
+
+  .error-banner {
+    background: rgba(248, 113, 113, 0.1);
+    border: 1px solid var(--red);
+    color: var(--red);
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 1.5rem;
+    text-align: center;
+    width: 100%;
+    max-width: 1100px;
+  }
+
+  .btn {
+    display: block;
+    margin-left: auto;
+    margin-top: 0.75rem;
+    padding: 0.4rem 0.9rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--bg);
+    background: var(--accent);
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: filter 0.2s;
+  }
+
+  .btn:hover {
+    filter: brightness(1.1);
+  }
+</style>
+
+<main>
+  <h1>kaufman-bot — Dashboard</h1>
+
+  @if (dashboard.error()) {
+    <div class="error-banner">Backend недоступен: {{ dashboard.error() }}</div>
+  }
+
+  @if (dashboard.loading() && !dashboard.health()) {
+    <div class="loading">Загрузка...</div>
+  } @else {
+    <div class="grid">
+      <!-- Server Time -->
+      <div class="card">
+        <h2>Серверное время</h2>
+        <div class="time-display">{{ dashboard.serverTime() }}</div>
+        <div class="row">
+          <span class="label">REST /time (снимок)</span>
+          <span class="value">{{ dashboard.restTime() }}</span>
+        </div>
+        <button class="btn" type="button" (click)="dashboard.fetchRestTime()">
+          Обновить по REST
+        </button>
+      </div>
+
+      <!-- General Status -->
+      @if (dashboard.health(); as h) {
+        <div class="card">
+          <h2>Общий статус</h2>
+          <div class="row">
+            <span class="label">Статус</span>
+            <span
+              class="badge"
+              [class.ok]="h.status === 'ok'"
+              [class.err]="h.status !== 'ok'"
+            >
+              {{ h.status === 'ok' ? 'OK' : 'ERROR' }}
+            </span>
+          </div>
+          <div class="row">
+            <span class="label">База данных</span>
+            <span
+              class="badge"
+              [class.ok]="h.database.status === 'connected'"
+              [class.err]="h.database.status !== 'connected'"
+            >
+              {{
+                h.database.status === 'connected' ? 'Подключена' : 'Нет связи'
+              }}
+            </span>
+          </div>
+          @if (h.database.latencyMs !== undefined) {
+            <div class="row">
+              <span class="label">Задержка БД</span>
+              <span class="value">{{ h.database.latencyMs }} мс</span>
+            </div>
+          }
+          <div class="row">
+            <span class="label">Аптайм</span>
+            <span class="value">{{ formatUptime(h.uptime) }}</span>
+          </div>
+        </div>
+      }
+
+      <!-- Stats -->
+      @if (dashboard.health(); as h) {
+        <div class="card">
+          <h2>Статистка</h2>
+          <div class="row">
+            <span class="label">Пользователи</span>
+            <span class="value">{{ h.stats.users }}</span>
+          </div>
+          <div class="row">
+            <span class="label">API ключи</span>
+            <span class="value">{{ h.stats.apiKeys }}</span>
+          </div>
+        </div>
+      }
+
+      <!-- Server Info -->
+      @if (dashboard.health(); as h) {
+        <div class="card">
+          <h2>Сервер</h2>
+          <div class="row">
+            <span class="label">Hostname</span>
+            <span class="value">{{ h.server.hostname }}</span>
+          </div>
+          <div class="row">
+            <span class="label">Платформа</span>
+            <span class="value"
+              >{{ h.server.platform }} / {{ h.server.arch }}</span
+            >
+          </div>
+          <div class="row">
+            <span class="label">Node.js</span>
+            <span class="value">{{ h.server.nodeVersion }}</span>
+          </div>
+          <div class="row">
+            <span class="label">CPU</span>
+            <span class="value">{{ h.server.cpu.cores }} ядер</span>
+          </div>
+          <div class="row">
+            <span class="label">Load avg (1/5/15)</span>
+            <span class="value"
+              >{{ h.server.cpu.loadAvg[0] }} / {{ h.server.cpu.loadAvg[1] }} /
+              {{ h.server.cpu.loadAvg[2] }}</span
+            >
+          </div>
+        </div>
+      }
+
+      <!-- Memory -->
+      @if (dashboard.health(); as h) {
+        <div class="card">
+          <h2>Память</h2>
+          <div class="row">
+            <span class="label">Использовано</span>
+            <span class="value"
+              >{{ h.server.memory.usedMb }} /
+              {{ h.server.memory.totalMb }} МБ</span
+            >
+          </div>
+          <div class="mem-bar">
+            <div
+              class="mem-bar-fill"
+              [style.width.%]="h.server.memory.usedPercent"
+              [style.background]="
+                h.server.memory.usedPercent > 80
+                  ? 'var(--red)'
+                  : h.server.memory.usedPercent > 60
+                    ? 'var(--yellow)'
+                    : 'var(--green)'
+              "
+            ></div>
+          </div>
+          <div class="row" style="border-bottom: none; margin-top: 0.5rem">
+            <span class="label">Процент использования</span>
+            <span class="value">{{ h.server.memory.usedPercent }}%</span>
+          </div>
+          <div class="row">
+            <span class="label">Свободно</span>
+            <span class="value">{{ h.server.memory.freeMb }} МБ</span>
+          </div>
+        </div>
+      }
+    </div>
+  }
+</main>
