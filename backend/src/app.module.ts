@@ -9,6 +9,10 @@ import { ChatController } from './controllers/chat.controller.js';
 import { HealthController } from './controllers/health.controller.js';
 import { MockBotController } from './controllers/mock-bot.controller.js';
 import { TimeController } from './controllers/time.controller.js';
+import { BOT_PLUGINS } from './plugins/bot-plugin.interface.js';
+import { BotPluginsService } from './plugins/bot-plugins.service.js';
+import { PingPongPlugin } from './plugins/ping-pong.plugin.js';
+import { TimePlugin } from './plugins/time.plugin.js';
 import { PrismaModule } from './prisma/index.js';
 import { SeedModule } from './seed/seed.module.js';
 import { ApiKeysService } from './services/api-keys.service.js';
@@ -66,6 +70,22 @@ const isProd = process.env.NODE_ENV === 'production';
     ChatService,
     MockBotService,
     UsersService,
+    // Bot plugins: each plugin is instantiated as its own provider and then
+    // aggregated once under the shared BOT_PLUGINS token. Nest does not merge
+    // several providers of one token into an array (the last one would win),
+    // so the token is provided via a factory — the inject list order below is
+    // the dispatch priority (first match wins).
+    BotPluginsService,
+    PingPongPlugin,
+    TimePlugin,
+    {
+      provide: BOT_PLUGINS,
+      useFactory: (pingPong: PingPongPlugin, time: TimePlugin) => [
+        pingPong,
+        time,
+      ],
+      inject: [PingPongPlugin, TimePlugin],
+    },
   ],
 })
 export class AppModule {}

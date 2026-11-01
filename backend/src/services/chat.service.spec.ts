@@ -1,6 +1,7 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MessageSenderRole } from '../generated/prisma/enums.js';
+import { BotPluginsService } from '../plugins/bot-plugins.service.js';
 import { ChatEventsService } from './chat-events.service.js';
 import { ChatService } from './chat.service.js';
 
@@ -9,6 +10,13 @@ const makePrismaMock = () => {
   const conversationUpsert = vi.fn();
   const messageCreate = vi.fn();
   const messageUpdateMany = vi.fn();
+  const botPluginTaskCreate = vi.fn();
+  const $transaction = vi.fn(async (fn: (tx: unknown) => unknown) =>
+    fn({
+      message: { create: messageCreate },
+      botPluginTask: { create: botPluginTaskCreate },
+    }),
+  );
 
   return {
     instance: {
@@ -20,11 +28,17 @@ const makePrismaMock = () => {
         create: messageCreate,
         updateMany: messageUpdateMany,
       },
+      botPluginTask: {
+        create: botPluginTaskCreate,
+      },
+      $transaction,
     },
     conversationFindUnique,
     conversationUpsert,
     messageCreate,
     messageUpdateMany,
+    botPluginTaskCreate,
+    $transaction,
   };
 };
 
@@ -34,6 +48,7 @@ const makeUser = (id = 'user-1') => ({
   password: 'hashed',
   role: 'USER' as const,
   isActive: true,
+  timezone: null,
   createdAt: new Date(),
   updatedAt: new Date(),
 });
@@ -55,17 +70,29 @@ const makeChatEventsMock = () => {
   };
 };
 
+const makeBotPluginsMock = () => {
+  const dispatchAndReply = vi.fn().mockResolvedValue(undefined);
+
+  return {
+    dispatchAndReply,
+    instance: { dispatchAndReply } as unknown as BotPluginsService,
+  };
+};
+
 describe('ChatService', () => {
   let prismaMock: ReturnType<typeof makePrismaMock>;
   let chatEventsMock: ReturnType<typeof makeChatEventsMock>;
+  let botPluginsMock: ReturnType<typeof makeBotPluginsMock>;
   let service: ChatService;
 
   beforeEach(() => {
     prismaMock = makePrismaMock();
     chatEventsMock = makeChatEventsMock();
+    botPluginsMock = makeBotPluginsMock();
     service = new ChatService(
       prismaMock.instance as any,
       chatEventsMock.instance,
+      botPluginsMock.instance,
     );
   });
 
@@ -210,6 +237,60 @@ describe('ChatService', () => {
         content: 'Hello',
         createdAt: createdAt.toISOString(),
       });
+
+      expect(botPluginsMock.dispatchAndReply).toHaveBeenCalledWith(
+        'conv-1',
+        expect.objectContaining({ id: 'user-1' }),
+        'Hello',
+        'msg-1',
+      );
+    });
+
+    it('should dispatch the trimmed content to plugins', async () => {
+      prismaMock.conversationUpsert.mockResolvedValue({
+        id: 'conv-1',
+        userId: 'user-1',
+      });
+      prismaMock.messageCreate.mockResolvedValue({
+        id: 'msg-1',
+        conversationId: 'conv-1',
+        senderRole: MessageSenderRole.USER,
+        content: 'Hello',
+        readAt: null,
+        createdAt: new Date(),
+      });
+
+      await service.sendMessage(makeUser(), '  Hello  ');
+
+      expect(botPluginsMock.dispatchAndReply).toHaveBeenCalledWith(
+        'conv-1',
+        expect.anything(),
+        'Hello',
+        'msg-1',
+      );
+    });
+
+    it('should not fail the send when the plugin dispatch fails', async () => {
+      botPluginsMock.dispatchAndReply.mockRejectedValue(
+        new Error('dispatch exploded'),
+      );
+      prismaMock.conversationUpsert.mockResolvedValue({
+        id: 'conv-1',
+        userId: 'user-1',
+      });
+      prismaMock.messageCreate.mockResolvedValue({
+        id: 'msg-1',
+        conversationId: 'conv-1',
+        senderRole: MessageSenderRole.USER,
+        content: 'Hello',
+        readAt: null,
+        createdAt: new Date(),
+      });
+
+      const result = await service.sendMessage(makeUser(), 'Hello');
+
+      expect(result.id).toBe('msg-1');
+      expect(result.content).toBe('Hello');
     });
 
     it('should trim whitespace from content', async () => {
@@ -236,6 +317,53 @@ describe('ChatService', () => {
           content: 'Hello',
         },
       });
+    });
+
+    it('should create the plugin task in the same transaction as the message', async () => {
+      prismaMock.conversationUpsert.mockResolvedValue({
+        id: 'conv-1',
+        userId: 'user-1',
+      });
+      prismaMock.messageCreate.mockResolvedValue({
+        id: 'msg-1',
+        conversationId: 'conv-1',
+        senderRole: MessageSenderRole.USER,
+        content: 'Hello',
+        readAt: null,
+        createdAt: new Date(),
+      });
+
+      await service.sendMessage(makeUser(), 'Hello');
+
+      expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
+      expect(prismaMock.botPluginTaskCreate).toHaveBeenCalledWith({
+        data: { messageId: 'msg-1' },
+      });
+    });
+
+    it('should not accept the message when task creation fails', async () => {
+      prismaMock.conversationUpsert.mockResolvedValue({
+        id: 'conv-1',
+        userId: 'user-1',
+      });
+      prismaMock.messageCreate.mockResolvedValue({
+        id: 'msg-1',
+        conversationId: 'conv-1',
+        senderRole: MessageSenderRole.USER,
+        content: 'Hello',
+        readAt: null,
+        createdAt: new Date(),
+      });
+      prismaMock.botPluginTaskCreate.mockRejectedValue(
+        new Error('task insert failed'),
+      );
+
+      await expect(service.sendMessage(makeUser(), 'Hello')).rejects.toThrow(
+        'task insert failed',
+      );
+      // The transaction rolls back: no event, no plugin dispatch
+      expect(chatEventsMock.publish).not.toHaveBeenCalled();
+      expect(botPluginsMock.dispatchAndReply).not.toHaveBeenCalled();
     });
   });
 

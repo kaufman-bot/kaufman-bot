@@ -1,12 +1,14 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { ChatMessageDto, ChatStreamEventDto } from '../dto/chat.dto.js';
 import type { User } from '../generated/prisma/client.js';
 import { MessageSenderRole } from '../generated/prisma/enums.js';
+import { BotPluginsService } from '../plugins/bot-plugins.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { ChatEvent, ChatEventsService } from './chat-events.service.js';
 
@@ -16,13 +18,17 @@ const MAX_CONTENT_LENGTH = 4000;
 /**
  * User-side chat use cases: retrieve conversation history, send messages,
  * and stream real-time events. The conversation is created lazily on the
- * first message from the user.
+ * first message from the user. Every sent user message is also passed to
+ * the bot plugins, whose reply is delivered as a bot message.
  */
 @Injectable()
 export class ChatService {
+  private readonly logger = new Logger(ChatService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly chatEvents: ChatEventsService,
+    private readonly botPlugins: BotPluginsService,
   ) {}
 
   /**
@@ -60,8 +66,9 @@ export class ChatService {
 
   /**
    * Sends a message on behalf of the authenticated user. Creates the
-   * conversation lazily if it does not exist yet. Returns the persisted
-   * message and publishes a real-time event.
+   * conversation lazily if it does not exist yet. The message and its
+   * plugin-dispatch task are persisted atomically (see BotPluginTask).
+   * Returns the persisted message and publishes a real-time event.
    */
   async sendMessage(user: User, content: string): Promise<ChatMessageDto> {
     const trimmed = typeof content === 'string' ? content.trim() : '';
@@ -81,16 +88,28 @@ export class ChatService {
       create: { userId: user.id },
     });
 
-    const message = await this.prisma.message.create({
-      data: {
-        conversationId: conversation.id,
-        senderRole: MessageSenderRole.USER,
-        content: trimmed,
-      },
+    // Atomic acceptance: the message and its plugin-dispatch task are
+    // created in one transaction, so a crash or a DB failure can never leave
+    // a persisted message without its outbox task — the task is what
+    // guarantees the plugin processing is finished (or retried) across
+    // server restarts.
+    const message = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.message.create({
+        data: {
+          conversationId: conversation.id,
+          senderRole: MessageSenderRole.USER,
+          content: trimmed,
+        },
+      });
+      await tx.botPluginTask.create({
+        data: { messageId: created.id },
+      });
+      return created;
     });
 
     const dto = this.toDto(message);
     this.publishEvent(conversation.id, message, dto.createdAt);
+    await this.dispatchToPlugins(conversation.id, user, trimmed, message.id);
 
     return dto;
   }
@@ -153,6 +172,33 @@ export class ChatService {
       throw new NotFoundException('Conversation not found for this user');
     }
     return conversation;
+  }
+
+  /**
+   * Passes a persisted user message to the plugin dispatcher. A dispatcher
+   * failure (including a failed bot-reply persistence) must never fail the
+   * user's own send: it is logged and the send response stays successful.
+   */
+  private async dispatchToPlugins(
+    conversationId: string,
+    user: User,
+    content: string,
+    messageId: string,
+  ): Promise<void> {
+    try {
+      await this.botPlugins.dispatchAndReply(
+        conversationId,
+        user,
+        content,
+        messageId,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Bot plugins dispatch failed for conversation ${conversationId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
   }
 
   private toDto(message: {
