@@ -5,11 +5,27 @@ import { SessionService } from './session.service';
 
 const API_V1 = '/api/v1';
 
+/**
+ * Inline keyboard button attached to a BOT message. Matches the backend
+ * `KeyboardButtonDto` (title is what the user sees, callbackData is the
+ * opaque payload sent back on click).
+ */
+export interface KeyboardButton {
+  title: string;
+  callbackData: string;
+}
+
 export interface ChatMessage {
   id: string;
   conversationId: string;
   senderRole: 'USER' | 'BOT';
   content: string;
+  /**
+   * Inline keyboard snapshot; null when the message was sent without
+   * buttons (which is the case for every USER message and for text-only
+   * BOT replies).
+   */
+  buttons: KeyboardButton[] | null;
   readAt: string | null;
   createdAt: string;
 }
@@ -19,6 +35,7 @@ export interface ChatStreamEvent {
   conversationId: string;
   senderRole: 'USER' | 'BOT';
   content: string;
+  buttons?: KeyboardButton[] | null;
   createdAt: string;
 }
 
@@ -70,6 +87,21 @@ export class ChatService {
       .post<ChatMessage>(`${API_V1}/chat/messages`, {
         content: content.trim(),
       })
+      .pipe(catchError(() => of(null)));
+  }
+
+  /**
+   * Reports a keyboard-button press to the backend. Persists a
+   * `kind=BUTTON` USER message that the operator console sees but the
+   * clicking user never does (see backend ChatService filters). The
+   * response is intentionally dropped — the frontend must NOT append it
+   * to `messages()` because that would create the echo the specs forbid.
+   * Errors are swallowed to `null` so a failed click never surfaces an
+   * inline error and never disturbs the current chat state.
+   */
+  sendButtonCallback(callbackData: string): Observable<ChatMessage | null> {
+    return this.http
+      .post<ChatMessage>(`${API_V1}/chat/button-callbacks`, { callbackData })
       .pipe(catchError(() => of(null)));
   }
 

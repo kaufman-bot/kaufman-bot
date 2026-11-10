@@ -21,6 +21,18 @@ enum MessageSenderRole {
   BOT
 }
 
+/**
+ * Discriminates the source of a chat message. TEXT is the default and covers
+ * ordinary user text, operator replies and plugin replies. BUTTON marks a
+ * message that was created by the user pressing an inline keyboard button —
+ * it is visible to the operator console but suppressed from the user's own
+ * history and SSE stream (see specs/user-chat).
+ */
+enum MessageKind {
+  TEXT
+  BUTTON
+}
+
 enum BotPluginTaskStatus {
   PENDING
   PROCESSING
@@ -39,6 +51,7 @@ model User {
 
   apiKeys      ApiKey[]
   conversation Conversation?
+  presets      ButtonPreset[]
 
   @@map("users")
 }
@@ -74,7 +87,15 @@ model Message {
   id             String            @id @default(cuid())
   conversationId String
   senderRole     MessageSenderRole
+  kind           MessageKind       @default(TEXT)
   content        String
+  /**
+   * Immutable snapshot of inline keyboard buttons captured at send time.
+   * An array of `{ title, callbackData }`. Kept in the row so later edits
+   * or deletion of the source preset never rewrite already-sent messages
+   * (Telegram-like semantics). Read-only through `toButtons()`.
+   */
+  buttons        Json?
   readAt         DateTime?
   createdAt      DateTime          @default(now())
 
@@ -102,4 +123,25 @@ model BotPluginTask {
 
   @@index([status, updatedAt])
   @@map("bot_plugin_tasks")
+}
+
+/**
+ * Reusable named set of inline keyboard buttons owned by an ADMIN user.
+ * CRUD happens through `ButtonPresetsService`; the console picks a preset
+ * as "active" and attaches its `buttons` array to a bot reply, but the
+ * server never stores the "active" pointer — buttons on a `Message` are
+ * an independent snapshot (see specs/button-presets: "Снимок кнопок").
+ */
+model ButtonPreset {
+  id        String   @id @default(cuid())
+  name      String
+  buttons   Json
+  ownerId   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId])
+  @@map("button_presets")
 }

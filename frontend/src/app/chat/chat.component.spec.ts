@@ -25,6 +25,7 @@ describe('ChatComponent', () => {
       conversationId: 'conv1',
       senderRole: 'USER',
       content: 'Hello',
+      buttons: null,
       readAt: null,
       createdAt: '2026-01-01T00:00:00Z',
     },
@@ -33,6 +34,7 @@ describe('ChatComponent', () => {
       conversationId: 'conv1',
       senderRole: 'BOT',
       content: 'Hi there!',
+      buttons: null,
       readAt: null,
       createdAt: '2026-01-01T00:01:00Z',
     },
@@ -133,6 +135,7 @@ describe('ChatComponent', () => {
       conversationId: 'conv1',
       senderRole: 'USER',
       content: 'New message',
+      buttons: null,
       readAt: null,
       createdAt: '2026-01-01T00:02:00Z',
     };
@@ -231,6 +234,7 @@ describe('ChatComponent', () => {
       conversationId: 'conv1',
       senderRole: 'BOT',
       content: 'Recovered reply',
+      buttons: null,
       readAt: null,
       createdAt: '2026-01-01T00:05:00Z',
     };
@@ -259,5 +263,123 @@ describe('ChatComponent', () => {
   it('should handle formatTime with invalid date', () => {
     const formatted = component.formatTime('invalid');
     expect(formatted).toBe('');
+  });
+
+  describe('inline keyboard buttons', () => {
+    const botWithButtons: ChatMessage = {
+      id: 'bot-kb',
+      conversationId: 'conv1',
+      senderRole: 'BOT',
+      content: 'Choose',
+      buttons: [
+        { title: 'Yes', callbackData: 'yes' },
+        { title: 'No', callbackData: 'no' },
+      ],
+      readAt: null,
+      createdAt: '2026-01-01T00:10:00Z',
+    };
+
+    it('renders a keyboard under a BOT message that carries buttons', fakeAsync(() => {
+      jest.spyOn(chatService, 'connectStream').mockReturnValue(of());
+      fixture.detectChanges();
+      httpMock.expectOne('/api/v1/chat/messages').flush([botWithButtons]);
+      tick();
+      fixture.detectChanges();
+
+      const compiled = fixture.nativeElement as HTMLElement;
+      const buttons =
+        compiled.querySelectorAll<HTMLButtonElement>('.keyboard-button');
+      expect(buttons.length).toBe(2);
+      expect(buttons[0].textContent?.trim()).toBe('Yes');
+      expect(buttons[1].textContent?.trim()).toBe('No');
+    }));
+
+    it('does not render a keyboard for a BOT message without buttons', fakeAsync(() => {
+      jest.spyOn(chatService, 'connectStream').mockReturnValue(of());
+      fixture.detectChanges();
+      httpMock
+        .expectOne('/api/v1/chat/messages')
+        .flush([{ ...botWithButtons, buttons: null }]);
+      tick();
+      fixture.detectChanges();
+
+      const compiled = fixture.nativeElement as HTMLElement;
+      expect(compiled.querySelector('.keyboard')).toBeNull();
+    }));
+
+    it('clicking a button posts to /chat/button-callbacks and does not append the click', fakeAsync(() => {
+      jest.spyOn(chatService, 'connectStream').mockReturnValue(of());
+      fixture.detectChanges();
+      httpMock.expectOne('/api/v1/chat/messages').flush([botWithButtons]);
+      tick();
+      fixture.detectChanges();
+
+      // Pre-check: only one message in the store.
+      expect(chatService.messages().length).toBe(1);
+
+      const compiled = fixture.nativeElement as HTMLElement;
+      const yesBtn =
+        compiled.querySelector<HTMLButtonElement>('.keyboard-button')!;
+      yesBtn.click();
+      fixture.detectChanges();
+
+      const req = httpMock.expectOne('/api/v1/chat/button-callbacks');
+      expect(req.request.method).toBe('POST');
+      expect(req.request.body).toEqual({ callbackData: 'yes' });
+
+      // Server returns a USER/BUTTON-kind message; the frontend must NOT
+      // append it to the visible list — that would be the echo the specs
+      // forbid. The store still has only the original BOT message.
+      req.flush(
+        {
+          id: 'click-1',
+          conversationId: 'conv1',
+          senderRole: 'USER',
+          content: 'yes',
+          buttons: null,
+          readAt: null,
+          createdAt: '2026-01-01T00:11:00Z',
+        } satisfies ChatMessage,
+        { status: 201, statusText: 'Created' },
+      );
+      tick();
+      fixture.detectChanges();
+
+      expect(chatService.messages().length).toBe(1);
+      expect(chatService.messages()[0].id).toBe(botWithButtons.id);
+    }));
+
+    it('SSE event carrying buttons propagates them into the message store', fakeAsync(() => {
+      const streamSubject = new Subject<ChatStreamEvent>();
+      jest
+        .spyOn(chatService, 'connectStream')
+        .mockReturnValue(streamSubject.asObservable());
+
+      fixture.detectChanges();
+      httpMock.expectOne('/api/v1/chat/messages').flush([]);
+      tick();
+      fixture.detectChanges();
+
+      streamSubject.next({
+        messageId: 'evt-kb',
+        conversationId: 'conv1',
+        senderRole: 'BOT',
+        content: 'Pick one',
+        buttons: [{ title: 'Ping', callbackData: 'ping' }],
+        createdAt: '2026-01-01T00:12:00Z',
+      });
+      tick();
+      fixture.detectChanges();
+
+      const messages = chatService.messages();
+      expect(messages.length).toBe(1);
+      expect(messages[0].buttons).toEqual([
+        { title: 'Ping', callbackData: 'ping' },
+      ]);
+
+      const compiled = fixture.nativeElement as HTMLElement;
+      const btn = compiled.querySelector<HTMLButtonElement>('.keyboard-button');
+      expect(btn?.textContent?.trim()).toBe('Ping');
+    }));
   });
 });

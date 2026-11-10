@@ -48,6 +48,7 @@ describe('ChatService', () => {
           conversationId: 'conv1',
           senderRole: 'USER' as const,
           content: 'Hello',
+          buttons: null,
           readAt: null,
           createdAt: '2026-01-01T00:00:00Z',
         },
@@ -56,6 +57,7 @@ describe('ChatService', () => {
           conversationId: 'conv1',
           senderRole: 'BOT' as const,
           content: 'Hi there!',
+          buttons: [{ title: 'Yes', callbackData: 'yes' }],
           readAt: null,
           createdAt: '2026-01-01T00:01:00Z',
         },
@@ -88,6 +90,7 @@ describe('ChatService', () => {
         conversationId: 'conv1',
         senderRole: 'USER' as const,
         content: 'Hello bot',
+        buttons: null,
         readAt: null,
         createdAt: '2026-01-01T00:00:00Z',
       };
@@ -109,6 +112,41 @@ describe('ChatService', () => {
 
       const req = httpMock.expectOne('/api/v1/chat/messages');
       req.error(new ProgressEvent('network error'));
+    });
+  });
+
+  describe('sendButtonCallback', () => {
+    it('POSTs callbackData to /api/v1/chat/button-callbacks', () => {
+      const click = {
+        id: 'click-1',
+        conversationId: 'conv1',
+        senderRole: 'USER' as const,
+        content: 'yes',
+        buttons: null,
+        readAt: null,
+        createdAt: '2026-01-01T00:00:00Z',
+      };
+
+      service.sendButtonCallback('yes').subscribe((msg) => {
+        expect(msg).toEqual(click);
+      });
+
+      const req = httpMock.expectOne('/api/v1/chat/button-callbacks');
+      expect(req.request.method).toBe('POST');
+      expect(req.request.body).toEqual({ callbackData: 'yes' });
+      req.flush(click, { status: 201, statusText: 'Created' });
+    });
+
+    it('returns null on error so the UI never breaks on a failed press', () => {
+      let result: unknown = 'pending';
+      service.sendButtonCallback('ping').subscribe((msg) => {
+        result = msg;
+      });
+
+      const req = httpMock.expectOne('/api/v1/chat/button-callbacks');
+      req.error(new ProgressEvent('network error'));
+
+      expect(result).toBeNull();
     });
   });
 
@@ -151,6 +189,7 @@ describe('ChatService', () => {
           conversationId: 'conv1',
           senderRole: 'USER' as const,
           content: 'Test',
+          buttons: null,
           readAt: null,
           createdAt: '2026-01-01T00:00:00Z',
         },

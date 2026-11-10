@@ -2,7 +2,7 @@
 
 import { client } from './client.gen.js';
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client/index.js';
-import type { AdminUsersControllerGetV1Data, AdminUsersControllerGetV1Errors, AdminUsersControllerGetV1Responses, AdminUsersControllerListV1Data, AdminUsersControllerListV1Errors, AdminUsersControllerListV1Responses, AdminUsersControllerRemoveV1Data, AdminUsersControllerRemoveV1Errors, AdminUsersControllerRemoveV1Responses, AdminUsersControllerUpdateV1Data, AdminUsersControllerUpdateV1Errors, AdminUsersControllerUpdateV1Responses, ApiKeysControllerCreateV1Data, ApiKeysControllerCreateV1Errors, ApiKeysControllerCreateV1Responses, ApiKeysControllerListV1Data, ApiKeysControllerListV1Errors, ApiKeysControllerListV1Responses, ApiKeysControllerRemoveV1Data, ApiKeysControllerRemoveV1Errors, ApiKeysControllerRemoveV1Responses, ApiKeysControllerUpdateV1Data, ApiKeysControllerUpdateV1Errors, ApiKeysControllerUpdateV1Responses, AuthControllerLoginV1Data, AuthControllerLoginV1Errors, AuthControllerLoginV1Responses, AuthControllerMeV1Data, AuthControllerMeV1Errors, AuthControllerMeV1Responses, AuthControllerRegisterV1Data, AuthControllerRegisterV1Errors, AuthControllerRegisterV1Responses, AuthControllerUpdateMeV1Data, AuthControllerUpdateMeV1Errors, AuthControllerUpdateMeV1Responses, ChatControllerGetMessagesV1Data, ChatControllerGetMessagesV1Errors, ChatControllerGetMessagesV1Responses, ChatControllerSendMessageV1Data, ChatControllerSendMessageV1Errors, ChatControllerSendMessageV1Responses, ChatControllerStreamEventsV1Data, ChatControllerStreamEventsV1Errors, ChatControllerStreamEventsV1Responses, HealthControllerCheckV1Data, HealthControllerCheckV1Errors, HealthControllerCheckV1Responses, MockBotControllerGetConversationMessagesV1Data, MockBotControllerGetConversationMessagesV1Errors, MockBotControllerGetConversationMessagesV1Responses, MockBotControllerListConversationsV1Data, MockBotControllerListConversationsV1Errors, MockBotControllerListConversationsV1Responses, MockBotControllerReplyAsBotV1Data, MockBotControllerReplyAsBotV1Errors, MockBotControllerReplyAsBotV1Responses, MockBotControllerStreamEventsV1Data, MockBotControllerStreamEventsV1Errors, MockBotControllerStreamEventsV1Responses, TimeControllerStreamV1Data, TimeControllerStreamV1Responses, TimeControllerTimeV1Data, TimeControllerTimeV1Responses } from './types.gen.js';
+import type { AdminUsersControllerGetV1Data, AdminUsersControllerGetV1Errors, AdminUsersControllerGetV1Responses, AdminUsersControllerListV1Data, AdminUsersControllerListV1Errors, AdminUsersControllerListV1Responses, AdminUsersControllerRemoveV1Data, AdminUsersControllerRemoveV1Errors, AdminUsersControllerRemoveV1Responses, AdminUsersControllerUpdateV1Data, AdminUsersControllerUpdateV1Errors, AdminUsersControllerUpdateV1Responses, ApiKeysControllerCreateV1Data, ApiKeysControllerCreateV1Errors, ApiKeysControllerCreateV1Responses, ApiKeysControllerListV1Data, ApiKeysControllerListV1Errors, ApiKeysControllerListV1Responses, ApiKeysControllerRemoveV1Data, ApiKeysControllerRemoveV1Errors, ApiKeysControllerRemoveV1Responses, ApiKeysControllerUpdateV1Data, ApiKeysControllerUpdateV1Errors, ApiKeysControllerUpdateV1Responses, AuthControllerLoginV1Data, AuthControllerLoginV1Errors, AuthControllerLoginV1Responses, AuthControllerMeV1Data, AuthControllerMeV1Errors, AuthControllerMeV1Responses, AuthControllerRegisterV1Data, AuthControllerRegisterV1Errors, AuthControllerRegisterV1Responses, AuthControllerUpdateMeV1Data, AuthControllerUpdateMeV1Errors, AuthControllerUpdateMeV1Responses, ButtonPresetsControllerCreateV1Data, ButtonPresetsControllerCreateV1Errors, ButtonPresetsControllerCreateV1Responses, ButtonPresetsControllerListV1Data, ButtonPresetsControllerListV1Errors, ButtonPresetsControllerListV1Responses, ButtonPresetsControllerRemoveV1Data, ButtonPresetsControllerRemoveV1Errors, ButtonPresetsControllerRemoveV1Responses, ButtonPresetsControllerUpdateV1Data, ButtonPresetsControllerUpdateV1Errors, ButtonPresetsControllerUpdateV1Responses, ChatControllerGetMessagesV1Data, ChatControllerGetMessagesV1Errors, ChatControllerGetMessagesV1Responses, ChatControllerSendMessageV1Data, ChatControllerSendMessageV1Errors, ChatControllerSendMessageV1Responses, ChatControllerStreamEventsV1Data, ChatControllerStreamEventsV1Errors, ChatControllerStreamEventsV1Responses, ChatControllerSubmitButtonCallbackV1Data, ChatControllerSubmitButtonCallbackV1Errors, ChatControllerSubmitButtonCallbackV1Responses, HealthControllerCheckV1Data, HealthControllerCheckV1Errors, HealthControllerCheckV1Responses, MockBotControllerGetConversationMessagesV1Data, MockBotControllerGetConversationMessagesV1Errors, MockBotControllerGetConversationMessagesV1Responses, MockBotControllerListConversationsV1Data, MockBotControllerListConversationsV1Errors, MockBotControllerListConversationsV1Responses, MockBotControllerReplyAsBotV1Data, MockBotControllerReplyAsBotV1Errors, MockBotControllerReplyAsBotV1Responses, MockBotControllerStreamEventsV1Data, MockBotControllerStreamEventsV1Errors, MockBotControllerStreamEventsV1Responses, TimeControllerStreamV1Data, TimeControllerStreamV1Responses, TimeControllerTimeV1Data, TimeControllerTimeV1Responses } from './types.gen.js';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -230,6 +230,20 @@ export class Sdk extends HeyApiClient {
     }
     
     /**
+     * Notify the server that an inline keyboard button was pressed. Persists the callbackData as a USER message with kind=BUTTON (visible to the operator console, suppressed from this user's history/SSE, and never dispatched to bot plugins).
+     */
+    public chatControllerSubmitButtonCallbackV1<ThrowOnError extends boolean = false>(options: Options<ChatControllerSubmitButtonCallbackV1Data, ThrowOnError>): RequestResult<ChatControllerSubmitButtonCallbackV1Responses, ChatControllerSubmitButtonCallbackV1Errors, ThrowOnError> {
+        return (options.client ?? this.client).post<ChatControllerSubmitButtonCallbackV1Responses, ChatControllerSubmitButtonCallbackV1Errors, ThrowOnError>({
+            url: '/api/v1/chat/button-callbacks',
+            ...options,
+            headers: {
+                'Content-Type': 'application/json',
+                ...options.headers
+            }
+        });
+    }
+    
+    /**
      * Stream real-time chat events via Server-Sent Events
      */
     public chatControllerStreamEventsV1<ThrowOnError extends boolean = false>(options?: Options<ChatControllerStreamEventsV1Data, ThrowOnError>): RequestResult<ChatControllerStreamEventsV1Responses, ChatControllerStreamEventsV1Errors, ThrowOnError> {
@@ -251,7 +265,7 @@ export class Sdk extends HeyApiClient {
     }
     
     /**
-     * Send a reply on behalf of the bot to a user
+     * Send a reply on behalf of the bot to a user (optional inline keyboard)
      */
     public mockBotControllerReplyAsBotV1<ThrowOnError extends boolean = false>(options: Options<MockBotControllerReplyAsBotV1Data, ThrowOnError>): RequestResult<MockBotControllerReplyAsBotV1Responses, MockBotControllerReplyAsBotV1Errors, ThrowOnError> {
         return (options.client ?? this.client).post<MockBotControllerReplyAsBotV1Responses, MockBotControllerReplyAsBotV1Errors, ThrowOnError>({
@@ -269,5 +283,47 @@ export class Sdk extends HeyApiClient {
      */
     public mockBotControllerStreamEventsV1<ThrowOnError extends boolean = false>(options?: Options<MockBotControllerStreamEventsV1Data, ThrowOnError>): RequestResult<MockBotControllerStreamEventsV1Responses, MockBotControllerStreamEventsV1Errors, ThrowOnError> {
         return (options?.client ?? this.client).get<MockBotControllerStreamEventsV1Responses, MockBotControllerStreamEventsV1Errors, ThrowOnError>({ url: '/api/v1/mock-bot/stream', ...options });
+    }
+    
+    /**
+     * List presets owned by the calling admin
+     */
+    public buttonPresetsControllerListV1<ThrowOnError extends boolean = false>(options?: Options<ButtonPresetsControllerListV1Data, ThrowOnError>): RequestResult<ButtonPresetsControllerListV1Responses, ButtonPresetsControllerListV1Errors, ThrowOnError> {
+        return (options?.client ?? this.client).get<ButtonPresetsControllerListV1Responses, ButtonPresetsControllerListV1Errors, ThrowOnError>({ url: '/api/v1/mock-bot/presets', ...options });
+    }
+    
+    /**
+     * Create a named preset of inline keyboard buttons
+     */
+    public buttonPresetsControllerCreateV1<ThrowOnError extends boolean = false>(options: Options<ButtonPresetsControllerCreateV1Data, ThrowOnError>): RequestResult<ButtonPresetsControllerCreateV1Responses, ButtonPresetsControllerCreateV1Errors, ThrowOnError> {
+        return (options.client ?? this.client).post<ButtonPresetsControllerCreateV1Responses, ButtonPresetsControllerCreateV1Errors, ThrowOnError>({
+            url: '/api/v1/mock-bot/presets',
+            ...options,
+            headers: {
+                'Content-Type': 'application/json',
+                ...options.headers
+            }
+        });
+    }
+    
+    /**
+     * Delete a caller-owned preset (already-sent messages keep buttons)
+     */
+    public buttonPresetsControllerRemoveV1<ThrowOnError extends boolean = false>(options: Options<ButtonPresetsControllerRemoveV1Data, ThrowOnError>): RequestResult<ButtonPresetsControllerRemoveV1Responses, ButtonPresetsControllerRemoveV1Errors, ThrowOnError> {
+        return (options.client ?? this.client).delete<ButtonPresetsControllerRemoveV1Responses, ButtonPresetsControllerRemoveV1Errors, ThrowOnError>({ url: '/api/v1/mock-bot/presets/{id}', ...options });
+    }
+    
+    /**
+     * Update the name and/or buttons of a caller-owned preset
+     */
+    public buttonPresetsControllerUpdateV1<ThrowOnError extends boolean = false>(options: Options<ButtonPresetsControllerUpdateV1Data, ThrowOnError>): RequestResult<ButtonPresetsControllerUpdateV1Responses, ButtonPresetsControllerUpdateV1Errors, ThrowOnError> {
+        return (options.client ?? this.client).patch<ButtonPresetsControllerUpdateV1Responses, ButtonPresetsControllerUpdateV1Errors, ThrowOnError>({
+            url: '/api/v1/mock-bot/presets/{id}',
+            ...options,
+            headers: {
+                'Content-Type': 'application/json',
+                ...options.headers
+            }
+        });
     }
 }

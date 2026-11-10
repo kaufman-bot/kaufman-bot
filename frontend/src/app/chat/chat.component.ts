@@ -12,7 +12,12 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Subscription } from 'rxjs';
-import { ChatMessage, ChatService, ChatStreamEvent } from '../chat.service';
+import {
+  ChatMessage,
+  ChatService,
+  ChatStreamEvent,
+  KeyboardButton,
+} from '../chat.service';
 
 @Component({
   selector: 'app-chat',
@@ -41,6 +46,21 @@ import { ChatMessage, ChatService, ChatStreamEvent } from '../chat.service';
               msg.senderRole === 'USER' ? 'Вы' : 'Бот'
             }}</span>
             <span class="content">{{ msg.content }}</span>
+            @if (
+              msg.senderRole === 'BOT' && msg.buttons && msg.buttons.length
+            ) {
+              <div class="keyboard" role="group">
+                @for (btn of msg.buttons; track btn.callbackData) {
+                  <button
+                    type="button"
+                    class="keyboard-button"
+                    (click)="onButtonPress(btn)"
+                  >
+                    {{ btn.title }}
+                  </button>
+                }
+              </div>
+            }
             <span class="time">{{ formatTime(msg.createdAt) }}</span>
           </div>
         }
@@ -132,6 +152,27 @@ import { ChatMessage, ChatService, ChatStreamEvent } from '../chat.service';
         font-size: 0.7rem;
         opacity: 0.6;
         align-self: flex-end;
+      }
+      .keyboard {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem;
+        margin-top: 0.4rem;
+      }
+      .keyboard-button {
+        padding: 0.4rem 0.75rem;
+        background: #ffffff;
+        color: #1976d2;
+        border: 1px solid #1976d2;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 0.9rem;
+      }
+      .keyboard-button:hover {
+        background: #e3f2fd;
+      }
+      .keyboard-button:active {
+        background: #bbdefb;
       }
       .input-form {
         display: flex;
@@ -243,12 +284,24 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
     }
   }
 
+  /**
+   * Reports a button press to the backend. Deliberately does NOT append
+   * anything to `chatService.messages()` — the backend filters `kind=BUTTON`
+   * events out of the user's SSE and excludes them from the user's own
+   * history, so appending the response locally would be the exact echo the
+   * specs forbid. The click is a quiet operator-visible trace.
+   */
+  onButtonPress(btn: KeyboardButton): void {
+    this.chatService.sendButtonCallback(btn.callbackData).subscribe();
+  }
+
   private handleStreamEvent(event: ChatStreamEvent): void {
     const newMsg: ChatMessage = {
       id: event.messageId,
       conversationId: event.conversationId,
       senderRole: event.senderRole,
       content: event.content,
+      buttons: event.buttons ?? null,
       readAt: null,
       createdAt: event.createdAt,
     };

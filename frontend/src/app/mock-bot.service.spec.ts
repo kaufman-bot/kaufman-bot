@@ -84,6 +84,7 @@ describe('MockBotService', () => {
           conversationId: 'conv1',
           senderRole: 'USER' as const,
           content: 'Hello',
+          buttons: null,
           readAt: null,
           createdAt: '2026-01-01T00:00:00Z',
         },
@@ -119,6 +120,7 @@ describe('MockBotService', () => {
         conversationId: 'conv1',
         senderRole: 'BOT' as const,
         content: 'Bot reply',
+        buttons: null,
         readAt: null,
         createdAt: '2026-01-01T00:02:00Z',
       };
@@ -135,7 +137,31 @@ describe('MockBotService', () => {
       req.flush(mockResponse, { status: 201, statusText: 'Created' });
     });
 
-    it('should return null on error', () => {
+    it('includes buttons in the body when the caller supplies them', () => {
+      service
+        .sendReply('user1', 'Choose', [
+          { title: 'Yes', callbackData: 'yes' },
+          { title: 'No', callbackData: 'no' },
+        ])
+        .subscribe();
+
+      const req = httpMock.expectOne(
+        '/api/v1/mock-bot/conversations/user1/messages',
+      );
+      expect(req.request.body).toEqual({
+        content: 'Choose',
+        buttons: [
+          { title: 'Yes', callbackData: 'yes' },
+          { title: 'No', callbackData: 'no' },
+        ],
+      });
+      req.flush({ id: 'x' } as unknown as never, {
+        status: 201,
+        statusText: 'Created',
+      });
+    });
+
+    it('returns null on error', () => {
       service.sendReply('user1', 'test').subscribe((msg) => {
         expect(msg).toBeNull();
       });
@@ -147,6 +173,83 @@ describe('MockBotService', () => {
     });
   });
 
+  describe('presets CRUD', () => {
+    it('listPresets → GET /api/v1/mock-bot/presets', () => {
+      const mockPresets = [
+        {
+          id: 'p1',
+          name: 'Yes/No',
+          buttons: [
+            { title: 'Yes', callbackData: 'yes' },
+            { title: 'No', callbackData: 'no' },
+          ],
+          ownerId: 'admin-1',
+          createdAt: '2026-01-01T00:00:00Z',
+          updatedAt: '2026-01-01T00:00:00Z',
+        },
+      ];
+
+      service.listPresets().subscribe((presets) => {
+        expect(presets).toEqual(mockPresets);
+      });
+
+      const req = httpMock.expectOne('/api/v1/mock-bot/presets');
+      expect(req.request.method).toBe('GET');
+      req.flush(mockPresets);
+    });
+
+    it('listPresets resolves to [] on error (console must keep working)', () => {
+      service.listPresets().subscribe((presets) => {
+        expect(presets).toEqual([]);
+      });
+
+      const req = httpMock.expectOne('/api/v1/mock-bot/presets');
+      req.error(new ProgressEvent('network error'));
+    });
+
+    it('createPets → POST /api/v1/mock-bot/presets with name and buttons', () => {
+      service
+        .createPreset('Greeting', [{ title: 'Hi', callbackData: 'hi' }])
+        .subscribe();
+
+      const req = httpMock.expectOne('/api/v1/mock-bot/presets');
+      expect(req.request.method).toBe('POST');
+      expect(req.request.body).toEqual({
+        name: 'Greeting',
+        buttons: [{ title: 'Hi', callbackData: 'hi' }],
+      });
+      req.flush({ id: 'p2' }, { status: 201, statusText: 'Created' });
+    });
+
+    it('updatePreset → PATCH /api/v1/mock-bot/presets/:id with partial body', () => {
+      service.updatePreset('p1', { name: 'Renamed' }).subscribe();
+
+      const req = httpMock.expectOne('/api/v1/mock-bot/presets/p1');
+      expect(req.request.method).toBe('PATCH');
+      expect(req.request.body).toEqual({ name: 'Renamed' });
+      req.flush({ id: 'p1', name: 'Renamed' });
+    });
+
+    it('deletePreset → DELETE /api/v1/mock-bot/presets/:id yields true', () => {
+      let result: boolean | undefined;
+      service.deletePreset('p1').subscribe((ok) => (result = ok));
+
+      const req = httpMock.expectOne('/api/v1/mock-bot/presets/p1');
+      expect(req.request.method).toBe('DELETE');
+      req.flush(null);
+      expect(result).toBe(true);
+    });
+
+    it('deletePreset yields false on error', () => {
+      let result: boolean | undefined;
+      service.deletePreset('p1').subscribe((ok) => (result = ok));
+
+      const req = httpMock.expectOne('/api/v1/mock-bot/presets/p1');
+      req.error(new ProgressEvent('network error'));
+      expect(result).toBe(false);
+    });
+  });
+
   describe('selectConversation', () => {
     it('should set selectedUserId and load messages', () => {
       const mockMsgs = [
@@ -155,6 +258,7 @@ describe('MockBotService', () => {
           conversationId: 'conv1',
           senderRole: 'USER' as const,
           content: 'Hello',
+          buttons: null,
           readAt: null,
           createdAt: '2026-01-01T00:00:00Z',
         },

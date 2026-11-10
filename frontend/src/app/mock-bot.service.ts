@@ -1,9 +1,25 @@
 import { HttpClient } from '@angular/common/http';
 import { inject, Injectable, signal } from '@angular/core';
-import { catchError, Observable, of, switchMap, timer } from 'rxjs';
+import { catchError, map, Observable, of, switchMap, timer } from 'rxjs';
 import { SessionService } from './session.service';
 
 const API_V1 = '/api/v1';
+
+/** Inline keyboard button; matches backend `KeyboardButtonDto`. */
+export interface KeyboardButton {
+  title: string;
+  callbackData: string;
+}
+
+/** Reusable named button set owned by the calling ADMIN. */
+export interface ButtonPreset {
+  id: string;
+  name: string;
+  buttons: KeyboardButton[];
+  ownerId: string;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export interface ConversationSummary {
   id: string;
@@ -22,6 +38,8 @@ export interface ConversationMessage {
   conversationId: string;
   senderRole: 'USER' | 'BOT';
   content: string;
+  /** Inline keyboard snapshot (null when the reply was text-only). */
+  buttons: KeyboardButton[] | null;
   readAt: string | null;
   createdAt: string;
 }
@@ -32,6 +50,7 @@ export interface MockBotStreamEvent {
   userId: string;
   senderRole: 'USER' | 'BOT';
   content: string;
+  buttons?: KeyboardButton[] | null;
   createdAt: string;
 }
 
@@ -53,6 +72,14 @@ export class MockBotService {
 
   /** The userId of the currently selected conversation. */
   readonly selectedUserId = signal<string | null>(null);
+
+  /**
+   * Presets owned by the calling ADMIN. Loaded once on console init via
+   * `listPresets` and mutated locally by `createPreset` / `updatePreset` /
+   * `deletePreset`; the console never sees foreign presets because the
+   * backend filters by `ownerId`.
+   */
+  readonly presets = signal<ButtonPreset[]>([]);
 
   /** Whether the SSE connection is active. */
   readonly connected = signal(false);
@@ -82,19 +109,64 @@ export class MockBotService {
   }
 
   /**
-   * Sends a bot reply to a user's conversation.
+   * Sends a bot reply to a user's conversation. Both `content` and
+   * `buttons` are optional here but the backend requires at least one
+   * non-empty; the console validates before calling.
    * POST /api/v1/mock-bot/conversations/:userId/messages
    */
   sendReply(
     userId: string,
     content: string,
+    buttons?: KeyboardButton[],
   ): Observable<ConversationMessage | null> {
+    const body: Record<string, unknown> = { content: content.trim() };
+    if (buttons && buttons.length > 0) {
+      body['buttons'] = buttons;
+    }
     return this.http
       .post<ConversationMessage>(
         `${API_V1}/mock-bot/conversations/${userId}/messages`,
-        { content: content.trim() },
+        body,
       )
       .pipe(catchError(() => of(null)));
+  }
+
+  /**
+   * Lists presets owned by the calling ADMIN. Errors resolve to `[]` so
+   * a transient outage does not blank the console UI.
+   */
+  listPresets(): Observable<ButtonPreset[]> {
+    return this.http
+      .get<ButtonPreset[]>(`${API_V1}/mock-bot/presets`)
+      .pipe(catchError(() => of([])));
+  }
+
+  /** Creates a preset from `name` + `buttons` (backend enforces 1..12). */
+  createPreset(
+    name: string,
+    buttons: KeyboardButton[],
+  ): Observable<ButtonPreset | null> {
+    return this.http
+      .post<ButtonPreset>(`${API_V1}/mock-bot/presets`, { name, buttons })
+      .pipe(catchError(() => of(null)));
+  }
+
+  /** Patches name and/or buttons of a preset the caller owns. */
+  updatePreset(
+    id: string,
+    body: { name?: string; buttons?: KeyboardButton[] },
+  ): Observable<ButtonPreset | null> {
+    return this.http
+      .patch<ButtonPreset>(`${API_V1}/mock-bot/presets/${id}`, body)
+      .pipe(catchError(() => of(null)));
+  }
+
+  /** Deletes a caller-owned preset; already-sent messages keep buttons. */
+  deletePreset(id: string): Observable<boolean> {
+    return this.http.delete<void>(`${API_V1}/mock-bot/presets/${id}`).pipe(
+      map(() => true),
+      catchError(() => of(false)),
+    );
   }
 
   /**

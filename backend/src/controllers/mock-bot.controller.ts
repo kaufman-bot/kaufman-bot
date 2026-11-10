@@ -101,21 +101,28 @@ export class MockBotController {
   }
 
   @Post('conversations/:userId/messages')
-  @ApiOperation({ summary: 'Send a reply on behalf of the bot to a user' })
+  @ApiOperation({
+    summary:
+      'Send a reply on behalf of the bot to a user (optional inline keyboard)',
+  })
   @ApiParam({ name: 'userId', description: 'User ID to reply to' })
   @ApiCreatedResponse({
     type: ChatMessageDto,
-    description: 'The persisted bot message with its server-generated fields',
+    description:
+      'The persisted bot message with its server-generated fields, ' +
+      'including the buttons snapshot when the reply carries a keyboard',
   })
   @ApiBadRequestResponse({
     type: ApiErrorDto,
-    description: 'Reply content is empty or exceeds 4000 characters',
+    description:
+      'Reply is empty (no text and no buttons), text exceeds 4000 characters, ' +
+      'or the buttons array fails validation',
   })
   async replyAsBot(
     @Param('userId') userId: string,
     @Body() dto: MockBotReplyRequestDto,
   ): Promise<ChatMessageDto> {
-    return this.mockBotService.replyAsBot(userId, dto.content);
+    return this.mockBotService.replyAsBot(userId, dto.content, dto.buttons);
   }
 
   @Sse('stream')

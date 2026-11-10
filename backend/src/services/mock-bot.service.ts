@@ -6,12 +6,18 @@ import {
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { ChatMessageDto } from '../dto/chat.dto.js';
+import { KeyboardButtonDto } from '../dto/keyboard.dto.js';
 import {
   ConversationSummaryDto,
   MockBotStreamEventDto,
 } from '../dto/mock-bot.dto.js';
-import { MessageSenderRole } from '../generated/prisma/enums.js';
+import { MessageKind, MessageSenderRole } from '../generated/prisma/enums.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import {
+  normalizeButtons,
+  toButtons,
+  validateButtons,
+} from '../utils/keyboard-buttons.js';
 import { ChatEvent, ChatEventsService } from './chat-events.service.js';
 
 /** Maximum length of a reply content after trimming. */
@@ -22,8 +28,9 @@ const LAST_MESSAGE_PREVIEW_LENGTH = 100;
 
 /**
  * Operator-side mock-bot console use cases: list conversations with unread
- * counts, read a specific user's messages, reply as the bot, and stream
- * real-time events from all users.
+ * counts, read a specific user's messages, reply as the bot (optionally
+ * with an inline keyboard snapshot), and stream real-time events from all
+ * users.
  */
 @Injectable()
 export class MockBotService {
@@ -90,6 +97,12 @@ export class MockBotService {
    * Retrieves all messages for a specific user's conversation and marks
    * them as read (the operator is viewing them). Returns messages ordered
    * by creation time ascending.
+   *
+   * Unlike the user-side history, the operator console sees everything:
+   * ordinary text, bot replies (with their inline keyboard snapshot) and
+   * user button callbacks. Callback messages carry `kind=BUTTON` and their
+   * `content` equals the pressed `callbackData`, so the operator can trace
+   * every click without reloading the page.
    */
   async getConversationMessages(userId: string): Promise<ChatMessageDto[]> {
     const conversation = await this.prisma.conversation.findUnique({
@@ -122,6 +135,7 @@ export class MockBotService {
           conversationId: msg.conversationId,
           senderRole: msg.senderRole as 'USER' | 'BOT',
           content: msg.content,
+          buttons: toButtons(msg.buttons),
           readAt: msg.readAt?.toISOString() ?? null,
           createdAt: msg.createdAt.toISOString(),
         }),
@@ -132,11 +146,26 @@ export class MockBotService {
    * Sends a reply on behalf of the bot to a specific user's conversation.
    * Creates the conversation if it does not exist yet (edge case: operator
    * replies before the user has sent any messages).
+   *
+   * `content` is optional (trimmed) and `buttons` is optional; the reply
+   * MUST carry at least one of them, otherwise 400 is raised. Buttons go
+   * through `validateButtons` (1..12 items, per-field length limits) and
+   * are stored on the message row as an immutable `Json` snapshot so later
+   * edits or deletion of the source preset never rewrite this row.
    */
-  async replyAsBot(userId: string, content: string): Promise<ChatMessageDto> {
+  async replyAsBot(
+    userId: string,
+    content: string | undefined,
+    buttons?: KeyboardButtonDto[],
+  ): Promise<ChatMessageDto> {
     const trimmed = typeof content === 'string' ? content.trim() : '';
-    if (!trimmed) {
-      throw new BadRequestException('Reply content cannot be empty');
+    validateButtons(buttons);
+    const normalizedButtons = normalizeButtons(buttons);
+
+    if (!trimmed && (!normalizedButtons || normalizedButtons.length === 0)) {
+      throw new BadRequestException(
+        'Reply must contain text or at least one button',
+      );
     }
     if (trimmed.length > MAX_CONTENT_LENGTH) {
       throw new BadRequestException(
@@ -155,26 +184,35 @@ export class MockBotService {
       data: {
         conversationId: conversation.id,
         senderRole: MessageSenderRole.BOT,
+        kind: MessageKind.TEXT,
         content: trimmed,
+        buttons: normalizedButtons
+          ? (normalizedButtons as unknown as object)
+          : undefined,
       },
     });
 
+    const dtoButtons = toButtons(message.buttons);
     const dto = new ChatMessageDto({
       id: message.id,
       conversationId: message.conversationId,
       senderRole: message.senderRole as 'USER' | 'BOT',
       content: message.content,
+      buttons: dtoButtons,
       readAt: message.readAt?.toISOString() ?? null,
       createdAt: message.createdAt.toISOString(),
     });
 
-    // Publish event for real-time delivery
+    // Publish event for real-time delivery (kind=TEXT: this is a normal
+    // bot reply, visible to both the operator console and the user).
     const event: ChatEvent = {
       conversationId: conversation.id,
       messageId: message.id,
       senderRole: MessageSenderRole.BOT,
       content: trimmed,
       createdAt: dto.createdAt,
+      kind: 'TEXT',
+      buttons: dtoButtons,
     };
     this.chatEvents.publish(event);
 
@@ -184,7 +222,7 @@ export class MockBotService {
   /**
    * Returns an Observable that emits real-time chat events from all
    * conversations. The mock-bot console uses this to stream messages
-   * from all users without filtering.
+   * from all users without filtering (including BUTTON-kind callbacks).
    */
   streamEvents(): Observable<MockBotStreamEventDto> {
     return this.chatEvents
@@ -199,6 +237,7 @@ export class MockBotService {
       userId: '', // Will be enriched below
       senderRole: event.senderRole,
       content: event.content,
+      buttons: event.buttons ?? null,
       createdAt: event.createdAt,
     });
   }

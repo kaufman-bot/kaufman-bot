@@ -1,10 +1,20 @@
 import { Injectable, OnModuleDestroy } from '@nestjs/common';
 import { Observable, Subject } from 'rxjs';
 import { filter, map } from 'rxjs/operators';
+import { KeyboardButtonDto } from '../dto/keyboard.dto.js';
 
 /**
  * Shape of a chat event published through the bus. The `conversationId`
  * identifies the dialogue the message belongs to; consumers filter by it.
+ *
+ * `kind` distinguishes ordinary messages (`TEXT`, default when omitted by
+ * a legacy publisher) from button callbacks (`BUTTON`). The user-side SSE
+ * stream suppresses `BUTTON` events so a click does not echo back into the
+ * clicking user's own chat. The operator console keeps them and renders
+ * them as ordinary USER messages.
+ *
+ * `buttons` is the inline keyboard attached to a BOT message. Null/omitted
+ * for text-only replies and for USER messages.
  */
 export interface ChatEvent {
   conversationId: string;
@@ -12,6 +22,8 @@ export interface ChatEvent {
   senderRole: 'USER' | 'BOT';
   content: string;
   createdAt: string;
+  kind?: 'TEXT' | 'BUTTON';
+  buttons?: KeyboardButtonDto[] | null;
 }
 
 /**

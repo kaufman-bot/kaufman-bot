@@ -320,6 +320,17 @@ export type UpdateAdminUserRequestDto = {
     role?: 'USER' | 'ADMIN' | 'GUEST';
 };
 
+export type KeyboardButtonDto = {
+    /**
+     * Visible label shown on the button
+     */
+    title: string;
+    /**
+     * Opaque payload sent back to the server when the button is pressed
+     */
+    callbackData: string;
+};
+
 export type ChatMessageDto = {
     /**
      * Unique message identifier
@@ -337,6 +348,10 @@ export type ChatMessageDto = {
      * Message text content
      */
     content: string;
+    /**
+     * Inline keyboard buttons attached to a bot message (null when the message has no buttons). For user-side reads, callback messages (kind=BUTTON) are filtered out before reaching the client, so this field is only ever present on BOT messages of the user history.
+     */
+    buttons: Array<KeyboardButtonDto> | null;
     /**
      * When the opposite side read the message (null if unread)
      */
@@ -356,6 +371,13 @@ export type SendMessageRequestDto = {
     content: string;
 };
 
+export type ButtonCallbackRequestDto = {
+    /**
+     * Opaque callbackData carried by the pressed button (non-empty, max 256 characters)
+     */
+    callbackData: string;
+};
+
 export type ChatStreamEventDto = {
     /**
      * Unique message identifier
@@ -373,6 +395,10 @@ export type ChatStreamEventDto = {
      * Message text content
      */
     content: string;
+    /**
+     * Inline keyboard buttons attached to a bot message (null when none)
+     */
+    buttons: Array<KeyboardButtonDto> | null;
     /**
      * When the message was created
      */
@@ -424,9 +450,13 @@ export type ConversationSummaryDto = {
 
 export type MockBotReplyRequestDto = {
     /**
-     * Reply text (non-empty, max 4000 characters after trimming)
+     * Optional reply text (max 4000 characters after trimming). Must be present together with at least one button when omitted.
      */
-    content: string;
+    content?: string;
+    /**
+     * Optional ordered set of inline keyboard buttons attached to the reply (1..12 items). Required when `content` is empty.
+     */
+    buttons?: Array<KeyboardButtonDto>;
 };
 
 export type MockBotStreamEventDto = {
@@ -451,9 +481,62 @@ export type MockBotStreamEventDto = {
      */
     content: string;
     /**
+     * Inline keyboard buttons attached to a bot message (null when none)
+     */
+    buttons: Array<KeyboardButtonDto> | null;
+    /**
      * When the message was created
      */
     createdAt: string;
+};
+
+export type CreateButtonPresetRequestDto = {
+    /**
+     * Preset name shown in the console list
+     */
+    name: string;
+    /**
+     * Ordered set of buttons (1..12 items). Each button must have a non-empty title (≤64 chars) and callbackData (≤256 chars).
+     */
+    buttons: Array<KeyboardButtonDto>;
+};
+
+export type ButtonPresetDto = {
+    /**
+     * Unique preset identifier
+     */
+    id: string;
+    /**
+     * Preset name
+     */
+    name: string;
+    /**
+     * Ordered buttons stored in the preset
+     */
+    buttons: Array<KeyboardButtonDto>;
+    /**
+     * ADMIN user who owns this preset
+     */
+    ownerId: string;
+    /**
+     * When the preset was created
+     */
+    createdAt: string;
+    /**
+     * When the preset was last modified
+     */
+    updatedAt: string;
+};
+
+export type UpdateButtonPresetRequestDto = {
+    /**
+     * New preset name (optional; unchanged when omitted)
+     */
+    name?: string;
+    /**
+     * New ordered set of buttons (optional; unchanged when omitted). When provided it must contain 1..12 valid buttons.
+     */
+    buttons?: Array<KeyboardButtonDto>;
 };
 
 export type TimeControllerTimeV1Data = {
@@ -1015,6 +1098,41 @@ export type ChatControllerSendMessageV1Responses = {
 
 export type ChatControllerSendMessageV1Response = ChatControllerSendMessageV1Responses[keyof ChatControllerSendMessageV1Responses];
 
+export type ChatControllerSubmitButtonCallbackV1Data = {
+    body: ButtonCallbackRequestDto;
+    headers?: {
+        /**
+         * API key of the authenticated user. Optional in the schema because ?apiKey= is accepted as an alternative (header-less SSE clients); the guard rejects requests that carry neither.
+         */
+        'x-api-key'?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/chat/button-callbacks';
+};
+
+export type ChatControllerSubmitButtonCallbackV1Errors = {
+    /**
+     * callbackData is empty or exceeds 256 characters
+     */
+    400: ApiErrorDto;
+    /**
+     * No valid API key provided
+     */
+    401: ApiErrorDto;
+};
+
+export type ChatControllerSubmitButtonCallbackV1Error = ChatControllerSubmitButtonCallbackV1Errors[keyof ChatControllerSubmitButtonCallbackV1Errors];
+
+export type ChatControllerSubmitButtonCallbackV1Responses = {
+    /**
+     * The persisted callback message. Clients should NOT append it to the user's local chat list (server-side suppression mirrors the client).
+     */
+    201: ChatMessageDto;
+};
+
+export type ChatControllerSubmitButtonCallbackV1Response = ChatControllerSubmitButtonCallbackV1Responses[keyof ChatControllerSubmitButtonCallbackV1Responses];
+
 export type ChatControllerStreamEventsV1Data = {
     body?: never;
     headers?: {
@@ -1145,7 +1263,7 @@ export type MockBotControllerReplyAsBotV1Data = {
 
 export type MockBotControllerReplyAsBotV1Errors = {
     /**
-     * Reply content is empty or exceeds 4000 characters
+     * Reply is empty (no text and no buttons), text exceeds 4000 characters, or the buttons array fails validation
      */
     400: ApiErrorDto;
     /**
@@ -1162,7 +1280,7 @@ export type MockBotControllerReplyAsBotV1Error = MockBotControllerReplyAsBotV1Er
 
 export type MockBotControllerReplyAsBotV1Responses = {
     /**
-     * The persisted bot message with its server-generated fields
+     * The persisted bot message with its server-generated fields, including the buttons snapshot when the reply carries a keyboard
      */
     201: ChatMessageDto;
 };
@@ -1203,3 +1321,169 @@ export type MockBotControllerStreamEventsV1Responses = {
 };
 
 export type MockBotControllerStreamEventsV1Response = MockBotControllerStreamEventsV1Responses[keyof MockBotControllerStreamEventsV1Responses];
+
+export type ButtonPresetsControllerListV1Data = {
+    body?: never;
+    headers?: {
+        /**
+         * API key of an ADMIN account. Optional in the schema because ?apiKey= is accepted as an alternative; the guard rejects requests that carry neither.
+         */
+        'x-api-key'?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/mock-bot/presets';
+};
+
+export type ButtonPresetsControllerListV1Errors = {
+    /**
+     * No valid API key provided
+     */
+    401: ApiErrorDto;
+    /**
+     * Authenticated account is not an admin
+     */
+    403: ApiErrorDto;
+};
+
+export type ButtonPresetsControllerListV1Error = ButtonPresetsControllerListV1Errors[keyof ButtonPresetsControllerListV1Errors];
+
+export type ButtonPresetsControllerListV1Responses = {
+    /**
+     * Only the caller-owned presets; foreign presets are never returned
+     */
+    200: Array<ButtonPresetDto>;
+};
+
+export type ButtonPresetsControllerListV1Response = ButtonPresetsControllerListV1Responses[keyof ButtonPresetsControllerListV1Responses];
+
+export type ButtonPresetsControllerCreateV1Data = {
+    body: CreateButtonPresetRequestDto;
+    headers?: {
+        /**
+         * API key of an ADMIN account. Optional in the schema because ?apiKey= is accepted as an alternative; the guard rejects requests that carry neither.
+         */
+        'x-api-key'?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/mock-bot/presets';
+};
+
+export type ButtonPresetsControllerCreateV1Errors = {
+    /**
+     * Empty name, empty buttons list, or buttons that fail validation (missing/blank title/callbackData, per-field length limits, >12 items)
+     */
+    400: ApiErrorDto;
+    /**
+     * No valid API key provided
+     */
+    401: ApiErrorDto;
+    /**
+     * Authenticated account is not an admin
+     */
+    403: ApiErrorDto;
+};
+
+export type ButtonPresetsControllerCreateV1Error = ButtonPresetsControllerCreateV1Errors[keyof ButtonPresetsControllerCreateV1Errors];
+
+export type ButtonPresetsControllerCreateV1Responses = {
+    /**
+     * The persisted preset owned by the calling admin
+     */
+    201: ButtonPresetDto;
+};
+
+export type ButtonPresetsControllerCreateV1Response = ButtonPresetsControllerCreateV1Responses[keyof ButtonPresetsControllerCreateV1Responses];
+
+export type ButtonPresetsControllerRemoveV1Data = {
+    body?: never;
+    headers?: {
+        /**
+         * API key of an ADMIN account. Optional in the schema because ?apiKey= is accepted as an alternative; the guard rejects requests that carry neither.
+         */
+        'x-api-key'?: string;
+    };
+    path: {
+        /**
+         * Preset id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/v1/mock-bot/presets/{id}';
+};
+
+export type ButtonPresetsControllerRemoveV1Errors = {
+    /**
+     * No valid API key provided
+     */
+    401: ApiErrorDto;
+    /**
+     * Authenticated account is not an admin
+     */
+    403: ApiErrorDto;
+    /**
+     * Preset does not exist or belongs to another admin
+     */
+    404: ApiErrorDto;
+};
+
+export type ButtonPresetsControllerRemoveV1Error = ButtonPresetsControllerRemoveV1Errors[keyof ButtonPresetsControllerRemoveV1Errors];
+
+export type ButtonPresetsControllerRemoveV1Responses = {
+    /**
+     * Preset deleted
+     */
+    204: void;
+};
+
+export type ButtonPresetsControllerRemoveV1Response = ButtonPresetsControllerRemoveV1Responses[keyof ButtonPresetsControllerRemoveV1Responses];
+
+export type ButtonPresetsControllerUpdateV1Data = {
+    body: UpdateButtonPresetRequestDto;
+    headers?: {
+        /**
+         * API key of an ADMIN account. Optional in the schema because ?apiKey= is accepted as an alternative; the guard rejects requests that carry neither.
+         */
+        'x-api-key'?: string;
+    };
+    path: {
+        /**
+         * Preset id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/v1/mock-bot/presets/{id}';
+};
+
+export type ButtonPresetsControllerUpdateV1Errors = {
+    /**
+     * Empty body, invalid name or invalid buttons
+     */
+    400: ApiErrorDto;
+    /**
+     * No valid API key provided
+     */
+    401: ApiErrorDto;
+    /**
+     * Authenticated account is not an admin
+     */
+    403: ApiErrorDto;
+    /**
+     * Preset does not exist or belongs to another admin
+     */
+    404: ApiErrorDto;
+};
+
+export type ButtonPresetsControllerUpdateV1Error = ButtonPresetsControllerUpdateV1Errors[keyof ButtonPresetsControllerUpdateV1Errors];
+
+export type ButtonPresetsControllerUpdateV1Responses = {
+    /**
+     * The updated preset
+     */
+    200: ButtonPresetDto;
+};
+
+export type ButtonPresetsControllerUpdateV1Response = ButtonPresetsControllerUpdateV1Responses[keyof ButtonPresetsControllerUpdateV1Responses];

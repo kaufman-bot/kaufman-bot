@@ -20,6 +20,7 @@ import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { X_API_KEY } from '../constants/api-key.constants.js';
 import {
+  ButtonCallbackRequestDto,
   ChatMessageDto,
   ChatStreamEventDto,
   SendMessageRequestDto,
@@ -85,6 +86,32 @@ export class ChatController {
   ): Promise<ChatMessageDto> {
     const user = requireAuthUser(req);
     return this.chatService.sendMessage(user, dto.content);
+  }
+
+  @Post('button-callbacks')
+  @ApiOperation({
+    summary:
+      'Notify the server that an inline keyboard button was pressed. ' +
+      'Persists the callbackData as a USER message with kind=BUTTON (visible ' +
+      "to the operator console, suppressed from this user's history/SSE, " +
+      'and never dispatched to bot plugins).',
+  })
+  @ApiCreatedResponse({
+    type: ChatMessageDto,
+    description:
+      'The persisted callback message. Clients should NOT append it to the ' +
+      "user's local chat list (server-side suppression mirrors the client).",
+  })
+  @ApiBadRequestResponse({
+    type: ApiErrorDto,
+    description: 'callbackData is empty or exceeds 256 characters',
+  })
+  async submitButtonCallback(
+    @Req() req: AuthenticatedRequest,
+    @Body() dto: ButtonCallbackRequestDto,
+  ): Promise<ChatMessageDto> {
+    const user = requireAuthUser(req);
+    return this.chatService.submitButtonCallback(user, dto);
   }
 
   @Sse('stream')

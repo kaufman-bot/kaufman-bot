@@ -5,6 +5,7 @@ import { join } from 'path';
 import { AdminUsersController } from './controllers/admin-users.controller.js';
 import { ApiKeysController } from './controllers/api-keys.controller.js';
 import { AuthController } from './controllers/auth.controller.js';
+import { ButtonPresetsController } from './controllers/button-presets.controller.js';
 import { ChatController } from './controllers/chat.controller.js';
 import { HealthController } from './controllers/health.controller.js';
 import { MockBotController } from './controllers/mock-bot.controller.js';
@@ -17,6 +18,7 @@ import { PrismaModule } from './prisma/index.js';
 import { SeedModule } from './seed/seed.module.js';
 import { ApiKeysService } from './services/api-keys.service.js';
 import { AuthService } from './services/auth.service.js';
+import { ButtonPresetsService } from './services/button-presets.service.js';
 import { ChatEventsService } from './services/chat-events.service.js';
 import { ChatService } from './services/chat.service.js';
 import { MockBotService } from './services/mock-bot.service.js';
@@ -62,10 +64,12 @@ const isProd = process.env.NODE_ENV === 'production';
     AdminUsersController,
     ChatController,
     MockBotController,
+    ButtonPresetsController,
   ],
   providers: [
     ApiKeysService,
     AuthService,
+    ButtonPresetsService,
     ChatEventsService,
     ChatService,
     MockBotService,

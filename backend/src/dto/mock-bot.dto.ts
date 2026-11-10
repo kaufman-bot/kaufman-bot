@@ -1,4 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiExtraModels, ApiProperty } from '@nestjs/swagger';
+import { KeyboardButtonDto } from './keyboard.dto.js';
 
 /**
  * Summary of a conversation for the mock-bot console list view. Includes
@@ -59,21 +60,46 @@ export class ConversationSummaryDto {
 /**
  * Request body for POST /mock-bot/conversations/:userId/messages. The
  * operator replies on behalf of the bot to a specific user's conversation.
+ *
+ * At least one of `content` or `buttons` MUST be non-empty; a request with
+ * neither is rejected with 400 by the service. When `buttons` is provided,
+ * it is validated (non-empty title/callbackData, length limits, 1..12 items)
+ * and stored on the message as an immutable snapshot.
  */
+@ApiExtraModels(KeyboardButtonDto)
 export class MockBotReplyRequestDto {
   @ApiProperty({
-    description: 'Reply text (non-empty, max 4000 characters after trimming)',
+    description:
+      'Optional reply text (max 4000 characters after trimming). Must be ' +
+      'present together with at least one button when omitted.',
     example: 'Hello! How can I help you?',
     maxLength: 4000,
+    required: false,
   })
-  content: string;
+  content?: string;
+
+  @ApiProperty({
+    description:
+      'Optional ordered set of inline keyboard buttons attached to the ' +
+      'reply (1..12 items). Required when `content` is empty.',
+    type: KeyboardButtonDto,
+    isArray: true,
+    required: false,
+  })
+  buttons?: KeyboardButtonDto[];
 }
 
 /**
  * SSE event payload for /mock-bot/stream. Emitted whenever any user sends
  * a message or a bot replies. The console uses this to update the UI in
  * real-time without polling.
+ *
+ * Callback messages produced by the user pressing a button are also
+ * published here (kind=BUTTON) with the operator-visible `content` set to
+ * the pressed `callbackData`. The console renders them as ordinary USER
+ * messages so the operator sees the click without a page reload.
  */
+@ApiExtraModels(KeyboardButtonDto)
 export class MockBotStreamEventDto {
   @ApiProperty({ description: 'Unique message identifier' })
   messageId: string;
@@ -94,6 +120,15 @@ export class MockBotStreamEventDto {
   content: string;
 
   @ApiProperty({
+    description:
+      'Inline keyboard buttons attached to a bot message (null when none)',
+    type: KeyboardButtonDto,
+    isArray: true,
+    nullable: true,
+  })
+  buttons: KeyboardButtonDto[] | null;
+
+  @ApiProperty({
     description: 'When the message was created',
     format: 'date-time',
   })
@@ -101,5 +136,8 @@ export class MockBotStreamEventDto {
 
   constructor(partial: Partial<MockBotStreamEventDto>) {
     Object.assign(this, partial);
+    if (this.buttons === undefined) {
+      this.buttons = null;
+    }
   }
 }

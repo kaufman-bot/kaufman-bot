@@ -184,7 +184,9 @@ describe('Mock Bot Console endpoints (e2e, running backend)', () => {
       });
 
       expect(result.response?.status).toBe(400);
-      expect(messageOf(result.error)).toMatch(/cannot be empty/i);
+      expect(messageOf(result.error)).toMatch(
+        /must contain text or at least one button/i,
+      );
     });
 
     it('rejects content exceeding 4000 characters with 400', async () => {
@@ -215,6 +217,97 @@ describe('Mock Bot Console endpoints (e2e, running backend)', () => {
       const botMessage = messages.find((m) => m.senderRole === 'BOT');
       expect(botMessage).toBeDefined();
       expect(botMessage!.content).toBe('Bot reply for user 2');
+    });
+
+    describe('with inline keyboard buttons', () => {
+      it('persists text + buttons and preserves the caller order', async () => {
+        const result = await admin.sdk.mockBotControllerReplyAsBotV1({
+          path: { userId: user1Id },
+          body: {
+            content: 'Please choose',
+            buttons: [
+              { title: 'Yes', callbackData: 'yes' },
+              { title: 'No', callbackData: 'no' },
+              { title: 'Maybe', callbackData: 'maybe' },
+            ],
+          },
+        });
+
+        expect(result.response?.status).toBe(201);
+        const message = result.data as ChatMessageDto;
+        expect(message.content).toBe('Please choose');
+        expect(message.buttons).toEqual([
+          { title: 'Yes', callbackData: 'yes' },
+          { title: 'No', callbackData: 'no' },
+          { title: 'Maybe', callbackData: 'maybe' },
+        ]);
+
+        // History must expose the same buttons on the same row.
+        const history =
+          await admin.sdk.mockBotControllerGetConversationMessagesV1({
+            path: { userId: user1Id },
+          });
+        const inHistory = (history.data as ChatMessageDto[]).find(
+          (m) => m.id === message.id,
+        );
+        expect(inHistory).toBeDefined();
+        expect(inHistory!.buttons).toEqual(message.buttons);
+      });
+
+      it('accepts a buttons-only reply (content omitted)', async () => {
+        const result = await admin.sdk.mockBotControllerReplyAsBotV1({
+          path: { userId: user1Id },
+          body: {
+            buttons: [{ title: 'Confirm', callbackData: 'confirm' }],
+          },
+        });
+
+        expect(result.response?.status).toBe(201);
+        const message = result.data as ChatMessageDto;
+        expect(message.content).toBe('');
+        expect(message.buttons).toEqual([
+          { title: 'Confirm', callbackData: 'confirm' },
+        ]);
+      });
+
+      it('rejects a reply with neither text nor buttons (400)', async () => {
+        const result = await admin.sdk.mockBotControllerReplyAsBotV1({
+          path: { userId: user1Id },
+          body: { content: '   ', buttons: [] },
+        });
+
+        expect(result.response?.status).toBe(400);
+        expect(messageOf(result.error)).toMatch(
+          /must contain text or at least one button/i,
+        );
+      });
+
+      it('rejects invalid buttons (blank callbackData) with 400', async () => {
+        const result = await admin.sdk.mockBotControllerReplyAsBotV1({
+          path: { userId: user1Id },
+          body: {
+            content: 'hi',
+            buttons: [{ title: 'Ok', callbackData: '   ' }],
+          },
+        });
+
+        expect(result.response?.status).toBe(400);
+        expect(messageOf(result.error)).toMatch(/callbackData/i);
+      });
+
+      it('rejects too many buttons (13) with 400', async () => {
+        const buttons = Array.from({ length: 13 }, (_, i) => ({
+          title: `b${i}`,
+          callbackData: `cb-${i}`,
+        }));
+        const result = await admin.sdk.mockBotControllerReplyAsBotV1({
+          path: { userId: user1Id },
+          body: { content: 'too many', buttons },
+        });
+
+        expect(result.response?.status).toBe(400);
+        expect(messageOf(result.error)).toMatch(/too many buttons/i);
+      });
     });
   });
 });

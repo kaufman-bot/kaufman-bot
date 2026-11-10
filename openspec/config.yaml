@@ -1,5 +1,37 @@
 schema: spec-driven
 
+# Project context (optional)
+# Add only constraints that should guide OpenSpec artifacts and workflows.
+# Include constraints an agent cannot infer by reading the code.
+# Keep general project documentation and discoverable codebase facts out.
+context: |
+  Проектная память живёт в репозитории, а не в памяти агента (Qoder/Cursor/
+  Claude): прежде чем сохранить knowledge-заметку в личную память, поместить
+  её в один из проектных файлов — `.agents/skills/<slug>/SKILL.md`
+  (жёсткие правила), `docs/architecture.md`, `docs/environment.md`,
+  `docs/testing.md`, `docs/pitfalls.md`, `docs/decisions.md`,
+  `README.md`/`backend/README.md`/`frontend/README.md`, `BACKLOG.md` или
+  `openspec/specs/` — и удалить memory-запись. Карта «kind → location»:
+  `.agents/skills/agent-memory-policy/SKILL.md` и `docs/README.md`. Личные
+  предпочтения пользователя (язык ответа, тон, identity) остаются в памяти
+  агента.
+  .agents/skills, которые обязан применять агент при работе с кодом:
+  prisma-migrations-only, controller-dto-swagger, service-layer-split,
+  backend-module-topology, e2e-fixture-hygiene, git-onboarding-commit,
+  readme-auto-update, openspec-*.
+  E2E-тесты (`backend/test/*.e2e-spec.ts`) не должны изменять или удалять
+  ничего из данных основного (засиженного) админа `admin@kaufman.bot`
+  (ADMIN_API_KEY из `backend/.env`): его ButtonPreset, ApiKey, User,
+  Conversation/Message — это реальная продуктовая область оператора.
+  Сид-ключ разрешено предъявлять только для `POST /auth/register`,
+  `PATCH /admin/users/:id { role: 'ADMIN' }` (повысить тестовый аккаунт)
+  и `DELETE /admin/users/:id` по id, созданному тем же тестом; плюс
+  negative-self-delete проверка на 403. Любой защищённый CRUD
+  (пресеты кнопок, сообщения, API-ключи и т.п.) ведётся от отдельного
+  ActivityHelper с test-spawned ADMIN-ключом; cleanup-циклы обходят
+  исключительно test-spawned ключи, никогда сам `admin`. Полный канон:
+  `.agents/skills/e2e-fixture-hygiene/SKILL.md`.
+
 # Per-artifact rules (project-wide).
 rules:
   tasks:
@@ -18,15 +50,6 @@ rules:
       сессию и обязательной явной проверкой (тест/команда/наблюдаемое поведение).
     - >-
       Ориентир: лучше заметно меньше, но крупных задач, чем много мелких чекбоксов.
-
-# Project context (optional)
-# Add only constraints that should guide OpenSpec artifacts and workflows.
-# Include constraints an agent cannot infer by reading the code.
-# Keep general project documentation and discoverable codebase facts out.
-# Example:
-#   context: |
-#     Designs and tasks must cover Windows, macOS, and Linux
-#     Write all artifacts in Spanish
 
 # Per-artifact rules (optional)
 # Add custom rules for specific artifacts.

@@ -46,16 +46,21 @@ This project includes a web chat system where users can communicate with a mock 
 
 #### User Chat (requires USER or ADMIN role)
 
-- `GET /api/v1/chat/messages` — Get message history for the authenticated user's conversation
+- `GET /api/v1/chat/messages` — Get message history for the authenticated user's conversation (`kind: BUTTON` callbacks are filtered out)
 - `POST /api/v1/chat/messages` — Send a message to the bot (body: `{ content: string }`)
-- `GET /api/v1/chat/stream` — SSE stream for real-time messages (use `?apiKey=` query param)
+- `POST /api/v1/chat/button-callbacks` — Notify the server that an inline keyboard button was pressed (body: `{ callbackData: string }`, up to 256 chars, returns 201 with the persisted `kind: BUTTON` message; the response must NOT be appended to the user's local chat list)
+- `GET /api/v1/chat/stream` — SSE stream for real-time messages (use `?apiKey=` query param); events with `kind: BUTTON` are suppressed for the user subscriber
 
 #### Mock Bot Console (requires ADMIN role)
 
 - `GET /api/v1/mock-bot/conversations` — List all user conversations with unread counts
-- `GET /api/v1/mock-bot/conversations/:userId/messages` — Get messages for a specific user's conversation
-- `POST /api/v1/mock-bot/conversations/:userId/messages` — Reply as bot (body: `{ content: string }`)
+- `GET /api/v1/mock-bot/conversations/:userId/messages` — Get messages for a specific user's conversation (the operator sees every message, including `kind: BUTTON` callbacks the user pressed)
+- `POST /api/v1/mock-bot/conversations/:userId/messages` — Reply as bot (body: `{ content?: string, buttons?: KeyboardButtonDto[] }`; at least one of the two must be non-empty, otherwise 400)
 - `GET /api/v1/mock-bot/stream` — SSE stream for all conversation events (use `?apiKey=` query param)
+- `GET /api/v1/mock-bot/presets` — List the calling admin's button presets
+- `POST /api/v1/mock-bot/presets` — Create a preset (body: `{ name: string, buttons: KeyboardButtonDto[] }`, 201)
+- `PATCH /api/v1/mock-bot/presets/:id` — Update caller-owned preset (body: partial `{ name?, buttons? }`, 200; foreign ids → 404)
+- `DELETE /api/v1/mock-bot/presets/:id` — Delete caller-owned preset (204; already-sent messages keep their button snapshot; foreign ids → 404)
 
 ### Environment Variables
 
@@ -104,6 +109,44 @@ Plugin dispatch is crash-safe — the server may be restarted at any moment (dev
 
 A plugin error closes the task without a reply (isolation contract — a permanently failing plugin is not retried); only infrastructure failures (e.g. a failed reply transaction) are retried by the sweep.
 
+## Inline Keyboard Buttons
+
+Bot replies can carry a small inline keyboard — a horizontal strip of tappable buttons rendered under the message bubble. The operator composes the keyboard in the mock-bot console; the user taps a button in `/chat`; the press is captured server-side for the operator but never echoed back into the user's own chat.
+
+### Message snapshot
+
+Each `Message` row stores its keyboard as a `Json` column (`buttons`) alongside the text (`content`) and a `kind` flag:
+
+```prisma
+enum MessageKind { TEXT  BUTTON }
+
+model Message {
+  kind    MessageKind @default(TEXT)
+  content String
+  buttons Json?
+}
+```
+
+`buttons` is a **snapshot**, not a live reference to a preset — deleting or editing a preset does not rewrite the buttons on messages that were already sent. `Message.buttons` is serialised as `KeyboardButtonDto[]` (`{ title, callbackData }`) or `null` when the message has no keyboard.
+
+Validation lives in `backend/src/utils/keyboard-buttons.ts` (`validateButtons`, `toButtons`, `MAX_BUTTONS = 12`, `MAX_TITLE_LENGTH = 64`, `MAX_CALLBACK_LENGTH = 256`). The same limits are enforced in the DTOs via `class-validator` (`maxLength`) and by `MockBotService.replyAsBot`, `ButtonPresetsService`, and `ChatService.submitButtonCallback`.
+
+### Operator reply
+
+`POST /api/v1/mock-bot/conversations/:userId/messages` accepts `{ content?, buttons? }` and is valid as long as **at least one** of them is non-empty after trimming — a buttons-only reply with empty text is allowed (`content` is persisted as `''`). The reply is stored with `kind: TEXT` and the validated `buttons` array; the resulting `ChatEvent` is published to the bus with the same `buttons` payload so the user's SSE stream and the operator's console stream render the keyboard without a refetch.
+
+`GET /api/v1/mock-bot/conversations/:userId/messages` always returns every message — TEXT and BUTTON — because the operator needs to see which buttons the user pressed. `GET /api/v1/chat/messages` and `GET /api/v1/chat/stream` do the opposite for the user: `ChatService` filters out `kind: BUTTON` in `getHistory`, and `streamEvents` drops BUTTON events before mapping them to `ChatStreamEventDto` — this is the "no echo" rule.
+
+### Button press (no echo, no plugins)
+
+`POST /api/v1/chat/button-callbacks` with `{ callbackData }` upserts the conversation, writes a `Message { senderRole: USER, kind: BUTTON, content: <callbackData> }` and publishes a `ChatEvent` with `kind: BUTTON`. **No `BotPluginTask` row is created** and **the plugin dispatcher is not invoked**, so `ping` written into a button's `callbackData` will _not_ trigger the PingPong reply — plugins only react to typed `sendMessage` traffic. The response is the persisted message DTO; the frontend chat calls `sendButtonCallback` and discards the result (only refreshing the operator-side stream via the SSE bus), so the user's bubble list never grows from a click. The operator's `/mock-bot` stream does receive the event and shows the pressed `callbackData` as a USER message.
+
+### Button presets
+
+`ButtonPreset` (`backend/prisma/schema.prisma`) names a reusable keyboard for the operator: `{ id, name, buttons Json, ownerId → User (onDelete: Cascade) }`, table `button_presets`. CRUD lives in `ButtonPresetsService`/`ButtonPresetsController` (`/api/v1/mock-bot/presets`) behind `ApiKeyGuard` + `AdminGuard`. Every read/write is scoped by `ownerId` — `update`/`remove` use conditional `updateMany`/`deleteMany` with `{ id, ownerId }` and raise `NotFoundException` when the count is 0, so a foreign preset id is indistinguishable from a missing one. Presets never touch messages: they are only a source for the composer's draft keyboard.
+
+To exercise owner isolation in tests, register a second account via `POST /api/v1/auth/register` (the response carries both `user` and its `apiKey`), then promote it with `PATCH /api/v1/admin/users/:id { "role": "ADMIN" }` — do not mint an additional key through `ApiKeyService.createForUser` for the mock caller, otherwise both "admins" resolve to the same owner row.
+
 ## Project setup
 
 ```bash
@@ -135,6 +178,35 @@ $ npm run test:e2e
 # test coverage
 $ npm run test:cov
 ```
+
+### E2E conventions
+
+E2E specs (`backend/test/*.e2e-spec.ts`) run against a live backend on
+`:3000`, use the OpenAPI SDK generated under `backend/test/generated/client`,
+and prepare fixtures **only** through HTTP endpoints (no direct Prisma
+access). Full rules are captured in the project skill
+[`.agents/skills/e2e-fixture-hygiene/SKILL.md`](../.agents/skills/e2e-fixture-hygiene/SKILL.md).
+
+The single most important rule: **the seeded admin (`admin@kaufman.bot`) is
+a real operator account, not a test fixture.** Test cleanup must never
+enumerate or delete rows owned by the seeded key. Every operator-side CRUD
+(button presets, chat messages, API keys, etc.) runs behind a **test-spawned
+ADMIN** obtained via `POST /auth/register` + `PATCH /admin/users/:id`
+`{ role: 'ADMIN' }`. The seeded admin key is used only for
+`registerAccount`, `removeAccountAsAdmin(id)` on test-created ids, and
+role-promotion — nothing else.
+
+Pre-commit self-check:
+
+```bash
+# From backend/
+grep -RnE 'admin\.sdk\.[a-zA-Z]+(Remove|Delete|Update|Create)V1' test/*.e2e-spec.ts
+```
+
+Legitimate hits: `adminUsersControllerUpdateV1` (promote in `spawnAdmin`) and
+`adminUsersControllerRemoveV1` (either the self-delete negative test or a
+remove whose id was returned by an earlier `admin.registerAccount(...)` in
+the same spec). Anything else is a bug.
 
 ## Deployment
 

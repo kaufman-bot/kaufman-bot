@@ -1,7 +1,6 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { firstValueFrom, Subject, take, toArray } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { MessageSenderRole } from '../generated/prisma/enums.js';
-import { BotPluginsService } from '../plugins/bot-plugins.service.js';
 import { ChatEventsService } from './chat-events.service.js';
 import { ChatService } from './chat.service.js';
 
@@ -54,14 +53,16 @@ const makeUser = (id = 'user-1') => ({
 });
 
 const makeChatEventsMock = () => {
-  const publish = vi.fn();
-  const streamByConversation = vi.fn().mockReturnValue({ subscribe: vi.fn() });
-  const streamAll = vi.fn().mockReturnValue({ subscribe: vi.fn() });
+  const subject = new Subject<any>();
+  const publish = vi.fn((event) => subject.next(event));
+  const streamByConversation = vi.fn((_id: string) => subject.asObservable());
+  const streamAll = vi.fn(() => subject.asObservable());
 
   return {
     publish,
     streamByConversation,
     streamAll,
+    subject,
     instance: {
       publish,
       streamByConversation,
@@ -75,7 +76,7 @@ const makeBotPluginsMock = () => {
 
   return {
     dispatchAndReply,
-    instance: { dispatchAndReply } as unknown as BotPluginsService,
+    instance: { dispatchAndReply } as unknown as any,
   };
 };
 
@@ -106,39 +107,41 @@ describe('ChatService', () => {
       expect(result).toEqual([]);
     });
 
-    it('should return messages ordered by createdAt ascending', async () => {
-      const messages = [
-        {
-          id: 'msg-1',
-          conversationId: 'conv-1',
-          senderRole: MessageSenderRole.USER,
-          content: 'First',
-          readAt: null,
-          createdAt: new Date('2024-01-01'),
-        },
-        {
-          id: 'msg-2',
-          conversationId: 'conv-1',
-          senderRole: MessageSenderRole.BOT,
-          content: 'Second',
-          readAt: null,
-          createdAt: new Date('2024-01-02'),
-        },
-      ];
-
+    it('excludes kind=BUTTON rows from the user history (Prisma where filter)', async () => {
       prismaMock.conversationFindUnique.mockResolvedValue({
         id: 'conv-1',
         userId: 'user-1',
-        messages,
+        messages: [
+          {
+            id: 'msg-1',
+            conversationId: 'conv-1',
+            senderRole: 'BOT',
+            kind: 'TEXT',
+            content: 'Hi',
+            buttons: [{ title: 'Да', callbackData: 'yes' }],
+            readAt: null,
+            createdAt: new Date('2024-01-01'),
+          },
+        ],
       });
-      prismaMock.messageUpdateMany.mockResolvedValue({ count: 1 });
+      prismaMock.messageUpdateMany.mockResolvedValue({ count: 0 });
 
-      const user = makeUser();
-      const result = await service.getHistory(user);
+      const result = await service.getHistory(makeUser());
 
-      expect(result).toHaveLength(2);
-      expect(result[0].id).toBe('msg-1');
-      expect(result[1].id).toBe('msg-2');
+      // The findUnique include call MUST ask for a where filter that
+      // excludes BUTTON rows — otherwise callbacks leak into history.
+      expect(prismaMock.conversationFindUnique).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { userId: 'user-1' },
+          include: {
+            messages: expect.objectContaining({
+              where: { kind: { not: 'BUTTON' } },
+              orderBy: { createdAt: 'asc' },
+            }),
+          },
+        }),
+      );
+      expect(result[0].buttons).toEqual([{ title: 'Да', callbackData: 'yes' }]);
     });
 
     it('should mark bot messages as read', async () => {
@@ -155,7 +158,7 @@ describe('ChatService', () => {
       expect(prismaMock.messageUpdateMany).toHaveBeenCalledWith({
         where: {
           conversationId: 'conv-1',
-          senderRole: MessageSenderRole.BOT,
+          senderRole: 'BOT',
           readAt: null,
         },
         data: { readAt: expect.any(Date) },
@@ -192,7 +195,8 @@ describe('ChatService', () => {
       prismaMock.messageCreate.mockResolvedValue({
         id: 'msg-1',
         conversationId: 'conv-1',
-        senderRole: MessageSenderRole.USER,
+        senderRole: 'USER',
+        kind: 'TEXT',
         content: 'Hello',
         readAt: null,
         createdAt: new Date('2024-01-01'),
@@ -208,7 +212,7 @@ describe('ChatService', () => {
       });
     });
 
-    it('should persist the message and publish an event', async () => {
+    it('should persist the message and publish an event (kind=TEXT)', async () => {
       const createdAt = new Date('2024-01-01T00:00:00Z');
       prismaMock.conversationUpsert.mockResolvedValue({
         id: 'conv-1',
@@ -217,7 +221,8 @@ describe('ChatService', () => {
       prismaMock.messageCreate.mockResolvedValue({
         id: 'msg-1',
         conversationId: 'conv-1',
-        senderRole: MessageSenderRole.USER,
+        senderRole: 'USER',
+        kind: 'TEXT',
         content: 'Hello',
         readAt: null,
         createdAt,
@@ -233,9 +238,11 @@ describe('ChatService', () => {
       expect(chatEventsMock.publish).toHaveBeenCalledWith({
         conversationId: 'conv-1',
         messageId: 'msg-1',
-        senderRole: MessageSenderRole.USER,
+        senderRole: 'USER',
         content: 'Hello',
         createdAt: createdAt.toISOString(),
+        kind: 'TEXT',
+        buttons: null,
       });
 
       expect(botPluginsMock.dispatchAndReply).toHaveBeenCalledWith(
@@ -254,7 +261,8 @@ describe('ChatService', () => {
       prismaMock.messageCreate.mockResolvedValue({
         id: 'msg-1',
         conversationId: 'conv-1',
-        senderRole: MessageSenderRole.USER,
+        senderRole: 'USER',
+        kind: 'TEXT',
         content: 'Hello',
         readAt: null,
         createdAt: new Date(),
@@ -281,7 +289,8 @@ describe('ChatService', () => {
       prismaMock.messageCreate.mockResolvedValue({
         id: 'msg-1',
         conversationId: 'conv-1',
-        senderRole: MessageSenderRole.USER,
+        senderRole: 'USER',
+        kind: 'TEXT',
         content: 'Hello',
         readAt: null,
         createdAt: new Date(),
@@ -301,7 +310,8 @@ describe('ChatService', () => {
       prismaMock.messageCreate.mockResolvedValue({
         id: 'msg-1',
         conversationId: 'conv-1',
-        senderRole: MessageSenderRole.USER,
+        senderRole: 'USER',
+        kind: 'TEXT',
         content: 'Hello',
         readAt: null,
         createdAt: new Date(),
@@ -313,7 +323,8 @@ describe('ChatService', () => {
       expect(prismaMock.messageCreate).toHaveBeenCalledWith({
         data: {
           conversationId: 'conv-1',
-          senderRole: MessageSenderRole.USER,
+          senderRole: 'USER',
+          kind: 'TEXT',
           content: 'Hello',
         },
       });
@@ -327,7 +338,8 @@ describe('ChatService', () => {
       prismaMock.messageCreate.mockResolvedValue({
         id: 'msg-1',
         conversationId: 'conv-1',
-        senderRole: MessageSenderRole.USER,
+        senderRole: 'USER',
+        kind: 'TEXT',
         content: 'Hello',
         readAt: null,
         createdAt: new Date(),
@@ -349,7 +361,8 @@ describe('ChatService', () => {
       prismaMock.messageCreate.mockResolvedValue({
         id: 'msg-1',
         conversationId: 'conv-1',
-        senderRole: MessageSenderRole.USER,
+        senderRole: 'USER',
+        kind: 'TEXT',
         content: 'Hello',
         readAt: null,
         createdAt: new Date(),
@@ -364,6 +377,127 @@ describe('ChatService', () => {
       // The transaction rolls back: no event, no plugin dispatch
       expect(chatEventsMock.publish).not.toHaveBeenCalled();
       expect(botPluginsMock.dispatchAndReply).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('submitButtonCallback', () => {
+    it('should persist a USER message with kind=BUTTON and not create a BotPluginTask', async () => {
+      prismaMock.conversationUpsert.mockResolvedValue({
+        id: 'conv-1',
+        userId: 'user-1',
+      });
+      prismaMock.messageCreate.mockResolvedValue({
+        id: 'msg-cb',
+        conversationId: 'conv-1',
+        senderRole: 'USER',
+        kind: 'BUTTON',
+        content: 'ping',
+        readAt: null,
+        createdAt: new Date('2024-01-01'),
+      });
+
+      const result = await service.submitButtonCallback(makeUser(), {
+        callbackData: 'ping',
+      });
+
+      expect(result.id).toBe('msg-cb');
+      expect(result.content).toBe('ping');
+      expect(result.senderRole).toBe('USER');
+
+      // Uses a plain create, not a $transaction wrapper (no outbox row).
+      expect(prismaMock.$transaction).not.toHaveBeenCalled();
+      expect(prismaMock.botPluginTaskCreate).not.toHaveBeenCalled();
+
+      expect(prismaMock.messageCreate).toHaveBeenCalledWith({
+        data: {
+          conversationId: 'conv-1',
+          senderRole: 'USER',
+          kind: 'BUTTON',
+          content: 'ping',
+        },
+      });
+
+      // Plugins were NOT dispatched.
+      expect(botPluginsMock.dispatchAndReply).not.toHaveBeenCalled();
+
+      // Event is published with kind=BUTTON so user-stream filters drop it.
+      expect(chatEventsMock.publish).toHaveBeenCalledWith(
+        expect.objectContaining({
+          conversationId: 'conv-1',
+          messageId: 'msg-cb',
+          senderRole: 'USER',
+          content: 'ping',
+          kind: 'BUTTON',
+          buttons: null,
+        }),
+      );
+    });
+
+    it('rejects empty callbackData', async () => {
+      await expect(
+        service.submitButtonCallback(makeUser(), { callbackData: '   ' }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it(`rejects callbackData longer than 256 characters`, async () => {
+      await expect(
+        service.submitButtonCallback(makeUser(), {
+          callbackData: 'x'.repeat(257),
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('streamEvents (BUTTON suppression)', () => {
+    it('does not forward kind=BUTTON events to the user subscriber', async () => {
+      prismaMock.conversationFindUnique.mockResolvedValue({
+        id: 'conv-1',
+        userId: 'user-1',
+      });
+
+      const stream$ = service.streamEvents(makeUser());
+      const collected = firstValueFrom(stream$.pipe(take(2), toArray()));
+
+      // streamEvents resolves the user's conversation via a Promise before
+      // subscribing to the ChatEvents bus; wait for that microtask to flush
+      // so the following subject.next() calls actually reach the subscriber.
+      await new Promise((r) => setImmediate(r));
+
+      // Emit one ordinary TEXT bot event and one suppressed BUTTON event.
+      chatEventsMock.subject.next({
+        conversationId: 'conv-1',
+        messageId: 'msg-bot',
+        senderRole: 'BOT',
+        content: 'hello',
+        createdAt: new Date().toISOString(),
+        kind: 'TEXT',
+        buttons: null,
+      });
+      chatEventsMock.subject.next({
+        conversationId: 'conv-1',
+        messageId: 'msg-cb',
+        senderRole: 'USER',
+        content: 'ping',
+        createdAt: new Date().toISOString(),
+        kind: 'BUTTON',
+        buttons: null,
+      });
+      // And one more TEXT event to guarantee take(2) resolves after
+      // the BUTTON was filtered out; without suppression take(2) would
+      // have consumed [msg-bot, msg-cb] and this third event would
+      // remain unread — so its presence asserts the filter runs.
+      chatEventsMock.subject.next({
+        conversationId: 'conv-1',
+        messageId: 'msg-bot2',
+        senderRole: 'BOT',
+        content: 'again',
+        createdAt: new Date().toISOString(),
+        kind: 'TEXT',
+        buttons: null,
+      });
+
+      const received = await collected;
+      expect(received.map((e) => e.messageId)).toEqual(['msg-bot', 'msg-bot2']);
     });
   });
 

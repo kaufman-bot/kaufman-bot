@@ -28,6 +28,7 @@ CI/CD, e2e-тестов и продакшена.
 - [Технологии](#-технологии)
 - [Архитектура](#-архитектура)
 - [Структура проекта](#-структура-проекта)
+- [📖 Документация проекта](#-документация-проекта)
 - [Быстрый старт](#-быстрый-старт)
 - [Запуск и остановка](#-запуск-и-остановка)
 - [API](#-api)
@@ -138,6 +139,13 @@ kaufman-bot/
 ├── .github/workflows/
 │   ├── ci.yml              # Линт + сборка + unit-тесты backend/frontend на push в main
 │   └── e2e-prod.yml        # Ручной прогон: start:prod + e2e фронта и бэка + stop:prod
+├── docs/                   # Проектная память в репозитории: архитектура, окружение,
+│   ├── README.md           #   тестирование, pitfalls, решения — карта см. ниже
+│   ├── architecture.md
+│   ├── environment.md
+│   ├── testing.md
+│   ├── pitfalls.md
+│   └── decisions.md
 ├── .vscode/                # VS Code конфигурация
 │   ├── extensions.json     # Рекомендуемые расширения
 │   ├── settings.json       # Настройки редактора + MCP-серверы (для VS Code)
@@ -188,6 +196,31 @@ kaufman-bot/
 │                         # --init opwork`), CI его не трогает
 └── package.json          # Корневые скрипты
 ```
+
+---
+
+## 📖 Документация проекта
+
+Вся проектная память живёт в репозитории — правила, архитектура, окружение,
+баги и подводные камни, решения и долг. Личная память разработчика или
+AI-агента **не** является источником истины: клон + `README` + `docs/` +
+`.agents/skills/` достаточны, чтобы продолжить работу с любой машины.
+
+| Где что искать                                                                                                           | Файл                                           |
+| ------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------- |
+| Топология Nest-модуля, URL/версионирование, плагинная система и outbox, ServeStatic в prod                               | [`docs/architecture.md`](docs/architecture.md) |
+| Порты, Docker, PM2, `.env`, Prisma CLI, уровни MCP, `opwork`-сабмодуль                                                   | [`docs/environment.md`](docs/environment.md)   |
+| Наборы тестов, OpenAPI SDK workflow, Playwright, конвенции fixture-hygiene                                               | [`docs/testing.md`](docs/testing.md)           |
+| Воспроизведённые баги с root cause (Nest multi-provider, supertest ESM, GitHub Actions gitlink, PM2 npm-wrapper, …)      | [`docs/pitfalls.md`](docs/pitfalls.md)         |
+| ADR-lite: «почему выбрано именно это», alternatives, expiry conditions                                                   | [`docs/decisions.md`](docs/decisions.md)       |
+| Отложенный долг с якорями в коде                                                                                         | [`BACKLOG.md`](BACKLOG.md)                     |
+| Жёсткие правила для агента и контрибьюторов (migrations-only, DTO/Swagger, e2e hygiene, topology, service split, memory) | [`.agents/skills/`](.agents/skills)            |
+| OpenSpec-контекст, видимый воркфлоу                                                                                      | [`openspec/config.yaml`](openspec/config.yaml) |
+| Поведенческие спецификации выпущенных возможностей                                                                       | [`openspec/specs/`](openspec/specs)            |
+| Активные и архивные изменения (proposal / design / tasks / delta)                                                        | [`openspec/changes/`](openspec/changes)        |
+
+Правило переноса и карта «kind → location»:
+[`.agents/skills/agent-memory-policy/SKILL.md`](.agents/skills/agent-memory-policy/SKILL.md).
 
 ---
 
@@ -718,12 +751,17 @@ gh auth login   # однократная авторизация; провери�
 
 В `.agents/skills/` лежат правила, которые агент применяет при работе с кодом:
 
-| Skill                    | Что задаёт                                                                        |
-| ------------------------ | --------------------------------------------------------------------------------- |
-| `controller-dto-swagger` | Каждый handler принимает и возвращает DTO-классы со Swagger-декораторами          |
-| `prisma-migrations-only` | Схема БД меняется только через Prisma-миграции, без `db push` и raw SQL           |
-| `git-onboarding-commit`  | Пересборка изменений в последовательность коммитов, удобную для ревью             |
-| `readme-auto-update`     | README синхронизируется с изменениями структуры, конфигурации и поведения проекта |
+| Skill                     | Что задаёт                                                                                |
+| ------------------------- | ----------------------------------------------------------------------------------------- |
+| `agent-memory-policy`     | Всю проектную память хранить в репозитории, а не в памяти агента                          |
+| `backend-module-topology` | Один AppModule; обёрточные Nest-модули — в BACKLOG.md с якорями                           |
+| `controller-dto-swagger`  | Каждый handler принимает и возвращает DTO-классы со Swagger-декораторами                  |
+| `e2e-fixture-hygiene`     | E2E-тесты не трогают данные сид-админа; защищённый CRUD — через test-spawned ADMIN-ключ   |
+| `git-onboarding-commit`   | Пересборка изменений в последовательность коммитов, удобную для ревью                     |
+| `prisma-migrations-only`  | Схема БД меняется только через Prisma-миграции, без `db push` и raw SQL                   |
+| `readme-auto-update`      | README синхронизируется с изменениями структуры, конфигурации и поведения проекта         |
+| `service-layer-split`     | CRUD сущности и use-case сценарии живут в разных сервисах; регистрация только в AppModule |
+| `openspec-*`              | Workflow OpenSpec: propose / apply / archive / sync / update / explore                    |
 
 ### Как использовать MCP
 
@@ -1014,9 +1052,13 @@ rm -rf ~/.npm/_npx/*
   [Issue](https://github.com/kaufman-bot/kaufman-bot/issues);
 - хотите обсудить решение из видео — пишите в комментариях на любой площадке
   или в Issue;
-- перед PR полезно заглянуть в [`.agents/skills/`](.agents/skills) — там правила
-  проекта: DTO со Swagger-декораторами, миграции только через Prisma, атомарные
-  коммиты и синхронизация README.
+- перед PR полезно заглянуть в [`docs/`](docs) и
+  [`.agents/skills/`](.agents/skills): `docs/architecture.md` и
+  `docs/decisions.md` объясняют принятые развилки, `docs/pitfalls.md` — уже
+  разобранные баги, `docs/testing.md` — как устроены e2e-наборы. Skills
+  содержат жёсткие правила: DTO со Swagger-декораторами, миграции только
+  через Prisma, атомарные коммиты, синхронизация README, e2e hygiene,
+  модульная топология, разделение сервисов и политика проектной памяти.
 
 ---
 
