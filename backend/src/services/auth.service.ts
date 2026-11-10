@@ -14,8 +14,10 @@ import {
 } from '../dto/auth.dto.js';
 import type { ApiKey, User } from '../generated/prisma/client.js';
 import { Role } from '../generated/prisma/client.js';
+import type { Language } from '../generated/prisma/enums.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { hashPassword } from '../utils/hashPassword.js';
+import { normalizeLanguage, SUPPORTED_LANGUAGES } from '../utils/language.js';
 import { ApiKeysService } from './api-keys.service.js';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -90,8 +92,9 @@ export class AuthService {
 
   /**
    * Self-service profile update for the owner of the presented API key.
-   * Currently supports the optional IANA time zone: a non-empty string is
-   * validated and stored, null clears it, an absent field leaves it as is.
+   * Supports the optional IANA time zone and the active language: a non-empty
+   * string is validated and stored, null clears the time zone, an absent field
+   * leaves the stored value as is. Both fields are written in one update.
    */
   async updateProfile(
     user: User,
@@ -105,12 +108,35 @@ export class AuthService {
           ? null
           : this.normalizeTimezone(dto.timezone);
 
+    const language = this.resolveLanguage(dto.language, user.language);
+
     const updated = await this.prisma.user.update({
       where: { id: user.id },
-      data: { timezone },
+      data: { timezone, language },
     });
 
     return this.profile(updated, apiKey);
+  }
+
+  /**
+   * Active language of the profile update: an absent or null selector keeps the
+   * stored language, anything outside the supported codes is a 400 listing the
+   * allowed ones.
+   */
+  private resolveLanguage(
+    raw: string | null | undefined,
+    fallback: Language,
+  ): Language {
+    if (raw === undefined || raw === null) {
+      return fallback;
+    }
+    const language = normalizeLanguage(raw);
+    if (!language) {
+      throw new BadRequestException(
+        `Unsupported language: expected one of ${SUPPORTED_LANGUAGES.join(', ')}`,
+      );
+    }
+    return language;
   }
 
   private toProfile(user: User): AuthProfileUserDto {
@@ -120,6 +146,7 @@ export class AuthService {
       role: user.role,
       isActive: user.isActive,
       timezone: user.timezone,
+      language: user.language,
     } satisfies AuthProfileUserDto;
   }
 

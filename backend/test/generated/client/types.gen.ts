@@ -129,6 +129,10 @@ export type AuthProfileUserDto = {
      * IANA time zone of the user (e.g. Europe/Moscow), null when not set
      */
     timezone: string | null;
+    /**
+     * Active language of the user
+     */
+    language: 'en' | 'ru';
 };
 
 export type ApiKeySecretDto = {
@@ -214,6 +218,10 @@ export type UpdateProfileRequestDto = {
      * IANA time zone (e.g. Europe/Moscow) or null to clear the stored one
      */
     timezone?: string | null;
+    /**
+     * Active language; omit to keep the stored one
+     */
+    language?: 'en' | 'ru';
 };
 
 export type ApiKeyDto = {

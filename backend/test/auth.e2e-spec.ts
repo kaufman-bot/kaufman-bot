@@ -40,6 +40,8 @@ describe('Registration and auth profile (e2e, running backend)', () => {
       expect(created.user.email).toBe(email);
       expect(created.user.role).toBe('USER');
       expect(created.user.isActive).toBe(true);
+      // A new account starts with the default active language.
+      expect(created.user.language).toBe('en');
       expect(created.apiKey.key).toMatch(API_KEY);
       expect(created.apiKey.name).toBe('Default key');
       expect(created.apiKey.expiresAt).toBeNull();
@@ -135,6 +137,7 @@ describe('Registration and auth profile (e2e, running backend)', () => {
         role: 'USER',
         isActive: true,
         timezone: null,
+        language: 'en',
       });
       expect(profile.apiKey.id).toBe(registered.apiKey.id);
     });
@@ -225,7 +228,7 @@ describe('Registration and auth profile (e2e, running backend)', () => {
 
       unwrap(
         await activity.sdk.authControllerUpdateMeV1({
-          body: { timezone: 'Europe/Paris' },
+          body: { timezone: 'Europe/Paris', language: 'ru' },
         }),
         'PATCH /auth/me',
       );
@@ -237,12 +240,83 @@ describe('Registration and auth profile (e2e, running backend)', () => {
         'POST /auth/login',
       );
       expect(login.user.timezone).toBe('Europe/Paris');
+      expect(login.user.language).toBe('ru');
 
       const profile = unwrap(
         await activity.sdk.authControllerMeV1(),
         'GET /auth/me',
       );
       expect(profile.user.timezone).toBe('Europe/Paris');
+      expect(profile.user.language).toBe('ru');
+    });
+
+    it('stores a supported language and persists it', async () => {
+      const registered = await activity.registerAccount(
+        `test_${activity.randomSha7}_lang@example.com`,
+      );
+      createdUsers.push(registered.user.id);
+      activity.loginByApiKey(registered.apiKey.key);
+
+      const result = await activity.sdk.authControllerUpdateMeV1({
+        body: { language: 'ru' },
+      });
+
+      expect(result.response?.status).toBe(200);
+      expect(result.data?.user.language).toBe('ru');
+
+      const profile = unwrap(
+        await activity.sdk.authControllerMeV1(),
+        'GET /auth/me',
+      );
+      expect(profile.user.language).toBe('ru');
+    });
+
+    it('rejects a language outside the supported set with 400', async () => {
+      const registered = await activity.registerAccount(
+        `test_${activity.randomSha7}_langbad@example.com`,
+      );
+      createdUsers.push(registered.user.id);
+      activity.loginByApiKey(registered.apiKey.key);
+
+      // The SDK types `language` as the supported union, the endpoint still has
+      // to reject a value outside it.
+      const result = await activity.sdk.authControllerUpdateMeV1({
+        body: { language: 'de' as 'en' },
+      });
+
+      expect(result.response?.status).toBe(400);
+      expect(messageOf(result.error)).toMatch(/language/i);
+
+      // The stored language was not touched by the rejected request.
+      const profile = unwrap(
+        await activity.sdk.authControllerMeV1(),
+        'GET /auth/me',
+      );
+      expect(profile.user.language).toBe('en');
+    });
+
+    it('keeps the stored language when the field is absent', async () => {
+      const registered = await activity.registerAccount(
+        `test_${activity.randomSha7}_langkeep@example.com`,
+      );
+      createdUsers.push(registered.user.id);
+      activity.loginByApiKey(registered.apiKey.key);
+
+      unwrap(
+        await activity.sdk.authControllerUpdateMeV1({
+          body: { language: 'ru' },
+        }),
+        'PATCH /auth/me (set language)',
+      );
+
+      const updated = unwrap(
+        await activity.sdk.authControllerUpdateMeV1({
+          body: { timezone: 'Europe/Moscow' },
+        }),
+        'PATCH /auth/me (time zone only)',
+      );
+      expect(updated.user.timezone).toBe('Europe/Moscow');
+      expect(updated.user.language).toBe('ru');
     });
   });
 
@@ -262,6 +336,7 @@ describe('Registration and auth profile (e2e, running backend)', () => {
       expect(profile.user.id).toBe(registered.user.id);
       expect(profile.user.email).toBe(registered.user.email);
       expect(profile.user.timezone).toBeNull();
+      expect(profile.user.language).toBe('en');
       expect(profile.apiKey.id).toBe(registered.apiKey.id);
     });
 

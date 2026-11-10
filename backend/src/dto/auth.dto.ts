@@ -22,6 +22,13 @@ export class AuthProfileUserDto {
     type: String,
   })
   timezone: string | null;
+
+  @ApiProperty({
+    description: 'Active language of the user',
+    enum: ['en', 'ru'],
+    example: 'en',
+  })
+  language: string;
 }
 
 /** API-key part of the auth profile response (the secret itself is masked). */
@@ -94,6 +101,16 @@ export class UpdateProfileRequestDto {
     example: 'Europe/Moscow',
   })
   timezone?: string | null;
+
+  @ApiProperty({
+    required: false,
+    description: 'Active language; omit to keep the stored one',
+    enum: ['en', 'ru'],
+    nullable: true,
+    type: String,
+    example: 'ru',
+  })
+  language?: string | null;
 }
 
 /**
