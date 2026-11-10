@@ -9,6 +9,9 @@ import { ButtonPresetsController } from './controllers/button-presets.controller
 import { ChatController } from './controllers/chat.controller.js';
 import { HealthController } from './controllers/health.controller.js';
 import { MockBotController } from './controllers/mock-bot.controller.js';
+import { TelegramBotsController } from './controllers/telegram-bots.controller.js';
+import { TelegramLaunchController } from './controllers/telegram-launch.controller.js';
+import { TelegramWebhookController } from './controllers/telegram-webhook.controller.js';
 import { TimeController } from './controllers/time.controller.js';
 import { BOT_PLUGINS } from './plugins/bot-plugin.interface.js';
 import { BotPluginsService } from './plugins/bot-plugins.service.js';
@@ -23,6 +26,10 @@ import { ButtonPresetsService } from './services/button-presets.service.js';
 import { ChatEventsService } from './services/chat-events.service.js';
 import { ChatService } from './services/chat.service.js';
 import { MockBotService } from './services/mock-bot.service.js';
+import { TelegramBindingService } from './services/telegram-binding.service.js';
+import { TelegramBotsService } from './services/telegram-bots.service.js';
+import { TelegramBridgeService } from './services/telegram-bridge.service.js';
+import { TelegramWebhookService } from './services/telegram-webhook.service.js';
 import { UsersService } from './services/users.service.js';
 
 export const { ObserveModule, ObserveInstrument } = createObserveModule();
@@ -66,6 +73,9 @@ const isProd = process.env.NODE_ENV === 'production';
     ChatController,
     MockBotController,
     ButtonPresetsController,
+    TelegramBotsController,
+    TelegramLaunchController,
+    TelegramWebhookController,
   ],
   providers: [
     ApiKeysService,
@@ -75,6 +85,10 @@ const isProd = process.env.NODE_ENV === 'production';
     ChatService,
     MockBotService,
     UsersService,
+    TelegramBotsService,
+    TelegramBindingService,
+    TelegramBridgeService,
+    TelegramWebhookService,
     // Bot plugins: each plugin is instantiated as its own provider and then
     // aggregated once under the shared BOT_PLUGINS token. Nest does not merge
     // several providers of one token into an array (the last one would win),
