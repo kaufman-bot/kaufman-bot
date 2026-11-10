@@ -48,6 +48,7 @@ const makeUser = (id = 'user-1') => ({
   role: 'USER' as const,
   isActive: true,
   timezone: null,
+  language: 'en' as const,
   createdAt: new Date(),
   updatedAt: new Date(),
 });
@@ -250,6 +251,7 @@ describe('ChatService', () => {
         expect.objectContaining({ id: 'user-1' }),
         'Hello',
         'msg-1',
+        'TEXT',
       );
     });
 
@@ -275,6 +277,7 @@ describe('ChatService', () => {
         expect.anything(),
         'Hello',
         'msg-1',
+        'TEXT',
       );
     });
 
@@ -381,7 +384,67 @@ describe('ChatService', () => {
   });
 
   describe('submitButtonCallback', () => {
-    it('should persist a USER message with kind=BUTTON and not create a BotPluginTask', async () => {
+    it('should persist the click with its outbox task and dispatch it as a button', async () => {
+      prismaMock.conversationUpsert.mockResolvedValue({
+        id: 'conv-1',
+        userId: 'user-1',
+      });
+      prismaMock.messageCreate.mockResolvedValue({
+        id: 'msg-cb',
+        conversationId: 'conv-1',
+        senderRole: 'USER',
+        kind: 'BUTTON',
+        content: 'settings:language:ru',
+        readAt: null,
+        createdAt: new Date('2024-01-01'),
+      });
+
+      const result = await service.submitButtonCallback(makeUser(), {
+        callbackData: 'settings:language:ru',
+      });
+
+      expect(result.id).toBe('msg-cb');
+      expect(result.content).toBe('settings:language:ru');
+      expect(result.senderRole).toBe('USER');
+
+      // Same atomic acceptance as a typed message: click + outbox task.
+      expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
+      expect(prismaMock.botPluginTaskCreate).toHaveBeenCalledWith({
+        data: { messageId: 'msg-cb' },
+      });
+      expect(prismaMock.messageCreate).toHaveBeenCalledWith({
+        data: {
+          conversationId: 'conv-1',
+          senderRole: 'USER',
+          kind: 'BUTTON',
+          content: 'settings:language:ru',
+        },
+      });
+
+      // The payload reaches the dispatcher as a button, so only plugins that
+      // opted into callbacks can answer it.
+      expect(botPluginsMock.dispatchAndReply).toHaveBeenCalledWith(
+        'conv-1',
+        expect.objectContaining({ id: 'user-1' }),
+        'settings:language:ru',
+        'msg-cb',
+        'BUTTON',
+      );
+
+      // Event is published with kind=BUTTON so user-stream filters drop it.
+      expect(chatEventsMock.publish).toHaveBeenCalledWith(
+        expect.objectContaining({
+          conversationId: 'conv-1',
+          messageId: 'msg-cb',
+          senderRole: 'USER',
+          content: 'settings:language:ru',
+          kind: 'BUTTON',
+          buttons: null,
+        }),
+      );
+    });
+
+    it('should not fail the click when the plugin dispatch fails', async () => {
       prismaMock.conversationUpsert.mockResolvedValue({
         id: 'conv-1',
         userId: 'user-1',
@@ -395,48 +458,22 @@ describe('ChatService', () => {
         readAt: null,
         createdAt: new Date('2024-01-01'),
       });
-
-      const result = await service.submitButtonCallback(makeUser(), {
-        callbackData: 'ping',
-      });
-
-      expect(result.id).toBe('msg-cb');
-      expect(result.content).toBe('ping');
-      expect(result.senderRole).toBe('USER');
-
-      // Uses a plain create, not a $transaction wrapper (no outbox row).
-      expect(prismaMock.$transaction).not.toHaveBeenCalled();
-      expect(prismaMock.botPluginTaskCreate).not.toHaveBeenCalled();
-
-      expect(prismaMock.messageCreate).toHaveBeenCalledWith({
-        data: {
-          conversationId: 'conv-1',
-          senderRole: 'USER',
-          kind: 'BUTTON',
-          content: 'ping',
-        },
-      });
-
-      // Plugins were NOT dispatched.
-      expect(botPluginsMock.dispatchAndReply).not.toHaveBeenCalled();
-
-      // Event is published with kind=BUTTON so user-stream filters drop it.
-      expect(chatEventsMock.publish).toHaveBeenCalledWith(
-        expect.objectContaining({
-          conversationId: 'conv-1',
-          messageId: 'msg-cb',
-          senderRole: 'USER',
-          content: 'ping',
-          kind: 'BUTTON',
-          buttons: null,
-        }),
+      botPluginsMock.dispatchAndReply.mockRejectedValue(
+        new Error('dispatch exploded'),
       );
+
+      // The click still succeeds: the plugin error is only logged.
+      await expect(
+        service.submitButtonCallback(makeUser(), { callbackData: 'ping' }),
+      ).resolves.toMatchObject({ id: 'msg-cb' });
     });
 
     it('rejects empty callbackData', async () => {
       await expect(
         service.submitButtonCallback(makeUser(), { callbackData: '   ' }),
       ).rejects.toThrow(BadRequestException);
+      expect(prismaMock.messageCreate).not.toHaveBeenCalled();
+      expect(botPluginsMock.dispatchAndReply).not.toHaveBeenCalled();
     });
 
     it(`rejects callbackData longer than 256 characters`, async () => {

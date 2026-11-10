@@ -11,10 +11,10 @@ import { messageOf } from './utils/api-result.js';
  *   2. The user presses a button → `POST /api/v1/chat/button-callbacks`
  *      returns 201 and persists a USER message with `kind=BUTTON`.
  *   3. That click must NOT flow back into the clicking user's history or
- *      SSE (see ChatService.getHistory filter + `emitIfVisible`), and must
- *      NOT trigger a bot reply: plugins like PingPong are deliberately
- *      bypassed (no `BotPluginTask` is created — see ChatService
- *      .submitButtonCallback).
+ *      SSE (see ChatService.getHistory filter + `emitIfVisible`). It IS
+ *      dispatched to plugins, but only plugins declaring `handlesCallbacks`
+ *      are offered it — PingPong is not one of them, so a `ping` payload
+ *      pressed from a keyboard still produces no bot reply.
  *   4. The operator console keeps the click (via `getConversationMessages`
  *      which does not filter by `kind`), so an operator can trace every
  *      press.
@@ -94,10 +94,10 @@ describe('Inline keyboard buttons (e2e, running backend)', () => {
     const msgs = history.data as ChatMessageDto[];
     expect(msgs.find((m) => m.id === click.id)).toBeUndefined();
 
-    // PingPong would have replied `pong` if the click had been dispatched
-    // to plugins. Because ChatService.submitButtonCallback skips the
-    // BotPluginTask and the dispatcher entirely, no BOT reply with
-    // `pong` is present after the click.
+    // PingPong would have replied `pong` if it accepted button presses.
+    // The click does reach the dispatcher now, but PingPong never declared
+    // `handlesCallbacks`, so it is not even asked — no BOT reply with
+    // `pong` may appear after the click.
     const autoReply = msgs.find(
       (m) => m.senderRole === 'BOT' && m.content.toLowerCase().includes('pong'),
     );

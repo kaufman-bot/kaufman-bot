@@ -11,8 +11,9 @@ import {
   ChatMessageDto,
   ChatStreamEventDto,
 } from '../dto/chat.dto.js';
-import type { User } from '../generated/prisma/client.js';
+import type { Message, User } from '../generated/prisma/client.js';
 import { MessageKind, MessageSenderRole } from '../generated/prisma/enums.js';
+import type { BotPluginSourceKind } from '../plugins/bot-plugin.interface.js';
 import { BotPluginsService } from '../plugins/bot-plugins.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { MAX_CALLBACK_LENGTH, toButtons } from '../utils/keyboard-buttons.js';
@@ -104,19 +105,11 @@ export class ChatService {
     // a persisted message without its outbox task — the task is what
     // guarantees the plugin processing is finished (or retried) across
     // server restarts.
-    const message = await this.prisma.$transaction(async (tx) => {
-      const created = await tx.message.create({
-        data: {
-          conversationId: conversation.id,
-          senderRole: MessageSenderRole.USER,
-          kind: MessageKind.TEXT,
-          content: trimmed,
-        },
-      });
-      await tx.botPluginTask.create({
-        data: { messageId: created.id },
-      });
-      return created;
+    const message = await this.createMessageWithTask({
+      conversationId: conversation.id,
+      senderRole: MessageSenderRole.USER,
+      kind: MessageKind.TEXT,
+      content: trimmed,
     });
 
     const dto = this.toDto(message);
@@ -130,10 +123,13 @@ export class ChatService {
    * Handles a user pressing an inline keyboard button on a bot message.
    * Persists the payload as a USER message with `kind=BUTTON` — the
    * operator sees it in the console, the clicking user does NOT (see
-   * `getHistory` and `streamEvents` filters). Deliberately does not
-   * create a `BotPluginTask` and does not invoke the plugin dispatcher,
-   * so a click never triggers an automatic bot reply even when its
-   * `callbackData` matches a plugin trigger (e.g. `ping`).
+   * `getHistory` and `streamEvents` filters).
+   *
+   * The click is dispatched to the plugins like any other user message, but
+   * only plugins that declared `handlesCallbacks` are offered it, so a
+   * payload colliding with a text-only trigger (e.g. `ping`) still produces
+   * no reply. The reply — if any — arrives as a separate BOT event, which is
+   * why this response stays the quiet callback DTO the frontend ignores.
    */
   async submitButtonCallback(
     user: User,
@@ -156,15 +152,14 @@ export class ChatService {
       create: { userId: user.id },
     });
 
-    // No outbox task, no plugin dispatch: a button click is a quiet
-    // operator-visible trace, not a conversational turn.
-    const message = await this.prisma.message.create({
-      data: {
-        conversationId: conversation.id,
-        senderRole: MessageSenderRole.USER,
-        kind: MessageKind.BUTTON,
-        content: callbackData,
-      },
+    // The click and its processing task are committed together, so a crash
+    // right after this point still leaves the recovery sweep able to deliver
+    // the plugin reply (same invariant as a typed message).
+    const message = await this.createMessageWithTask({
+      conversationId: conversation.id,
+      senderRole: MessageSenderRole.USER,
+      kind: MessageKind.BUTTON,
+      content: callbackData,
     });
 
     const dtoResult = this.toDto(message);
@@ -183,7 +178,34 @@ export class ChatService {
     };
     this.chatEvents.publish(event);
 
+    await this.dispatchToPlugins(
+      conversation.id,
+      user,
+      callbackData,
+      message.id,
+      'BUTTON',
+    );
+
     return dtoResult;
+  }
+
+  /**
+   * Persists an inbound user message (typed text or a button payload)
+   * together with the `BotPluginTask` that guards its processing, in a single
+   * transaction. Used by both `sendMessage` and `submitButtonCallback` so the
+   * outbox invariant cannot be satisfied by one path and missed by the other.
+   */
+  private async createMessageWithTask(data: {
+    conversationId: string;
+    senderRole: MessageSenderRole;
+    kind: MessageKind;
+    content: string;
+  }): Promise<Message> {
+    return this.prisma.$transaction(async (tx) => {
+      const created = await tx.message.create({ data });
+      await tx.botPluginTask.create({ data: { messageId: created.id } });
+      return created;
+    });
   }
 
   /**
@@ -269,6 +291,7 @@ export class ChatService {
     user: User,
     content: string,
     messageId: string,
+    kind: BotPluginSourceKind = 'TEXT',
   ): Promise<void> {
     try {
       await this.botPlugins.dispatchAndReply(
@@ -276,6 +299,7 @@ export class ChatService {
         user,
         content,
         messageId,
+        kind,
       );
     } catch (error) {
       this.logger.error(
