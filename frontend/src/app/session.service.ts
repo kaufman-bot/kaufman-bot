@@ -21,6 +21,8 @@ export interface AuthProfileUser {
   role: 'USER' | 'ADMIN' | 'GUEST';
   isActive: boolean;
   timezone: string | null;
+  telegramBotId?: string | null;
+  telegramBotName?: string | null;
 }
 
 export interface AuthProfileApiKey {
@@ -69,6 +71,11 @@ export class SessionService {
   /** Whether the authenticated user has ADMIN role. */
   readonly isAdmin = computed(
     () => this.profileSignal()?.user.role === 'ADMIN',
+  );
+
+  /** Whether the user's active transport target is a Telegram bot (not mock). */
+  readonly isTelegramTarget = computed(
+    () => !!this.profileSignal()?.user.telegramBotId,
   );
 
   constructor() {
@@ -166,6 +173,28 @@ export class SessionService {
       .subscribe((profile) => {
         if (profile) {
           this.profileSignal.set(profile);
+        }
+      });
+  }
+
+  /**
+   * Calls POST /telegram/launch and opens the returned t.me deep-link.
+   * Errors are silently swallowed (the button simply does nothing on failure).
+   */
+  launchTelegram(): void {
+    if (!isPlatformBrowser(this.platformId)) {
+      return;
+    }
+    this.http
+      .post<{ url: string; token: string }>(
+        `${API_V1}/telegram/launch`,
+        {},
+        { headers: { 'x-api-key': this.apiKeySignal() ?? '' } },
+      )
+      .pipe(catchError(() => of(null)))
+      .subscribe((result) => {
+        if (result?.url) {
+          window.open(result.url, '_blank');
         }
       });
   }
