@@ -23,6 +23,7 @@ describe('PingPongPlugin', () => {
     const reply = await plugin.handle({
       user: { id: 'user-1' } as User,
       content: 'ping',
+      kind: 'TEXT' as const,
     });
     expect(reply).toBe('pong');
   });

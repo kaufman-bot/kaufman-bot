@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { User } from '../generated/prisma/client.js';
 import {
@@ -6,7 +7,7 @@ import {
 } from '../generated/prisma/enums.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { ChatEventsService } from '../services/chat-events.service.js';
-import { BotPlugin } from './bot-plugin.interface.js';
+import { BotPlugin, BotPluginReply } from './bot-plugin.interface.js';
 import { BotPluginsService } from './bot-plugins.service.js';
 
 const makePrismaMock = () => {
@@ -47,7 +48,11 @@ const makeChatEventsMock = () => {
   };
 };
 
-const makePlugin = (name: string, canHandle: boolean, reply: string) => ({
+const makePlugin = (
+  name: string,
+  canHandle: boolean,
+  reply: BotPluginReply,
+) => ({
   name,
   canHandle: vi.fn().mockReturnValue(canHandle),
   handle: vi.fn().mockReturnValue(reply),
@@ -110,7 +115,11 @@ describe('BotPluginsService', () => {
         where: { messageId: 'msg-in', status: BotPluginTaskStatus.PENDING },
         data: { status: BotPluginTaskStatus.PROCESSING },
       });
-      expect(first.handle).toHaveBeenCalledWith({ user, content: 'ping' });
+      expect(first.handle).toHaveBeenCalledWith({
+        user,
+        content: 'ping',
+        kind: 'TEXT',
+      });
       expect(second.handle).not.toHaveBeenCalled();
       expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
       expect(prismaMock.messageCreate).toHaveBeenCalledWith({
@@ -185,6 +194,203 @@ describe('BotPluginsService', () => {
         where: { messageId: 'msg-in', status: BotPluginTaskStatus.PROCESSING },
         data: { status: BotPluginTaskStatus.DONE },
       });
+    });
+  });
+
+  describe('button callbacks', () => {
+    const callbackButtons = [
+      { title: 'English', callbackData: 'settings:language:en' },
+      { title: 'Русский', callbackData: 'settings:language:ru' },
+    ];
+
+    it('does not offer a button payload to a plugin without handlesCallbacks', async () => {
+      const plugin = makePlugin('ping-only', true, 'pong');
+
+      const service = createService(plugin as BotPlugin);
+      await service.dispatchAndReply(
+        'conv-1',
+        user,
+        'ping',
+        'msg-in',
+        'BUTTON',
+      );
+
+      // The payload matches the trigger, but the plugin never opted in.
+      expect(plugin.canHandle).not.toHaveBeenCalled();
+      expect(plugin.handle).not.toHaveBeenCalled();
+      expect(prismaMock.messageCreate).not.toHaveBeenCalled();
+      expect(prismaMock.taskUpdateMany).toHaveBeenCalledWith({
+        where: { messageId: 'msg-in', status: BotPluginTaskStatus.PROCESSING },
+        data: { status: BotPluginTaskStatus.DONE },
+      });
+    });
+
+    it('offers a button payload to a plugin that opted in', async () => {
+      const plugin = {
+        ...makePlugin('settings', true, {
+          text: 'Language changed',
+          buttons: callbackButtons,
+        }),
+        handlesCallbacks: true,
+      };
+
+      const service = createService(plugin as BotPlugin);
+      await service.dispatchAndReply(
+        'conv-1',
+        user,
+        'settings:language:ru',
+        'msg-in',
+        'BUTTON',
+      );
+
+      expect(plugin.canHandle).toHaveBeenCalledWith(
+        'settings:language:ru',
+        'BUTTON',
+      );
+      expect(plugin.handle).toHaveBeenCalledWith({
+        user,
+        content: 'settings:language:ru',
+        kind: 'BUTTON',
+      });
+    });
+
+    it('stores the reply keyboard as a snapshot and publishes it', async () => {
+      const plugin = {
+        ...makePlugin('settings', true, {
+          text: 'Settings',
+          buttons: callbackButtons,
+        }),
+        handlesCallbacks: true,
+      };
+      prismaMock.messageCreate.mockResolvedValue({
+        id: 'msg-bot',
+        content: 'Settings',
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+      });
+
+      const service = createService(plugin as BotPlugin);
+      await service.dispatchAndReply(
+        'conv-1',
+        user,
+        '/settings',
+        'msg-in',
+        'TEXT',
+      );
+
+      expect(prismaMock.messageCreate).toHaveBeenCalledWith({
+        data: {
+          conversationId: 'conv-1',
+          senderRole: MessageSenderRole.BOT,
+          content: 'Settings',
+          buttons: callbackButtons,
+        },
+      });
+      expect(chatEventsMock.publish).toHaveBeenCalledWith(
+        expect.objectContaining({
+          content: 'Settings',
+          buttons: callbackButtons,
+        }),
+      );
+    });
+
+    it('normalizes the reply keyboard before storing it', async () => {
+      const plugin = makePlugin('settings', true, {
+        text: '  Settings  ',
+        buttons: [
+          { title: '  English ', callbackData: 'settings:language:en' },
+        ],
+      });
+
+      const service = createService(plugin as BotPlugin);
+      await service.dispatchAndReply('conv-1', user, '/settings', 'msg-in');
+
+      expect(prismaMock.messageCreate).toHaveBeenCalledWith({
+        data: {
+          conversationId: 'conv-1',
+          senderRole: MessageSenderRole.BOT,
+          content: 'Settings',
+          buttons: [{ title: 'English', callbackData: 'settings:language:en' }],
+        },
+      });
+    });
+
+    it('sends nothing when the reply keyboard is invalid', async () => {
+      const plugin = makePlugin('settings', true, {
+        text: 'Settings',
+        buttons: [
+          { title: '', callbackData: 'settings:language:en' },
+          { title: 'Too long', callbackData: 'x'.repeat(257) },
+        ],
+      });
+      const loggerError = vi
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => {});
+
+      const service = createService(plugin as BotPlugin);
+      await service.dispatchAndReply('conv-1', user, '/settings', 'msg-in');
+
+      expect(prismaMock.messageCreate).not.toHaveBeenCalled();
+      expect(chatEventsMock.publish).not.toHaveBeenCalled();
+      expect(prismaMock.taskUpdateMany).toHaveBeenCalledWith({
+        where: { messageId: 'msg-in', status: BotPluginTaskStatus.PROCESSING },
+        data: { status: BotPluginTaskStatus.DONE },
+      });
+      expect(loggerError).toHaveBeenCalledWith(
+        expect.stringContaining('invalid reply'),
+      );
+      loggerError.mockRestore();
+    });
+
+    it('sends nothing when the reply text is empty', async () => {
+      const plugin = makePlugin('settings', true, '   ');
+      vi.spyOn(Logger.prototype, 'error').mockImplementation(() => {});
+
+      const service = createService(plugin as BotPlugin);
+      await service.dispatchAndReply('conv-1', user, '/settings', 'msg-in');
+
+      expect(prismaMock.messageCreate).not.toHaveBeenCalled();
+      expect(chatEventsMock.publish).not.toHaveBeenCalled();
+    });
+
+    it('restores the button kind when the recovery sweep redispatches a task', async () => {
+      const buttonTask = {
+        ...pendingTask,
+        message: {
+          ...pendingTask.message,
+          content: 'settings:language:ru',
+          kind: 'BUTTON',
+        },
+      };
+      prismaMock.taskUpdateMany.mockResolvedValueOnce({ count: 0 });
+      prismaMock.taskFindMany.mockResolvedValue([buttonTask]);
+      prismaMock.conversationFindUnique.mockResolvedValue({
+        id: 'conv-1',
+        userId: 'user-1',
+      });
+      prismaMock.userFindUnique.mockResolvedValue(user);
+
+      const settings = {
+        ...makePlugin('settings', true, {
+          text: 'Язык изменён',
+          buttons: callbackButtons,
+        }),
+        handlesCallbacks: true,
+      };
+      const pingOnly = makePlugin('ping-only', true, 'pong');
+
+      const service = createService(
+        pingOnly as BotPlugin,
+        settings as BotPlugin,
+      );
+      await service.runRecoverySweep();
+
+      // The click is redispatched as a button, so the opt-in plugin gets it.
+      expect(settings.handle).toHaveBeenCalledWith({
+        user,
+        content: 'settings:language:ru',
+        kind: 'BUTTON',
+      });
+      expect(pingOnly.handle).not.toHaveBeenCalled();
     });
   });
 

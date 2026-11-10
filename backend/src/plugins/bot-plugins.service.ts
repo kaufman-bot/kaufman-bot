@@ -5,6 +5,7 @@ import {
   OnApplicationBootstrap,
   OnModuleDestroy,
 } from '@nestjs/common';
+import type { KeyboardButtonDto } from '../dto/keyboard.dto.js';
 import type {
   BotPluginTask,
   Message,
@@ -12,6 +13,7 @@ import type {
 } from '../generated/prisma/client.js';
 import {
   BotPluginTaskStatus,
+  MessageKind,
   MessageSenderRole,
 } from '../generated/prisma/enums.js';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -19,7 +21,16 @@ import {
   ChatEvent,
   ChatEventsService,
 } from '../services/chat-events.service.js';
-import { BOT_PLUGINS, BotPlugin } from './bot-plugin.interface.js';
+import {
+  normalizeButtons,
+  validateButtons,
+} from '../utils/keyboard-buttons.js';
+import {
+  BOT_PLUGINS,
+  BotPlugin,
+  BotPluginReply,
+  BotPluginSourceKind,
+} from './bot-plugin.interface.js';
 
 /** Interval between recovery sweeps (ms). */
 const SWEEP_INTERVAL_MS = 30_000;
@@ -33,6 +44,11 @@ const STALE_PROCESSING_MS = 60_000;
 
 /** A pending outbox task joined with its user message. */
 type PendingTask = BotPluginTask & { message: Message };
+
+/** Result of validating a plugin reply before anything is persisted. */
+type PreparedReply =
+  | { ok: true; text: string; buttons?: KeyboardButtonDto[] }
+  | { ok: false; reason: string };
 
 /**
  * Dispatches user messages to the registered bot plugins. Finds the first
@@ -99,12 +115,18 @@ export class BotPluginsService
    * BOT message of the conversation and published to the chat event bus for
    * real-time delivery; the task completion is committed in the same
    * transaction as the reply.
+   *
+   * `kind` tells the plugins whether `content` is typed text or the payload of
+   * a pressed inline button. Button messages are only offered to plugins that
+   * opt in via `handlesCallbacks`, so a button payload colliding with a
+   * text-only trigger stays silent.
    */
   async dispatchAndReply(
     conversationId: string,
     user: User,
     content: string,
     messageId: string,
+    kind: BotPluginSourceKind = 'TEXT',
   ): Promise<void> {
     const claimed = await this.prisma.botPluginTask.updateMany({
       where: { messageId, status: BotPluginTaskStatus.PENDING },
@@ -115,8 +137,10 @@ export class BotPluginsService
       return;
     }
 
-    const plugin = this.plugins.find((candidate) =>
-      candidate.canHandle(content),
+    const plugin = this.plugins.find(
+      (candidate) =>
+        (kind === 'TEXT' || candidate.handlesCallbacks === true) &&
+        candidate.canHandle(content, kind),
     );
     if (!plugin) {
       // No plugin matched: the message is fully processed without a reply.
@@ -124,9 +148,9 @@ export class BotPluginsService
       return;
     }
 
-    let reply: string;
+    let reply: BotPluginReply;
     try {
-      reply = await plugin.handle({ user, content });
+      reply = await plugin.handle({ user, content, kind });
     } catch (error) {
       // A plugin failure never affects the user's send: log it and close the
       // task so a persistently failing plugin is not retried forever (the
@@ -141,6 +165,17 @@ export class BotPluginsService
       return;
     }
 
+    const prepared = this.prepareReply(reply);
+    if (!prepared.ok) {
+      // Same isolation policy as a thrown error: log, close the task, send
+      // nothing, so a buggy reply cannot fail the request or loop retries.
+      this.logger.error(
+        `Plugin "${plugin.name}" produced an invalid reply (${prepared.reason}); no bot message was sent`,
+      );
+      await this.completeTask(messageId);
+      return;
+    }
+
     // Persist the reply and close the task atomically: a crash before the
     // commit leaves the task in PROCESSING for the recovery sweep, a commit
     // guarantees exactly one reply for this message.
@@ -149,7 +184,10 @@ export class BotPluginsService
         data: {
           conversationId,
           senderRole: MessageSenderRole.BOT,
-          content: reply,
+          content: prepared.text,
+          buttons: prepared.buttons
+            ? (prepared.buttons as unknown as object)
+            : undefined,
         },
       });
       await tx.botPluginTask.updateMany({
@@ -165,6 +203,7 @@ export class BotPluginsService
       senderRole: MessageSenderRole.BOT,
       content: message.content,
       createdAt: message.createdAt.toISOString(),
+      buttons: prepared.buttons,
     };
     this.chatEvents.publish(event);
   }
@@ -216,6 +255,35 @@ export class BotPluginsService
     }
   }
 
+  /**
+   * Validates and normalizes a plugin reply before anything is written:
+   * a text part must be non-empty and buttons go through the same rules as
+   * operator messages (`validateButtons` + `normalizeButtons`). An invalid
+   * reply produces no bot message at all instead of a partial one.
+   */
+  private prepareReply(reply: BotPluginReply): PreparedReply {
+    const { text, buttons } =
+      typeof reply === 'string' ? { text: reply, buttons: undefined } : reply;
+
+    const content = text.trim();
+    if (!content) {
+      return { ok: false, reason: 'reply text is empty' };
+    }
+    if (!buttons || buttons.length === 0) {
+      return { ok: true, text: content };
+    }
+
+    try {
+      validateButtons(buttons);
+      return { ok: true, text: content, buttons: normalizeButtons(buttons) };
+    } catch (error) {
+      return {
+        ok: false,
+        reason: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+
   /** Restores the dispatch context (conversation owner) and dispatches. */
   private async processPendingTask(task: PendingTask): Promise<void> {
     const message = task.message;
@@ -244,6 +312,10 @@ export class BotPluginsService
       user,
       message.content,
       message.id,
+      // A pressed button keeps its payload as content; the row's kind is what
+      // the live dispatch path passes as source kind, so a sweep of a button
+      // task reaches the same plugin the live path would have.
+      message.kind === MessageKind.BUTTON ? 'BUTTON' : 'TEXT',
     );
   }
 

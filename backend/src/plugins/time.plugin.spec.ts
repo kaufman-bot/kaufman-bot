@@ -26,6 +26,7 @@ describe('TimePlugin', () => {
     const reply = await plugin.handle({
       user: { timezone: 'Europe/Moscow' } as User,
       content: 'time',
+      kind: 'TEXT' as const,
     });
     expect(reply).toBe('2026-11-01 12:30:45 (Europe/Moscow)');
   });
@@ -34,6 +35,7 @@ describe('TimePlugin', () => {
     const reply = await plugin.handle({
       user: { timezone: null } as User,
       content: 'time',
+      kind: 'TEXT' as const,
     });
     expect(reply).toBe('2026-11-01 09:30:45 (UTC)');
   });
