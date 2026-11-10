@@ -25,6 +25,14 @@ export const routes: Routes = [
     canActivate: [requireAdminGuard],
   },
   {
+    path: 'telegram-bots',
+    loadComponent: () =>
+      import('./telegram-bots-admin/telegram-bots-admin.component').then(
+        (m) => m.TelegramBotsAdminComponent,
+      ),
+    canActivate: [requireAdminGuard],
+  },
+  {
     path: '',
     loadComponent: () =>
       import('./dashboard/dashboard.component').then(

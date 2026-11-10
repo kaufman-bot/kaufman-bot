@@ -12,8 +12,10 @@ describe('NavbarComponent', () => {
     const sessionSpy = {
       isAuthenticated: jest.fn().mockReturnValue(false),
       isAdmin: jest.fn().mockReturnValue(false),
+      isTelegramTarget: jest.fn().mockReturnValue(false),
       profile: jest.fn().mockReturnValue(null),
       logout: jest.fn(),
+      launchTelegram: jest.fn(),
     } as unknown as SessionService;
 
     await TestBed.configureTestingModule({
@@ -105,5 +107,36 @@ describe('NavbarComponent', () => {
     expect(compiled.querySelector('.brand-text')?.textContent).toContain(
       'Kaufman Bot',
     );
+  });
+
+  it('should show launch-tg button when user target is a bot', () => {
+    (sessionService.isAuthenticated as jest.Mock).mockReturnValue(true);
+    (sessionService.isTelegramTarget as jest.Mock).mockReturnValue(true);
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.querySelector('.btn-launch-tg')).toBeTruthy();
+  });
+
+  it('should NOT show launch-tg button when target is mock', () => {
+    (sessionService.isAuthenticated as jest.Mock).mockReturnValue(true);
+    (sessionService.isTelegramTarget as jest.Mock).mockReturnValue(false);
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.querySelector('.btn-launch-tg')).toBeFalsy();
+  });
+
+  it('should call session.launchTelegram on button click', () => {
+    (sessionService.isAuthenticated as jest.Mock).mockReturnValue(true);
+    (sessionService.isTelegramTarget as jest.Mock).mockReturnValue(true);
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const btn = compiled.querySelector('.btn-launch-tg') as HTMLButtonElement;
+    btn.click();
+    fixture.detectChanges();
+
+    expect(sessionService.launchTelegram).toHaveBeenCalled();
   });
 });

@@ -32,6 +32,23 @@ import { SessionService } from '../session.service';
         >
           Мок-сервер
         </a>
+
+        <a
+          *ngIf="session.isAdmin()"
+          routerLink="/telegram-bots"
+          routerLinkActive="active"
+        >
+          Телеграм-боты
+        </a>
+
+        <button
+          *ngIf="session.isTelegramTarget()"
+          class="btn-launch-tg"
+          type="button"
+          (click)="onLaunchTelegram()"
+        >
+          Запустить телеграм бота
+        </button>
       </div>
 
       <div class="navbar-actions">
@@ -158,6 +175,22 @@ import { SessionService } from '../session.service';
       .btn-login:hover {
         background: #0ea5e9;
       }
+
+      .btn-launch-tg {
+        padding: 0.5rem 1rem;
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: #fff;
+        background: #2aabee;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+
+      .btn-launch-tg:hover {
+        background: #229ed9;
+      }
     `,
   ],
 })
@@ -166,5 +199,9 @@ export class NavbarComponent {
 
   onLogout(): void {
     this.session.logout();
+  }
+
+  onLaunchTelegram(): void {
+    this.session.launchTelegram();
   }
 }
