@@ -2,7 +2,7 @@
 
 import { client } from './client.gen.js';
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client/index.js';
-import type { AdminUsersControllerGetV1Data, AdminUsersControllerGetV1Errors, AdminUsersControllerGetV1Responses, AdminUsersControllerListV1Data, AdminUsersControllerListV1Errors, AdminUsersControllerListV1Responses, AdminUsersControllerRemoveV1Data, AdminUsersControllerRemoveV1Errors, AdminUsersControllerRemoveV1Responses, AdminUsersControllerUpdateV1Data, AdminUsersControllerUpdateV1Errors, AdminUsersControllerUpdateV1Responses, ApiKeysControllerCreateV1Data, ApiKeysControllerCreateV1Errors, ApiKeysControllerCreateV1Responses, ApiKeysControllerListV1Data, ApiKeysControllerListV1Errors, ApiKeysControllerListV1Responses, ApiKeysControllerRemoveV1Data, ApiKeysControllerRemoveV1Errors, ApiKeysControllerRemoveV1Responses, ApiKeysControllerUpdateV1Data, ApiKeysControllerUpdateV1Errors, ApiKeysControllerUpdateV1Responses, AuthControllerLoginV1Data, AuthControllerLoginV1Errors, AuthControllerLoginV1Responses, AuthControllerMeV1Data, AuthControllerMeV1Errors, AuthControllerMeV1Responses, AuthControllerRegisterV1Data, AuthControllerRegisterV1Errors, AuthControllerRegisterV1Responses, AuthControllerUpdateMeV1Data, AuthControllerUpdateMeV1Errors, AuthControllerUpdateMeV1Responses, ButtonPresetsControllerCreateV1Data, ButtonPresetsControllerCreateV1Errors, ButtonPresetsControllerCreateV1Responses, ButtonPresetsControllerListV1Data, ButtonPresetsControllerListV1Errors, ButtonPresetsControllerListV1Responses, ButtonPresetsControllerRemoveV1Data, ButtonPresetsControllerRemoveV1Errors, ButtonPresetsControllerRemoveV1Responses, ButtonPresetsControllerUpdateV1Data, ButtonPresetsControllerUpdateV1Errors, ButtonPresetsControllerUpdateV1Responses, ChatControllerGetMessagesV1Data, ChatControllerGetMessagesV1Errors, ChatControllerGetMessagesV1Responses, ChatControllerSendMessageV1Data, ChatControllerSendMessageV1Errors, ChatControllerSendMessageV1Responses, ChatControllerStreamEventsV1Data, ChatControllerStreamEventsV1Errors, ChatControllerStreamEventsV1Responses, ChatControllerSubmitButtonCallbackV1Data, ChatControllerSubmitButtonCallbackV1Errors, ChatControllerSubmitButtonCallbackV1Responses, HealthControllerCheckV1Data, HealthControllerCheckV1Errors, HealthControllerCheckV1Responses, MockBotControllerGetConversationMessagesV1Data, MockBotControllerGetConversationMessagesV1Errors, MockBotControllerGetConversationMessagesV1Responses, MockBotControllerListConversationsV1Data, MockBotControllerListConversationsV1Errors, MockBotControllerListConversationsV1Responses, MockBotControllerReplyAsBotV1Data, MockBotControllerReplyAsBotV1Errors, MockBotControllerReplyAsBotV1Responses, MockBotControllerStreamEventsV1Data, MockBotControllerStreamEventsV1Errors, MockBotControllerStreamEventsV1Responses, TimeControllerStreamV1Data, TimeControllerStreamV1Responses, TimeControllerTimeV1Data, TimeControllerTimeV1Responses } from './types.gen.js';
+import type { AdminUsersControllerGetV1Data, AdminUsersControllerGetV1Errors, AdminUsersControllerGetV1Responses, AdminUsersControllerListV1Data, AdminUsersControllerListV1Errors, AdminUsersControllerListV1Responses, AdminUsersControllerRemoveV1Data, AdminUsersControllerRemoveV1Errors, AdminUsersControllerRemoveV1Responses, AdminUsersControllerSetTelegramTargetV1Data, AdminUsersControllerSetTelegramTargetV1Errors, AdminUsersControllerSetTelegramTargetV1Responses, AdminUsersControllerUpdateV1Data, AdminUsersControllerUpdateV1Errors, AdminUsersControllerUpdateV1Responses, ApiKeysControllerCreateV1Data, ApiKeysControllerCreateV1Errors, ApiKeysControllerCreateV1Responses, ApiKeysControllerListV1Data, ApiKeysControllerListV1Errors, ApiKeysControllerListV1Responses, ApiKeysControllerRemoveV1Data, ApiKeysControllerRemoveV1Errors, ApiKeysControllerRemoveV1Responses, ApiKeysControllerUpdateV1Data, ApiKeysControllerUpdateV1Errors, ApiKeysControllerUpdateV1Responses, AuthControllerLoginV1Data, AuthControllerLoginV1Errors, AuthControllerLoginV1Responses, AuthControllerMeV1Data, AuthControllerMeV1Errors, AuthControllerMeV1Responses, AuthControllerRegisterV1Data, AuthControllerRegisterV1Errors, AuthControllerRegisterV1Responses, AuthControllerUpdateMeV1Data, AuthControllerUpdateMeV1Errors, AuthControllerUpdateMeV1Responses, ButtonPresetsControllerCreateV1Data, ButtonPresetsControllerCreateV1Errors, ButtonPresetsControllerCreateV1Responses, ButtonPresetsControllerListV1Data, ButtonPresetsControllerListV1Errors, ButtonPresetsControllerListV1Responses, ButtonPresetsControllerRemoveV1Data, ButtonPresetsControllerRemoveV1Errors, ButtonPresetsControllerRemoveV1Responses, ButtonPresetsControllerUpdateV1Data, ButtonPresetsControllerUpdateV1Errors, ButtonPresetsControllerUpdateV1Responses, ChatControllerGetMessagesV1Data, ChatControllerGetMessagesV1Errors, ChatControllerGetMessagesV1Responses, ChatControllerSendMessageV1Data, ChatControllerSendMessageV1Errors, ChatControllerSendMessageV1Responses, ChatControllerStreamEventsV1Data, ChatControllerStreamEventsV1Errors, ChatControllerStreamEventsV1Responses, ChatControllerSubmitButtonCallbackV1Data, ChatControllerSubmitButtonCallbackV1Errors, ChatControllerSubmitButtonCallbackV1Responses, HealthControllerCheckV1Data, HealthControllerCheckV1Errors, HealthControllerCheckV1Responses, MockBotControllerGetConversationMessagesV1Data, MockBotControllerGetConversationMessagesV1Errors, MockBotControllerGetConversationMessagesV1Responses, MockBotControllerListConversationsV1Data, MockBotControllerListConversationsV1Errors, MockBotControllerListConversationsV1Responses, MockBotControllerReplyAsBotV1Data, MockBotControllerReplyAsBotV1Errors, MockBotControllerReplyAsBotV1Responses, MockBotControllerStreamEventsV1Data, MockBotControllerStreamEventsV1Errors, MockBotControllerStreamEventsV1Responses, TelegramBotsControllerCreateV1Data, TelegramBotsControllerCreateV1Errors, TelegramBotsControllerCreateV1Responses, TelegramBotsControllerGetV1Data, TelegramBotsControllerGetV1Errors, TelegramBotsControllerGetV1Responses, TelegramBotsControllerListV1Data, TelegramBotsControllerListV1Errors, TelegramBotsControllerListV1Responses, TelegramBotsControllerRemoveV1Data, TelegramBotsControllerRemoveV1Errors, TelegramBotsControllerRemoveV1Responses, TelegramBotsControllerUpdateV1Data, TelegramBotsControllerUpdateV1Errors, TelegramBotsControllerUpdateV1Responses, TelegramLaunchControllerLaunchV1Data, TelegramLaunchControllerLaunchV1Errors, TelegramLaunchControllerLaunchV1Responses, TelegramWebhookControllerReceiveData, TelegramWebhookControllerReceiveResponses, TimeControllerStreamV1Data, TimeControllerStreamV1Responses, TimeControllerTimeV1Data, TimeControllerTimeV1Responses } from './types.gen.js';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -209,6 +209,20 @@ export class Sdk extends HeyApiClient {
     }
     
     /**
+     * Assign or reset the Telegram bot target for a user
+     */
+    public adminUsersControllerSetTelegramTargetV1<ThrowOnError extends boolean = false>(options: Options<AdminUsersControllerSetTelegramTargetV1Data, ThrowOnError>): RequestResult<AdminUsersControllerSetTelegramTargetV1Responses, AdminUsersControllerSetTelegramTargetV1Errors, ThrowOnError> {
+        return (options.client ?? this.client).put<AdminUsersControllerSetTelegramTargetV1Responses, AdminUsersControllerSetTelegramTargetV1Errors, ThrowOnError>({
+            url: '/api/v1/admin/users/{id}/telegram-target',
+            ...options,
+            headers: {
+                'Content-Type': 'application/json',
+                ...options.headers
+            }
+        });
+    }
+    
+    /**
      * Retrieve the full message history of the authenticated user
      */
     public chatControllerGetMessagesV1<ThrowOnError extends boolean = false>(options?: Options<ChatControllerGetMessagesV1Data, ThrowOnError>): RequestResult<ChatControllerGetMessagesV1Responses, ChatControllerGetMessagesV1Errors, ThrowOnError> {
@@ -325,5 +339,68 @@ export class Sdk extends HeyApiClient {
                 ...options.headers
             }
         });
+    }
+    
+    /**
+     * List Telegram bots owned by the calling admin
+     */
+    public telegramBotsControllerListV1<ThrowOnError extends boolean = false>(options?: Options<TelegramBotsControllerListV1Data, ThrowOnError>): RequestResult<TelegramBotsControllerListV1Responses, TelegramBotsControllerListV1Errors, ThrowOnError> {
+        return (options?.client ?? this.client).get<TelegramBotsControllerListV1Responses, TelegramBotsControllerListV1Errors, ThrowOnError>({ url: '/api/v1/telegram/bots', ...options });
+    }
+    
+    /**
+     * Create a Telegram bot owned by the calling admin
+     */
+    public telegramBotsControllerCreateV1<ThrowOnError extends boolean = false>(options: Options<TelegramBotsControllerCreateV1Data, ThrowOnError>): RequestResult<TelegramBotsControllerCreateV1Responses, TelegramBotsControllerCreateV1Errors, ThrowOnError> {
+        return (options.client ?? this.client).post<TelegramBotsControllerCreateV1Responses, TelegramBotsControllerCreateV1Errors, ThrowOnError>({
+            url: '/api/v1/telegram/bots',
+            ...options,
+            headers: {
+                'Content-Type': 'application/json',
+                ...options.headers
+            }
+        });
+    }
+    
+    /**
+     * Delete a caller-owned Telegram bot
+     */
+    public telegramBotsControllerRemoveV1<ThrowOnError extends boolean = false>(options: Options<TelegramBotsControllerRemoveV1Data, ThrowOnError>): RequestResult<TelegramBotsControllerRemoveV1Responses, TelegramBotsControllerRemoveV1Errors, ThrowOnError> {
+        return (options.client ?? this.client).delete<TelegramBotsControllerRemoveV1Responses, TelegramBotsControllerRemoveV1Errors, ThrowOnError>({ url: '/api/v1/telegram/bots/{id}', ...options });
+    }
+    
+    /**
+     * Read a single caller-owned Telegram bot
+     */
+    public telegramBotsControllerGetV1<ThrowOnError extends boolean = false>(options: Options<TelegramBotsControllerGetV1Data, ThrowOnError>): RequestResult<TelegramBotsControllerGetV1Responses, TelegramBotsControllerGetV1Errors, ThrowOnError> {
+        return (options.client ?? this.client).get<TelegramBotsControllerGetV1Responses, TelegramBotsControllerGetV1Errors, ThrowOnError>({ url: '/api/v1/telegram/bots/{id}', ...options });
+    }
+    
+    /**
+     * Update the name, token, settings, or isActive of a caller-owned bot
+     */
+    public telegramBotsControllerUpdateV1<ThrowOnError extends boolean = false>(options: Options<TelegramBotsControllerUpdateV1Data, ThrowOnError>): RequestResult<TelegramBotsControllerUpdateV1Responses, TelegramBotsControllerUpdateV1Errors, ThrowOnError> {
+        return (options.client ?? this.client).patch<TelegramBotsControllerUpdateV1Responses, TelegramBotsControllerUpdateV1Errors, ThrowOnError>({
+            url: '/api/v1/telegram/bots/{id}',
+            ...options,
+            headers: {
+                'Content-Type': 'application/json',
+                ...options.headers
+            }
+        });
+    }
+    
+    /**
+     * Get a t.me deep-link to start the Telegram bot conversation
+     */
+    public telegramLaunchControllerLaunchV1<ThrowOnError extends boolean = false>(options?: Options<TelegramLaunchControllerLaunchV1Data, ThrowOnError>): RequestResult<TelegramLaunchControllerLaunchV1Responses, TelegramLaunchControllerLaunchV1Errors, ThrowOnError> {
+        return (options?.client ?? this.client).post<TelegramLaunchControllerLaunchV1Responses, TelegramLaunchControllerLaunchV1Errors, ThrowOnError>({ url: '/api/v1/telegram/launch', ...options });
+    }
+    
+    /**
+     * Receive a Telegram Bot API update (public webhook)
+     */
+    public telegramWebhookControllerReceive<ThrowOnError extends boolean = false>(options: Options<TelegramWebhookControllerReceiveData, ThrowOnError>): RequestResult<TelegramWebhookControllerReceiveResponses, unknown, ThrowOnError> {
+        return (options.client ?? this.client).post<TelegramWebhookControllerReceiveResponses, unknown, ThrowOnError>({ url: '/api/telegram/webhook/{botId}', ...options });
     }
 }

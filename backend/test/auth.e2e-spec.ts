@@ -138,6 +138,8 @@ describe('Registration and auth profile (e2e, running backend)', () => {
         isActive: true,
         timezone: null,
         language: 'en',
+        telegramBotId: null,
+        telegramBotName: null,
       });
       expect(profile.apiKey.id).toBe(registered.apiKey.id);
     });

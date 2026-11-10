@@ -133,6 +133,14 @@ export type AuthProfileUserDto = {
      * Active language of the user
      */
     language: 'en' | 'ru';
+    /**
+     * ID of the Telegram bot target (null when target is mock-server)
+     */
+    telegramBotId: string | null;
+    /**
+     * Name of the assigned Telegram bot (null when target is mock-server)
+     */
+    telegramBotName: string | null;
 };
 
 export type ApiKeySecretDto = {
@@ -300,6 +308,10 @@ export type AdminUserDto = {
      */
     isActive: boolean;
     /**
+     * ID of the Telegram bot assigned as the active transport target, or null when the account talks to the mock server
+     */
+    telegramBotId: string | null;
+    /**
      * Account creation time (ISO-8601)
      */
     createdAt: string;
@@ -326,6 +338,13 @@ export type UpdateAdminUserRequestDto = {
      * New role of the account
      */
     role?: 'USER' | 'ADMIN' | 'GUEST';
+};
+
+export type SetTelegramTargetRequestDto = {
+    /**
+     * ID of the Telegram bot to assign as active target, or null to reset to mock-server.
+     */
+    telegramBotId: string | null;
 };
 
 export type KeyboardButtonDto = {
@@ -545,6 +564,96 @@ export type UpdateButtonPresetRequestDto = {
      * New ordered set of buttons (optional; unchanged when omitted). When provided it must contain 1..12 valid buttons.
      */
     buttons?: Array<KeyboardButtonDto>;
+};
+
+export type CreateTelegramBotRequestDto = {
+    /**
+     * Display name of the bot
+     */
+    name: string;
+    /**
+     * Bot API token issued by @BotFather (secret, write-only)
+     */
+    botToken: string;
+    /**
+     * Telegram username (without leading @) used for the launch deep-link
+     */
+    botUsername?: string;
+    /**
+     * Optional arbitrary settings object stored as-is
+     */
+    settings?: {
+        [key: string]: unknown;
+    } | null;
+    /**
+     * Create the bot active (default) or disabled
+     */
+    isActive?: boolean;
+};
+
+export type TelegramBotDto = {
+    /**
+     * Unique bot identifier
+     */
+    id: string;
+    /**
+     * Human-readable bot name
+     */
+    name: string;
+    /**
+     * Masked Bot API token (the full secret is never returned)
+     */
+    botToken: string;
+    /**
+     * Telegram username used to build the deep-link, or null
+     */
+    botUsername: string | null;
+    /**
+     * Whether the bot is active (gates the transport bridge)
+     */
+    isActive: boolean;
+    /**
+     * Arbitrary per-bot settings object (opaque to the server today), or null when none were stored.
+     */
+    settings: {
+        [key: string]: unknown;
+    } | null;
+    /**
+     * ADMIN user who owns this bot
+     */
+    ownerId: string;
+    /**
+     * When the bot was created
+     */
+    createdAt: string;
+    /**
+     * When the bot was last modified
+     */
+    updatedAt: string;
+};
+
+export type UpdateTelegramBotRequestDto = {
+    name?: string;
+    /**
+     * New Bot API token (write-only secret)
+     */
+    botToken?: string;
+    botUsername?: string | null;
+    settings?: {
+        [key: string]: unknown;
+    } | null;
+    isActive?: boolean;
+};
+
+export type TelegramLaunchDto = {
+    /**
+     * t.me deep-link URL with the start-token
+     */
+    url: string;
+    /**
+     * One-time binding token embedded in the URL
+     */
+    token: string;
 };
 
 export type TimeControllerTimeV1Data = {
@@ -1040,6 +1149,48 @@ export type AdminUsersControllerUpdateV1Responses = {
 
 export type AdminUsersControllerUpdateV1Response = AdminUsersControllerUpdateV1Responses[keyof AdminUsersControllerUpdateV1Responses];
 
+export type AdminUsersControllerSetTelegramTargetV1Data = {
+    body: SetTelegramTargetRequestDto;
+    headers?: {
+        /**
+         * API key of an ADMIN account (?apiKey= also works).
+         */
+        'x-api-key'?: string;
+    };
+    path: {
+        /**
+         * User id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/users/{id}/telegram-target';
+};
+
+export type AdminUsersControllerSetTelegramTargetV1Errors = {
+    /**
+     * No valid API key
+     */
+    401: ApiErrorDto;
+    /**
+     * Authenticated account is not an admin
+     */
+    403: ApiErrorDto;
+    /**
+     * User or bot not found / bot not owned by caller
+     */
+    404: ApiErrorDto;
+};
+
+export type AdminUsersControllerSetTelegramTargetV1Error = AdminUsersControllerSetTelegramTargetV1Errors[keyof AdminUsersControllerSetTelegramTargetV1Errors];
+
+export type AdminUsersControllerSetTelegramTargetV1Responses = {
+    /**
+     * Target set (or reset to mock-server)
+     */
+    200: unknown;
+};
+
 export type ChatControllerGetMessagesV1Data = {
     body?: never;
     headers?: {
@@ -1495,3 +1646,261 @@ export type ButtonPresetsControllerUpdateV1Responses = {
 };
 
 export type ButtonPresetsControllerUpdateV1Response = ButtonPresetsControllerUpdateV1Responses[keyof ButtonPresetsControllerUpdateV1Responses];
+
+export type TelegramBotsControllerListV1Data = {
+    body?: never;
+    headers?: {
+        /**
+         * API key of an ADMIN account. Optional in the schema because ?apiKey= is accepted as an alternative; the guard rejects requests that carry neither.
+         */
+        'x-api-key'?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/telegram/bots';
+};
+
+export type TelegramBotsControllerListV1Errors = {
+    /**
+     * No valid API key provided
+     */
+    401: ApiErrorDto;
+    /**
+     * Authenticated account is not an admin
+     */
+    403: ApiErrorDto;
+};
+
+export type TelegramBotsControllerListV1Error = TelegramBotsControllerListV1Errors[keyof TelegramBotsControllerListV1Errors];
+
+export type TelegramBotsControllerListV1Responses = {
+    /**
+     * Only the caller-owned bots; foreign bots are never returned
+     */
+    200: Array<TelegramBotDto>;
+};
+
+export type TelegramBotsControllerListV1Response = TelegramBotsControllerListV1Responses[keyof TelegramBotsControllerListV1Responses];
+
+export type TelegramBotsControllerCreateV1Data = {
+    body: CreateTelegramBotRequestDto;
+    headers?: {
+        /**
+         * API key of an ADMIN account. Optional in the schema because ?apiKey= is accepted as an alternative; the guard rejects requests that carry neither.
+         */
+        'x-api-key'?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/telegram/bots';
+};
+
+export type TelegramBotsControllerCreateV1Errors = {
+    /**
+     * Empty name, empty token, or token exceeds length limits
+     */
+    400: ApiErrorDto;
+    /**
+     * No valid API key provided
+     */
+    401: ApiErrorDto;
+    /**
+     * Authenticated account is not an admin
+     */
+    403: ApiErrorDto;
+};
+
+export type TelegramBotsControllerCreateV1Error = TelegramBotsControllerCreateV1Errors[keyof TelegramBotsControllerCreateV1Errors];
+
+export type TelegramBotsControllerCreateV1Responses = {
+    /**
+     * The persisted bot with masked token
+     */
+    201: TelegramBotDto;
+};
+
+export type TelegramBotsControllerCreateV1Response = TelegramBotsControllerCreateV1Responses[keyof TelegramBotsControllerCreateV1Responses];
+
+export type TelegramBotsControllerRemoveV1Data = {
+    body?: never;
+    headers?: {
+        /**
+         * API key of an ADMIN account. Optional in the schema because ?apiKey= is accepted as an alternative; the guard rejects requests that carry neither.
+         */
+        'x-api-key'?: string;
+    };
+    path: {
+        /**
+         * Bot id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/v1/telegram/bots/{id}';
+};
+
+export type TelegramBotsControllerRemoveV1Errors = {
+    /**
+     * No valid API key provided
+     */
+    401: ApiErrorDto;
+    /**
+     * Authenticated account is not an admin
+     */
+    403: ApiErrorDto;
+    /**
+     * Bot does not exist or belongs to another admin
+     */
+    404: ApiErrorDto;
+};
+
+export type TelegramBotsControllerRemoveV1Error = TelegramBotsControllerRemoveV1Errors[keyof TelegramBotsControllerRemoveV1Errors];
+
+export type TelegramBotsControllerRemoveV1Responses = {
+    /**
+     * Bot deleted
+     */
+    204: void;
+};
+
+export type TelegramBotsControllerRemoveV1Response = TelegramBotsControllerRemoveV1Responses[keyof TelegramBotsControllerRemoveV1Responses];
+
+export type TelegramBotsControllerGetV1Data = {
+    body?: never;
+    headers?: {
+        /**
+         * API key of an ADMIN account. Optional in the schema because ?apiKey= is accepted as an alternative; the guard rejects requests that carry neither.
+         */
+        'x-api-key'?: string;
+    };
+    path: {
+        /**
+         * Bot id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/v1/telegram/bots/{id}';
+};
+
+export type TelegramBotsControllerGetV1Errors = {
+    /**
+     * No valid API key provided
+     */
+    401: ApiErrorDto;
+    /**
+     * Authenticated account is not an admin
+     */
+    403: ApiErrorDto;
+    /**
+     * Bot does not exist or belongs to another admin
+     */
+    404: ApiErrorDto;
+};
+
+export type TelegramBotsControllerGetV1Error = TelegramBotsControllerGetV1Errors[keyof TelegramBotsControllerGetV1Errors];
+
+export type TelegramBotsControllerGetV1Responses = {
+    /**
+     * The bot
+     */
+    200: TelegramBotDto;
+};
+
+export type TelegramBotsControllerGetV1Response = TelegramBotsControllerGetV1Responses[keyof TelegramBotsControllerGetV1Responses];
+
+export type TelegramBotsControllerUpdateV1Data = {
+    body: UpdateTelegramBotRequestDto;
+    headers?: {
+        /**
+         * API key of an ADMIN account. Optional in the schema because ?apiKey= is accepted as an alternative; the guard rejects requests that carry neither.
+         */
+        'x-api-key'?: string;
+    };
+    path: {
+        /**
+         * Bot id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/v1/telegram/bots/{id}';
+};
+
+export type TelegramBotsControllerUpdateV1Errors = {
+    /**
+     * Empty body or invalid field values
+     */
+    400: ApiErrorDto;
+    /**
+     * No valid API key provided
+     */
+    401: ApiErrorDto;
+    /**
+     * Authenticated account is not an admin
+     */
+    403: ApiErrorDto;
+    /**
+     * Bot does not exist or belongs to another admin
+     */
+    404: ApiErrorDto;
+};
+
+export type TelegramBotsControllerUpdateV1Error = TelegramBotsControllerUpdateV1Errors[keyof TelegramBotsControllerUpdateV1Errors];
+
+export type TelegramBotsControllerUpdateV1Responses = {
+    /**
+     * The updated bot
+     */
+    200: TelegramBotDto;
+};
+
+export type TelegramBotsControllerUpdateV1Response = TelegramBotsControllerUpdateV1Responses[keyof TelegramBotsControllerUpdateV1Responses];
+
+export type TelegramLaunchControllerLaunchV1Data = {
+    body?: never;
+    headers?: {
+        /**
+         * API key of an authenticated user account.
+         */
+        'x-api-key'?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/telegram/launch';
+};
+
+export type TelegramLaunchControllerLaunchV1Errors = {
+    /**
+     * User target is mock-server or bot username not set
+     */
+    400: ApiErrorDto;
+    /**
+     * No valid API key provided
+     */
+    401: ApiErrorDto;
+};
+
+export type TelegramLaunchControllerLaunchV1Error = TelegramLaunchControllerLaunchV1Errors[keyof TelegramLaunchControllerLaunchV1Errors];
+
+export type TelegramLaunchControllerLaunchV1Responses = {
+    /**
+     * Deep-link URL and one-time binding token
+     */
+    200: TelegramLaunchDto;
+};
+
+export type TelegramLaunchControllerLaunchV1Response = TelegramLaunchControllerLaunchV1Responses[keyof TelegramLaunchControllerLaunchV1Responses];
+
+export type TelegramWebhookControllerReceiveData = {
+    body?: never;
+    path: {
+        botId: string;
+    };
+    query?: never;
+    url: '/api/telegram/webhook/{botId}';
+};
+
+export type TelegramWebhookControllerReceiveResponses = {
+    201: unknown;
+};
