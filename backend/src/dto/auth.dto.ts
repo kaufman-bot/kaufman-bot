@@ -29,6 +29,22 @@ export class AuthProfileUserDto {
     example: 'en',
   })
   language: string;
+
+  @ApiProperty({
+    description:
+      'ID of the Telegram bot target (null when target is mock-server)',
+    nullable: true,
+    type: String,
+  })
+  telegramBotId: string | null;
+
+  @ApiProperty({
+    description:
+      'Name of the assigned Telegram bot (null when target is mock-server)',
+    nullable: true,
+    type: String,
+  })
+  telegramBotName: string | null;
 }
 
 /** API-key part of the auth profile response (the secret itself is masked). */

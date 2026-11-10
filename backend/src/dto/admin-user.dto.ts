@@ -16,6 +16,15 @@ export class AdminUserDto {
   isActive: boolean;
 
   @ApiProperty({
+    description:
+      'ID of the Telegram bot assigned as the active transport target, or ' +
+      'null when the account talks to the mock server',
+    nullable: true,
+    type: String,
+  })
+  telegramBotId: string | null;
+
+  @ApiProperty({
     description: 'Account creation time (ISO-8601)',
     example: '2026-09-30T12:00:00.000Z',
     type: String,
