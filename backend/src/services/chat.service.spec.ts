@@ -1,4 +1,8 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { firstValueFrom, Subject, take, toArray } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatEventsService } from './chat-events.service.js';
@@ -10,6 +14,7 @@ const makePrismaMock = () => {
   const messageCreate = vi.fn();
   const messageUpdateMany = vi.fn();
   const botPluginTaskCreate = vi.fn();
+  const telegramBotFindUnique = vi.fn();
   const $transaction = vi.fn(async (fn: (tx: unknown) => unknown) =>
     fn({
       message: { create: messageCreate },
@@ -30,6 +35,9 @@ const makePrismaMock = () => {
       botPluginTask: {
         create: botPluginTaskCreate,
       },
+      telegramBot: {
+        findUnique: telegramBotFindUnique,
+      },
       $transaction,
     },
     conversationFindUnique,
@@ -37,6 +45,7 @@ const makePrismaMock = () => {
     messageCreate,
     messageUpdateMany,
     botPluginTaskCreate,
+    telegramBotFindUnique,
     $transaction,
   };
 };
@@ -49,6 +58,8 @@ const makeUser = (id = 'user-1') => ({
   isActive: true,
   timezone: null,
   language: 'en' as const,
+  telegramBotId: null,
+  telegramChatId: null,
   createdAt: new Date(),
   updatedAt: new Date(),
 });
@@ -559,6 +570,77 @@ describe('ChatService', () => {
       const result = await service.getConversationByUserId('user-1');
 
       expect(result).toEqual(conversation);
+    });
+  });
+
+  // ─── Transport gate (design D4) ──────────────────────────────────────
+
+  describe('transport gate (409)', () => {
+    it('sendMessage throws 409 when assigned bot is disabled', async () => {
+      const user = { ...makeUser(), telegramBotId: 'bot-1' };
+      prismaMock.telegramBotFindUnique.mockResolvedValue({ isActive: false });
+
+      await expect(service.sendMessage(user as any, 'hello')).rejects.toThrow(
+        ConflictException,
+      );
+      // Message should NOT be written
+      expect(prismaMock.conversationUpsert).not.toHaveBeenCalled();
+    });
+
+    it('sendMessage succeeds when assigned bot is active', async () => {
+      const user = { ...makeUser(), telegramBotId: 'bot-1' };
+      prismaMock.telegramBotFindUnique.mockResolvedValue({ isActive: true });
+      prismaMock.conversationUpsert.mockResolvedValue({ id: 'conv-1' });
+      prismaMock.messageCreate.mockResolvedValue({
+        id: 'msg-1',
+        conversationId: 'conv-1',
+        senderRole: 'USER',
+        kind: 'TEXT',
+        content: 'hello',
+        buttons: null,
+        createdAt: new Date(),
+        readAt: null,
+      });
+      prismaMock.botPluginTaskCreate.mockResolvedValue({});
+
+      const result = await service.sendMessage(user as any, 'hello');
+
+      expect(result.content).toBe('hello');
+      expect(prismaMock.telegramBotFindUnique).toHaveBeenCalledWith({
+        where: { id: 'bot-1' },
+        select: { isActive: true },
+      });
+    });
+
+    it('sendMessage succeeds for mock-target user (telegramBotId null)', async () => {
+      const user = makeUser(); // telegramBotId: null
+      prismaMock.conversationUpsert.mockResolvedValue({ id: 'conv-1' });
+      prismaMock.messageCreate.mockResolvedValue({
+        id: 'msg-1',
+        conversationId: 'conv-1',
+        senderRole: 'USER',
+        kind: 'TEXT',
+        content: 'hi',
+        buttons: null,
+        createdAt: new Date(),
+        readAt: null,
+      });
+      prismaMock.botPluginTaskCreate.mockResolvedValue({});
+
+      const result = await service.sendMessage(user as any, 'hi');
+
+      expect(result.content).toBe('hi');
+      // Should not query telegramBot at all for mock users
+      expect(prismaMock.telegramBotFindUnique).not.toHaveBeenCalled();
+    });
+
+    it('submitButtonCallback throws 409 when assigned bot is disabled', async () => {
+      const user = { ...makeUser(), telegramBotId: 'bot-2' };
+      prismaMock.telegramBotFindUnique.mockResolvedValue({ isActive: false });
+
+      await expect(
+        service.submitButtonCallback(user as any, { callbackData: 'test' }),
+      ).rejects.toThrow(ConflictException);
     });
   });
 });

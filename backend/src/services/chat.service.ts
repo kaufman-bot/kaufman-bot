@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   Logger,
   NotFoundException,
@@ -83,6 +84,8 @@ export class ChatService {
    * Returns the persisted message and publishes a real-time event.
    */
   async sendMessage(user: User, content: string): Promise<ChatMessageDto> {
+    await this.assertTransportActive(user);
+
     const trimmed = typeof content === 'string' ? content.trim() : '';
     if (!trimmed) {
       throw new BadRequestException('Message content cannot be empty');
@@ -135,6 +138,8 @@ export class ChatService {
     user: User,
     dto: ButtonCallbackRequestDto,
   ): Promise<ChatMessageDto> {
+    await this.assertTransportActive(user);
+
     const callbackData =
       typeof dto?.callbackData === 'string' ? dto.callbackData.trim() : '';
     if (!callbackData) {
@@ -363,5 +368,29 @@ export class ChatService {
       buttons: toButtons(message.buttons),
     };
     this.chatEvents.publish(event);
+  }
+
+  /**
+   * Transport gate (design D4): if the user is assigned to a Telegram bot
+   * and that bot is disabled (isActive === false), throw ConflictException
+   * (409) before any message is written or dispatched. Mock-target users
+   * (telegramBotId === null) and active-bot users pass through unchanged.
+   */
+  private async assertTransportActive(user: User): Promise<void> {
+    if (user.telegramBotId == null) return;
+
+    const bot = await this.prisma.telegramBot.findUnique({
+      where: { id: user.telegramBotId },
+      select: { isActive: true },
+    });
+
+    // Bot was deleted (shouldn't happen due to SetNull FK, but defensive).
+    if (!bot) return;
+
+    if (!bot.isActive) {
+      throw new ConflictException(
+        'Telegram bot is disabled — switch the bot on or change your target',
+      );
+    }
   }
 }
