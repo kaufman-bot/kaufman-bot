@@ -13,6 +13,7 @@ import { TimeController } from './controllers/time.controller.js';
 import { BOT_PLUGINS } from './plugins/bot-plugin.interface.js';
 import { BotPluginsService } from './plugins/bot-plugins.service.js';
 import { PingPongPlugin } from './plugins/ping-pong.plugin.js';
+import { SettingsPlugin } from './plugins/settings.plugin.js';
 import { TimePlugin } from './plugins/time.plugin.js';
 import { PrismaModule } from './prisma/index.js';
 import { SeedModule } from './seed/seed.module.js';
@@ -84,13 +85,15 @@ const isProd = process.env.NODE_ENV === 'production';
     BotPluginsService,
     PingPongPlugin,
     TimePlugin,
+    SettingsPlugin,
     {
       provide: BOT_PLUGINS,
-      useFactory: (pingPong: PingPongPlugin, time: TimePlugin) => [
-        pingPong,
-        time,
-      ],
-      inject: [PingPongPlugin, TimePlugin],
+      useFactory: (
+        pingPong: PingPongPlugin,
+        time: TimePlugin,
+        settings: SettingsPlugin,
+      ) => [pingPong, time, settings],
+      inject: [PingPongPlugin, TimePlugin, SettingsPlugin],
     },
   ],
 })
