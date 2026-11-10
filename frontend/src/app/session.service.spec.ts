@@ -8,6 +8,8 @@ import { Router } from '@angular/router';
 import { SessionService, type AuthProfile } from './session.service';
 
 describe('SessionService', () => {
+  const STORAGE_KEY = 'kaufman_bot_api_key';
+
   let service: SessionService;
   let httpMock: HttpTestingController;
   let router: Router;
@@ -39,16 +41,9 @@ describe('SessionService', () => {
         timeZone: 'Europe/Moscow',
       } as Intl.ResolvedDateTimeFormatOptions);
 
-    // Clear localStorage before each test
+    // Clear localStorage before each test. Creating the service sends nothing:
+    // the key check lives in restore(), which these tests call explicitly.
     localStorage.clear();
-
-    // Flush any pending requests from constructor (validateStoredKey)
-    try {
-      const req = httpMock.expectOne('/api/v1/auth/me');
-      req.flush(null, { status: 401, statusText: 'Unauthorized' });
-    } catch {
-      // No pending request, that's fine
-    }
   });
 
   afterEach(() => {
@@ -135,6 +130,7 @@ describe('SessionService', () => {
     loginReq.flush(mockProfile);
 
     expect(service.isAuthenticated()).toBe(true);
+    expect(localStorage.getItem(STORAGE_KEY)).toBe('sk-test-key');
 
     // Then logout
     service.logout();
@@ -142,6 +138,7 @@ describe('SessionService', () => {
     expect(service.isAuthenticated()).toBe(false);
     expect(service.apiKey()).toBeNull();
     expect(service.profile()).toBeNull();
+    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
     expect(router.navigate).toHaveBeenCalledWith(['/login']);
   });
 
@@ -172,6 +169,8 @@ describe('SessionService', () => {
     service.expire();
 
     expect(service.isAuthenticated()).toBe(false);
+    expect(service.apiKey()).toBeNull();
+    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
     expect(router.navigate).toHaveBeenCalledWith(['/login']);
   });
 
@@ -284,6 +283,97 @@ describe('SessionService', () => {
 
       expect(service.isAuthenticated()).toBe(true);
       expect(service.profile()).toEqual(profile);
+    });
+  });
+
+  describe('telegram target', () => {
+    it('isTelegramTarget is true when telegramBotId is present', () => {
+      const mockProfile = {
+        user: {
+          id: 'user-1',
+          email: 'tg@example.com',
+          role: 'USER' as const,
+          isActive: true,
+          timezone: 'Europe/Moscow',
+          telegramBotId: 'bot-123',
+          telegramBotName: 'My Bot',
+        },
+        apiKey: {
+          id: 'key-1',
+          name: 'Test Key',
+          key: 'sk-…',
+          isActive: true,
+          expiresAt: null,
+        },
+      };
+
+      service.login('sk-tg-key').subscribe();
+      const req = httpMock.expectOne('/api/v1/auth/login');
+      req.flush(mockProfile);
+
+      expect(service.isTelegramTarget()).toBe(true);
+    });
+
+    it('isTelegramTarget is false when telegramBotId is null', () => {
+      const mockProfile = {
+        user: {
+          id: 'user-2',
+          email: 'mock@example.com',
+          role: 'USER' as const,
+          isActive: true,
+          timezone: 'Europe/Moscow',
+          telegramBotId: null,
+          telegramBotName: null,
+        },
+        apiKey: {
+          id: 'key-2',
+          name: 'Test Key',
+          key: 'sk-…',
+          isActive: true,
+          expiresAt: null,
+        },
+      };
+
+      service.login('sk-mock-key').subscribe();
+      const req = httpMock.expectOne('/api/v1/auth/login');
+      req.flush(mockProfile);
+
+      expect(service.isTelegramTarget()).toBe(false);
+    });
+
+    it('launchTelegram POSTs to /telegram/launch and opens url', () => {
+      // First login with bot target
+      const mockProfile = {
+        user: {
+          id: 'user-1',
+          email: 'tg@example.com',
+          role: 'USER' as const,
+          isActive: true,
+          timezone: 'Europe/Moscow',
+          telegramBotId: 'bot-1',
+          telegramBotName: 'My Bot',
+        },
+        apiKey: {
+          id: 'key-1',
+          name: 'Test Key',
+          key: 'sk-…',
+          isActive: true,
+          expiresAt: null,
+        },
+      };
+
+      service.login('sk-launch-key').subscribe();
+      httpMock.expectOne('/api/v1/auth/login').flush(mockProfile);
+
+      const openSpy = jest.spyOn(window, 'open').mockImplementation();
+      service.launchTelegram();
+
+      const req = httpMock.expectOne('/api/v1/telegram/launch');
+      expect(req.request.method).toBe('POST');
+      req.flush({ url: 't.me/my_bot?start=abc', token: 'abc' });
+
+      expect(openSpy).toHaveBeenCalledWith('t.me/my_bot?start=abc', '_blank');
+      openSpy.mockRestore();
     });
   });
 });

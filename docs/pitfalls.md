@@ -709,3 +709,73 @@ it…»; юниты зелёные.
 
 **См. также:** решение не тянуть bcrypt —
 [decisions.md](decisions.md#scrypt-not-bcrypt).
+
+---
+
+<a id="http-in-constructor-interceptor-cycle"></a>
+
+## HTTP-запрос в конструкторе сервиса, который инжектит его собственный интерцептор, молча не отправляется
+
+**Symptom.** После F5 пользователь снова видит страницу входа, хотя ключ лежит
+в `localStorage` (ключ не потерялся — `GET /api/v1/auth/me` в DevTools Network
+просто **не появляется**, ошибок в консоли тоже нет). В юнитах с
+`HttpTestingController` тот же симптом: `expectOne('/api/v1/auth/me')` →
+«found none», при этом `verify()` в `afterEach` говорит «Expected no open
+requests» — запрос не создаётся вообще.
+
+**Root cause.** `SessionService` в конструкторе делал `http.get('/auth/me')`,
+а `authInterceptor` (регистрируется в `withInterceptors`) делает
+`inject(SessionService)`. Цепочка интерцепторов резолвится на момент
+`subscribe()`, когда экземпляр `SessionService` **ещё строится**: получается
+циклическая DI-зависимость, исключение из неё уходит в RxJS-обёртку
+(`hostReportError` / `console.error`) и проглатывается собственным
+`catchError`-«заглушкой» сервиса. `profile` остаётся `null`, guard, который
+синхронно читает `isAuthenticated()`, редиректит на `/login`.
+
+**Fix / pattern.**
+
+- Никакого HTTP в конструкторах root-сервисов, чьи методы вызывает
+  интерцептор. Проверку вынести в идемпотентный метод (`restore()` с флагом
+  `restoreStarted`) и запускать из `provideAppInitializer`, а также
+  оборонительно из точки ожидания (`whenReady()`).
+- Guards не читают сигнал «в лоб», а ждут `whenReady()`
+  (`ReplaySubject<void>(1)` + `take(1)`), иначе они решают до ответа сервера.
+  Ответ проверки ограничить `timeout()`, иначе зависший запрос блокирует
+  навигацию навсегда.
+- Сохранённый ключ стирать только при явном отказе сервера (`401`/`403`);
+  `status 0`/`5xx`/timeout — сбой связи, ключ остаётся.
+
+**Boundary.** Любой root-сервис Angular (standalone-приложение, функциональные
+интерцепторы), запрашиваемый из интерцептора. В тестах: boot-запрос появляется
+только после явного `restore()` — `router.navigate()` сам по себе его не
+создаёт, потому что guard вызывается асинхронно, и `expectOne` сразу после
+`navigate` падает.
+
+**См. также:**
+[api-key-login → «Восстановление сессии при перезагрузке страницы»](../openspec/specs/api-key-login/spec.md),
+BACKLOG #10.
+
+---
+
+<a id="httptestingcontroller-match-removes"></a>
+
+## `HttpTestingController.match()` изымает запросы из open-списка
+
+**Symptom.** `expect(httpMock.match(URL).length).toBe(1)` проходит, а
+`httpMock.expectOne(URL)` сразу после него падает с «found none»; либо
+`verify()` в `afterEach` сообщает про «open requests», которые тест уже
+«закрыл».
+
+**Root cause.** `match()` не только фильтрует, но и **удаляет** совпадения из
+`this.open` (то же делает `expectOne`/`expectNone`). Поэтому проверка «ровно
+один запрос» через `match().length` + последующий `expectOne` физически
+несовместимы.
+
+**Fix.** Считать запросы через `expectOne(URL)` (он их и закрывает), а
+«больше нет» — через `expectNone(URL)`. Каждый созданный запрос обязан быть
+`flush`’нут/`error`’нут в самом тесте, иначе `verify()` в `afterEach` поймает
+его.
+
+**Boundary.** Только `@angular/common/http/testing` (v19). Поведение `match()`
+документировано в его JSDoc: «Requests returned through this API will no longer
+be in the list of open requests».

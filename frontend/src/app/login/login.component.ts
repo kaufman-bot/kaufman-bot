@@ -29,6 +29,13 @@ import { SessionService } from '../session.service';
             />
           </div>
 
+          @if (restoredKey() && apiKey.trim() && !error()) {
+            <p class="restored-hint">
+              Ключ взят из сохранённой сессии — нажмите «Войти», вводить его
+              заново не нужно.
+            </p>
+          }
+
           @if (error()) {
             <div class="error-message">
               {{ error() }}
@@ -107,6 +114,12 @@ import { SessionService } from '../session.service';
         cursor: not-allowed;
       }
 
+      .restored-hint {
+        margin: -0.5rem 0 1rem 0;
+        color: #4a5568;
+        font-size: 0.85rem;
+      }
+
       .error-message {
         background: #fee;
         color: #c33;
@@ -144,9 +157,16 @@ export class LoginComponent {
   private router = inject(Router);
   private route = inject(ActivatedRoute);
 
-  apiKey = '';
+  apiKey = this.session.storedApiKey() ?? '';
   loading = signal(false);
   error = signal<string | null>(null);
+
+  /**
+   * True when the field was prefilled from the key saved in the browser: the
+   * session was lost on the way (a reload while the backend was unreachable)
+   * but the key itself is still there, so the user only has to confirm it.
+   */
+  readonly restoredKey = signal(!!this.apiKey);
 
   onSubmit(): void {
     if (!this.apiKey.trim() || this.loading()) {

@@ -1,5 +1,5 @@
 import { isPlatformBrowser } from '@angular/common';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import {
   computed,
   inject,
@@ -8,12 +8,27 @@ import {
   signal,
 } from '@angular/core';
 import { Router } from '@angular/router';
-import { catchError, Observable, of, tap } from 'rxjs';
+import {
+  catchError,
+  finalize,
+  Observable,
+  of,
+  ReplaySubject,
+  take,
+  tap,
+  timeout,
+} from 'rxjs';
 
 const API_BASE = '/api';
 const API_V1 = `${API_BASE}/v1`;
 
 const STORAGE_KEY = 'kaufman_bot_api_key';
+
+/**
+ * How long the boot-time key check may take before the session counts as not
+ * restored. Route guards wait for it, so the wait has to stay bounded.
+ */
+const RESTORE_TIMEOUT_MS = 10_000;
 
 export interface AuthProfileUser {
   id: string;
@@ -45,7 +60,8 @@ export interface LoginRequest {
 /**
  * Manages user session state: API key + auth profile. Persists the key
  * in localStorage (browser-only, SSR-safe) and provides reactive signals
- * for components to observe.
+ * for components to observe. Route guards wait for `whenReady()` so that a
+ * page reload restores the session instead of bouncing it to `/login`.
  */
 @Injectable({ providedIn: 'root' })
 export class SessionService {
@@ -58,6 +74,17 @@ export class SessionService {
 
   /** The authenticated user's profile (null when not logged in). */
   private readonly profileSignal = signal<AuthProfile | null>(null);
+
+  /**
+   * Settles once the initial session restore is over: immediately when there
+   * is nothing to restore, otherwise after the saved key has been checked.
+   * Buffered (`ReplaySubject`) so subscribers that appear later — e.g. guards
+   * of a navigation started after the boot one — still get a value.
+   */
+  private readonly ready$ = new ReplaySubject<void>(1);
+
+  /** Whether the boot-time restore has already been started. */
+  private restoreStarted = false;
 
   /** Reactive API key for use in templates and effects. */
   readonly apiKey = this.apiKeySignal.asReadonly();
@@ -78,22 +105,60 @@ export class SessionService {
     () => !!this.profileSignal()?.user.telegramBotId,
   );
 
-  constructor() {
-    // Restore session from localStorage on init (browser-only)
-    if (isPlatformBrowser(this.platformId)) {
-      const storedKey = localStorage.getItem(STORAGE_KEY);
-      if (storedKey) {
-        this.apiKeySignal.set(storedKey);
-        // Validate the stored key by fetching profile
-        this.validateStoredKey(storedKey);
-      }
+  /**
+   * Restores the session saved in the browser. Idempotent and deliberately not
+   * done in the constructor: the request it makes travels through
+   * `authInterceptor`, which injects this very service, so starting it while
+   * the instance is still being built is a circular dependency and the request
+   * is never sent. Called by the app initializer and, defensively, by
+   * `whenReady()`.
+   */
+  restore(): void {
+    if (this.restoreStarted) {
+      return;
     }
+    this.restoreStarted = true;
+
+    if (!isPlatformBrowser(this.platformId)) {
+      this.markReady();
+      return;
+    }
+
+    const storedKey = this.storedApiKey();
+    if (!storedKey) {
+      this.markReady();
+      return;
+    }
+
+    // Publish the key before asking the server: the requests the restored page
+    // makes right away must already carry it.
+    this.apiKeySignal.set(storedKey);
+    this.restoreStoredKey(storedKey);
+  }
+
+  /**
+   * Resolves when the session state after a page load is final. A router guard
+   * that only reads `isAuthenticated()` would see `false` while the saved key
+   * is still being validated and would send a logged-in user to `/login`.
+   */
+  whenReady(): Observable<void> {
+    this.restore();
+    return this.ready$.pipe(take(1));
+  }
+
+  /** The key saved in the browser, whether or not it has been validated yet. */
+  storedApiKey(): string | null {
+    if (!isPlatformBrowser(this.platformId)) {
+      return null;
+    }
+    return localStorage.getItem(STORAGE_KEY);
   }
 
   /**
    * Logs in with the given API key by calling POST /auth/login. On success,
-   * stores the key in localStorage and updates the profile signal. On failure,
-   * clears any existing session.
+   * stores the key in localStorage and updates the profile signal. When the
+   * server rejects the key, any existing session is cleared; a transport
+   * failure leaves the saved key alone so a retry does not cost the session.
    */
   login(apiKey: string): Observable<AuthProfile | null> {
     return this.http
@@ -109,8 +174,15 @@ export class SessionService {
           }
           this.syncTimezone();
         }),
-        catchError(() => {
-          this.logout();
+        catchError((error: unknown) => {
+          // 400 is the login endpoint itself refusing the submitted key; a
+          // lost call (status 0) is not a rejection and keeps the saved key.
+          const rejected =
+            error instanceof HttpErrorResponse &&
+            (error.status === 400 || SessionService.isKeyRejection(error));
+          if (rejected) {
+            this.logout();
+          }
           return of(null);
         }),
       );
@@ -121,11 +193,7 @@ export class SessionService {
    * resets the profile signal, and redirects to /login.
    */
   logout(): void {
-    this.apiKeySignal.set(null);
-    this.profileSignal.set(null);
-    if (isPlatformBrowser(this.platformId)) {
-      localStorage.removeItem(STORAGE_KEY);
-    }
+    this.clearSession();
     this.router.navigate(['/login']);
   }
 
@@ -134,11 +202,7 @@ export class SessionService {
    * session and redirects to /login without showing an error.
    */
   expire(): void {
-    this.apiKeySignal.set(null);
-    this.profileSignal.set(null);
-    if (isPlatformBrowser(this.platformId)) {
-      localStorage.removeItem(STORAGE_KEY);
-    }
+    this.clearSession();
     this.router.navigate(['/login']);
   }
 
@@ -200,26 +264,53 @@ export class SessionService {
   }
 
   /**
-   * Validates a stored key by fetching the profile. If the key is invalid,
-   * clears the session.
+   * Restores the session from a key saved in the browser: validates it against
+   * `GET /auth/me` and settles `whenReady()`. Only a key the server rejects
+   * (401/403) is dropped; any other failure — backend down, 4xx/5xx from a
+   * proxy — keeps it, so a reload during a temporary outage does not force the
+   * user to type the key again.
    */
-  private validateStoredKey(apiKey: string): void {
+  private restoreStoredKey(apiKey: string): void {
     this.http
       .get<AuthProfile>(`${API_V1}/auth/me`, {
         headers: { 'x-api-key': apiKey },
       })
-      .subscribe({
-        next: (profile) => {
+      .pipe(
+        timeout(RESTORE_TIMEOUT_MS),
+        tap((profile) => {
           this.profileSignal.set(profile);
           this.syncTimezone();
-        },
-        error: () => {
-          // Stored key is invalid; clear session
-          this.apiKeySignal.set(null);
-          if (isPlatformBrowser(this.platformId)) {
-            localStorage.removeItem(STORAGE_KEY);
+        }),
+        catchError((error: unknown) => {
+          if (SessionService.isKeyRejection(error)) {
+            this.clearSession();
           }
-        },
-      });
+          return of(null);
+        }),
+        finalize(() => this.markReady()),
+      )
+      .subscribe();
+  }
+
+  /** Signals the guards that the session state after a page load is final. */
+  private markReady(): void {
+    this.ready$.next();
+  }
+
+  /** Whether the server itself rejected the key (as opposed to a lost call). */
+  private static isKeyRejection(error: unknown): boolean {
+    return (
+      error instanceof HttpErrorResponse &&
+      (error.status === 401 || error.status === 403)
+    );
+  }
+
+  /** Drops the in-memory session and the key saved in the browser. */
+  private clearSession(): void {
+    this.apiKeySignal.set(null);
+    this.profileSignal.set(null);
+    if (isPlatformBrowser(this.platformId)) {
+      localStorage.removeItem(STORAGE_KEY);
+    }
   }
 }

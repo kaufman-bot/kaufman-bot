@@ -5,11 +5,16 @@ import {
   Router,
   RouterStateSnapshot,
 } from '@angular/router';
+import { map } from 'rxjs';
 import { SessionService } from './session.service';
 
 /**
  * Route guard that requires an active session. Redirects to /login if the
  * user is not authenticated, preserving the attempted URL in returnUrl.
+ *
+ * Every guard first waits for `SessionService.whenReady()`: after a page
+ * reload the saved key is validated asynchronously, and deciding on the spot
+ * would send a logged-in user to /login just to make them type the key again.
  */
 export const requireAuthGuard: CanActivateFn = (
   route: ActivatedRouteSnapshot,
@@ -18,14 +23,15 @@ export const requireAuthGuard: CanActivateFn = (
   const session = inject(SessionService);
   const router = inject(Router);
 
-  if (session.isAuthenticated()) {
-    return true;
-  }
-
-  // Not authenticated; redirect to login with returnUrl
-  return router.createUrlTree(['/login'], {
-    queryParams: { returnUrl: state.url },
-  });
+  return session.whenReady().pipe(
+    map(() =>
+      session.isAuthenticated()
+        ? true
+        : router.createUrlTree(['/login'], {
+            queryParams: { returnUrl: state.url },
+          }),
+    ),
+  );
 };
 
 /**
@@ -39,18 +45,22 @@ export const requireAdminGuard: CanActivateFn = (
   const session = inject(SessionService);
   const router = inject(Router);
 
-  if (!session.isAuthenticated()) {
-    return router.createUrlTree(['/login'], {
-      queryParams: { returnUrl: state.url },
-    });
-  }
+  return session.whenReady().pipe(
+    map(() => {
+      if (!session.isAuthenticated()) {
+        return router.createUrlTree(['/login'], {
+          queryParams: { returnUrl: state.url },
+        });
+      }
 
-  if (session.isAdmin()) {
-    return true;
-  }
+      if (session.isAdmin()) {
+        return true;
+      }
 
-  // Authenticated but not admin; redirect to user chat
-  return router.createUrlTree(['/chat']);
+      // Authenticated but not admin; redirect to user chat
+      return router.createUrlTree(['/chat']);
+    }),
+  );
 };
 
 /**
@@ -61,13 +71,17 @@ export const redirectIfAuthenticatedGuard: CanActivateFn = () => {
   const session = inject(SessionService);
   const router = inject(Router);
 
-  if (!session.isAuthenticated()) {
-    return true;
-  }
+  return session.whenReady().pipe(
+    map(() => {
+      if (!session.isAuthenticated()) {
+        return true;
+      }
 
-  // Already authenticated; redirect to appropriate home
-  if (session.isAdmin()) {
-    return router.createUrlTree(['/mock-bot']);
-  }
-  return router.createUrlTree(['/chat']);
+      // Already authenticated; redirect to appropriate home
+      if (session.isAdmin()) {
+        return router.createUrlTree(['/mock-bot']);
+      }
+      return router.createUrlTree(['/chat']);
+    }),
+  );
 };
