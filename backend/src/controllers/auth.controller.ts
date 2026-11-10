@@ -111,8 +111,8 @@ export class AuthController {
     description: 'Missing or invalid API key',
     type: ApiErrorDto,
   })
-  me(@Req() req: AuthenticatedRequest): AuthProfileDto {
-    return this.auth.profile(requireAuthUser(req), requireAuthApiKey(req));
+  async me(@Req() req: AuthenticatedRequest): Promise<AuthProfileDto> {
+    return this.auth.profileAsync(requireAuthUser(req), requireAuthApiKey(req));
   }
 
   @Patch('me')

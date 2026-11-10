@@ -84,6 +84,7 @@ export class UsersService {
       email: user.email,
       role: user.role,
       isActive: user.isActive,
+      telegramBotId: user.telegramBotId ?? null,
       createdAt: user.createdAt.toISOString(),
       apiKeys: user.apiKeys.map((key) => this.apiKeys.toDto(key)),
     } satisfies AdminUserDto;

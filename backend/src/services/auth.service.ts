@@ -57,7 +57,10 @@ export class AuthService {
       name: DEFAULT_KEY_NAME,
     });
 
-    return { user: this.toProfile(user), apiKey } satisfies AuthRegisterDto;
+    return {
+      user: await this.toProfile(user),
+      apiKey,
+    } satisfies AuthRegisterDto;
   }
 
   /**
@@ -76,7 +79,7 @@ export class AuthService {
       throw new UnauthorizedException('Invalid API key');
     }
 
-    return this.profile(result.value.user, result.value.apiKey);
+    return this.profileAsync(result.value.user, result.value.apiKey);
   }
 
   /**
@@ -85,7 +88,18 @@ export class AuthService {
    */
   profile(user: User, apiKey: ApiKey): AuthProfileDto {
     return {
-      user: this.toProfile(user),
+      user: this.toProfileSync(user),
+      apiKey: this.apiKeys.toDto(apiKey),
+    } satisfies AuthProfileDto;
+  }
+
+  /**
+   * Payload of GET /auth/me, built from the request the ApiKeyGuard has
+   * already resolved. Enriches with Telegram bot name when target is set.
+   */
+  async profileAsync(user: User, apiKey: ApiKey): Promise<AuthProfileDto> {
+    return {
+      user: await this.toProfile(user),
       apiKey: this.apiKeys.toDto(apiKey),
     } satisfies AuthProfileDto;
   }
@@ -115,7 +129,7 @@ export class AuthService {
       data: { timezone, language },
     });
 
-    return this.profile(updated, apiKey);
+    return this.profileAsync(updated, apiKey);
   }
 
   /**
@@ -139,7 +153,7 @@ export class AuthService {
     return language;
   }
 
-  private toProfile(user: User): AuthProfileUserDto {
+  private toProfileSync(user: User): AuthProfileUserDto {
     return {
       id: user.id,
       email: user.email,
@@ -147,6 +161,29 @@ export class AuthService {
       isActive: user.isActive,
       timezone: user.timezone,
       language: user.language,
+      telegramBotId: user.telegramBotId ?? null,
+      telegramBotName: null,
+    } satisfies AuthProfileUserDto;
+  }
+
+  private async toProfile(user: User): Promise<AuthProfileUserDto> {
+    let telegramBotName: string | null = null;
+    if (user.telegramBotId) {
+      const bot = await this.prisma.telegramBot.findUnique({
+        where: { id: user.telegramBotId },
+        select: { name: true },
+      });
+      telegramBotName = bot?.name ?? null;
+    }
+    return {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      isActive: user.isActive,
+      timezone: user.timezone,
+      language: user.language,
+      telegramBotId: user.telegramBotId ?? null,
+      telegramBotName,
     } satisfies AuthProfileUserDto;
   }
 

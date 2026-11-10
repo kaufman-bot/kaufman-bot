@@ -6,6 +6,7 @@ import {
   HttpCode,
   Param,
   Patch,
+  Put,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -28,9 +29,11 @@ import {
   UpdateAdminUserRequestDto,
 } from '../dto/admin-user.dto.js';
 import { ApiErrorDto } from '../dto/error.dto.js';
+import { SetTelegramTargetRequestDto } from '../dto/telegram-target.dto.js';
 import { AdminGuard } from '../guards/admin.guard.js';
 import type { AuthenticatedRequest } from '../guards/api-key.guard.js';
 import { ApiKeyGuard, requireAuthUser } from '../guards/api-key.guard.js';
+import { TelegramBindingService } from '../services/telegram-binding.service.js';
 import { UsersService } from '../services/users.service.js';
 
 /**
@@ -51,7 +54,10 @@ import { UsersService } from '../services/users.service.js';
   description: 'Authenticated account is not an admin',
 })
 export class AdminUsersController {
-  constructor(private readonly users: UsersService) {}
+  constructor(
+    private readonly users: UsersService,
+    private readonly telegramBinding: TelegramBindingService,
+  ) {}
 
   @Get()
   @ApiOperation({ summary: 'List all user accounts with their masked keys' })
@@ -102,5 +108,27 @@ export class AdminUsersController {
     @Req() req: AuthenticatedRequest,
   ): Promise<void> {
     await this.users.remove(id, requireAuthUser(req).id);
+  }
+
+  @Put(':id/telegram-target')
+  @ApiOperation({
+    summary: 'Assign or reset the Telegram bot target for a user',
+  })
+  @ApiParam({ name: 'id', description: 'User id' })
+  @ApiOkResponse({ description: 'Target set (or reset to mock-server)' })
+  @ApiNotFoundResponse({
+    type: ApiErrorDto,
+    description: 'User or bot not found / bot not owned by caller',
+  })
+  async setTelegramTarget(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() dto: SetTelegramTargetRequestDto,
+  ): Promise<void> {
+    await this.telegramBinding.setTarget(
+      requireAuthUser(req).id,
+      id,
+      dto.telegramBotId,
+    );
   }
 }
