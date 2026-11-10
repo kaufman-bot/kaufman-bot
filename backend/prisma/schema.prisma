@@ -53,19 +53,30 @@ enum Language {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  password  String
-  role      Role     @default(USER)
-  isActive  Boolean  @default(true)
-  timezone  String?
-  language  Language @default(en)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id             String   @id @default(cuid())
+  email          String   @unique
+  password       String
+  role           Role     @default(USER)
+  isActive       Boolean  @default(true)
+  timezone       String?
+  language       Language @default(en)
+  /**
+   * Active Telegram target: null → mock server, otherwise this bot.
+   */
+  telegramBotId  String?
+  /**
+   * Telegram chat id bound via deep-link; only meaningful with telegramBotId.
+   */
+  telegramChatId String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   apiKeys      ApiKey[]
   conversation Conversation?
   presets      ButtonPreset[]
+
+  ownedTelegramBots TelegramBot[] @relation("BotOwner")
+  telegramBot       TelegramBot?  @relation("UserActiveBot", fields: [telegramBotId], references: [id], onDelete: SetNull)
 
   @@map("users")
 }
@@ -158,4 +169,49 @@ model ButtonPreset {
 
   @@index([ownerId])
   @@map("button_presets")
+}
+
+/**
+ * A real Telegram bot the admin connects via the Bot API. Owner-scoped like
+ * `ButtonPreset`: only the creating ADMIN can read/update/delete it, and only
+ * the operator's own bots can become a user's active target. `botToken` is a
+ * secret masked in every read DTO; `webhookSecret` is never returned and
+ * guards the public webhook route. `isActive` gates the whole transport bridge.
+ */
+model TelegramBot {
+  id            String   @id @default(cuid())
+  ownerId       String
+  name          String
+  botToken      String
+  botUsername   String?
+  isActive      Boolean  @default(true)
+  webhookSecret String   @default(cuid())
+  settings      Json?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  owner User   @relation("BotOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  users User[] @relation("UserActiveBot")
+
+  @@index([ownerId])
+  @@map("telegram_bots")
+}
+
+/**
+ * One-time binding token issued when a user launches their assigned bot. The
+ * deep-link `t.me/<botUsername>?start=<token>` carries it; when the bot
+ * receives `/start <token>` over the webhook it is spent to attach the
+ * Telegram `chat id` to the user.
+ */
+model TelegramBindingToken {
+  id            String    @id @default(cuid())
+  token         String    @unique
+  userId        String
+  telegramBotId String
+  expiresAt     DateTime
+  usedAt        DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([userId])
+  @@map("telegram_binding_tokens")
 }
