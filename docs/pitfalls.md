@@ -33,10 +33,11 @@
 providers: [
   PingPongPlugin,
   TimePlugin,
+  SettingsPlugin,
   {
     provide: BOT_PLUGINS,
-    useFactory: (pingPong, time) => [pingPong, time],
-    inject: [PingPongPlugin, TimePlugin], // порядок == приоритет диспетчера
+    useFactory: (pingPong, time, settings) => [pingPong, time, settings],
+    inject: [PingPongPlugin, TimePlugin, SettingsPlugin], // порядок == приоритет диспетчера
   },
 ];
 ```

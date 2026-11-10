@@ -40,15 +40,15 @@ This project includes a web chat system where users can communicate with a mock 
 
 #### Authentication
 
-- `POST /api/v1/auth/login` — Login with API key, returns user profile
+- `POST /api/v1/auth/login` — Login with API key, returns user profile (`language` included)
 - `GET /api/v1/auth/me` — Profile behind the presented API key
-- `PATCH /api/v1/auth/me` — Self-service profile update (body: `{ timezone?: string | null }`, an IANA time zone; `null` clears it)
+- `PATCH /api/v1/auth/me` — Self-service profile update (body: `{ timezone?: string | null, language?: 'en' | 'ru' | null }`; an IANA time zone, `null` clears it; `language` is validated against the supported set — anything else is `400`, an omitted field keeps the stored value)
 
 #### User Chat (requires USER or ADMIN role)
 
 - `GET /api/v1/chat/messages` — Get message history for the authenticated user's conversation (`kind: BUTTON` callbacks are filtered out)
 - `POST /api/v1/chat/messages` — Send a message to the bot (body: `{ content: string }`)
-- `POST /api/v1/chat/button-callbacks` — Notify the server that an inline keyboard button was pressed (body: `{ callbackData: string }`, up to 256 chars, returns 201 with the persisted `kind: BUTTON` message; the response must NOT be appended to the user's local chat list)
+- `POST /api/v1/chat/button-callbacks` — Notify the server that an inline keyboard button was pressed (body: `{ callbackData: string }`, up to 256 chars, returns 201 with the persisted `kind: BUTTON` message; the response must NOT be appended to the user's local chat list — a plugin that opted into callbacks replies as an ordinary `BOT` message over SSE)
 - `GET /api/v1/chat/stream` — SSE stream for real-time messages (use `?apiKey=` query param); events with `kind: BUTTON` are suppressed for the user subscriber
 
 #### Mock Bot Console (requires ADMIN role)
@@ -84,17 +84,23 @@ The `SeedService` will automatically create these users and their API keys on ap
 
 Reactions to user chat messages live in pluggable services (`backend/src/plugins/`), not in the chat core. Every plugin:
 
-- implements the single `BotPlugin` interface from `bot-plugin.interface.ts` — `name`, `canHandle(content)` (exact, trimmed, case-insensitive matching is up to the plugin) and `handle({ user, content })` returning the reply text;
+- implements the single `BotPlugin` interface from `bot-plugin.interface.ts` — `name`, `canHandle(content, kind)` (exact, trimmed, case-insensitive matching is up to the plugin) and `handle({ user, content, kind })` returning either reply text or `{ text, buttons }` when the reply carries an inline keyboard;
+- declares `handlesCallbacks = true` only if it also wants pressed inline buttons; without it a button payload is never offered to the plugin, so a payload colliding with a text trigger (e.g. `ping`) stays silent;
 - is registered in `AppModule` as its own provider and added to the `inject` list of the single `BOT_PLUGINS` factory — Nest does not merge several providers of one token into an array, so the token is aggregated once via `useFactory`; the `inject` order is the dispatch priority.
 
-When a user sends a chat message, `ChatService` hands it to the plugin dispatcher (`BotPluginsService`): the first plugin whose `canHandle` matches produces the reply, which is persisted as a `BOT` message and delivered over the chat SSE stream like any other bot reply. A plugin failure never fails the user's own message; plugin order in `AppModule` is the dispatch priority.
+`kind` is `TEXT` for a typed message and `BUTTON` for a pressed button (its `callbackData` arrives as `content`).
+
+When a user sends a chat message or presses a button, `ChatService` hands it to the plugin dispatcher (`BotPluginsService`): the first plugin whose `canHandle` matches produces the reply, which is persisted as a `BOT` message and delivered over the chat SSE stream like any other bot reply. Buttons of a reply are validated with the same rules as operator keyboards (`validateButtons` / `normalizeButtons`) and stored as an immutable snapshot on the message row; an invalid reply is logged and sends nothing. A plugin failure never fails the user's own message; plugin order in `AppModule` is the dispatch priority.
 
 Built-in plugins:
 
 - **PingPongPlugin** — replies `pong` to a `ping` message;
-- **TimePlugin** — replies with the current server time formatted in the user's IANA time zone (falls back to UTC when unset), e.g. `2026-11-01 12:34:56 (Europe/Moscow)`.
+- **TimePlugin** — replies with the current server time formatted in the user's IANA time zone (falls back to UTC when unset), e.g. `2026-11-01 12:34:56 (Europe/Moscow)`;
+- **SettingsPlugin** — `/settings` shows the user's settings screen with the active language and one button per supported language (the current one marked with `✓ `); pressing `settings:language:en|ru` stores the language and confirms the change in the language that just became active. The whole `settings:language:` payload namespace belongs to this plugin, so a button carrying a code outside the supported set (`settings:language:de`, an empty code, a list of codes) answers with a refusal naming the code and the available languages, written in the language that stayed active, and the stored language is left untouched. Payloads of other namespaces (`ping`, `presets:123`, `settings:lang:en`) are not claimed and stay silent.
 
 The user time zone is stored on the `User` row (`timezone`, nullable). The frontend syncs the browser time zone automatically after login/session restore via `PATCH /api/v1/auth/me`; the value can also be updated manually with the same endpoint.
+
+The active language is stored on the same row (`language`, enum `en`/`ru`, default `en` — existing rows got it from the migration default). It is returned by `GET /auth/me`, `POST /auth/login` and `POST /auth/register` and can be updated either via `PATCH /api/v1/auth/me` or by pressing a language button in the `SettingsPlugin` chat screen.
 
 To add a new plugin: create a class implementing `BotPlugin` in `backend/src/plugins/`, register it as a plain provider in `AppModule` and add it to the `inject` list of the `BOT_PLUGINS` factory (order = priority), and cover its behavior with unit tests next to the file.
 
@@ -137,9 +143,15 @@ Validation lives in `backend/src/utils/keyboard-buttons.ts` (`validateButtons`, 
 
 `GET /api/v1/mock-bot/conversations/:userId/messages` always returns every message — TEXT and BUTTON — because the operator needs to see which buttons the user pressed. `GET /api/v1/chat/messages` and `GET /api/v1/chat/stream` do the opposite for the user: `ChatService` filters out `kind: BUTTON` in `getHistory`, and `streamEvents` drops BUTTON events before mapping them to `ChatStreamEventDto` — this is the "no echo" rule.
 
-### Button press (no echo, no plugins)
+### Button press (no echo, opt-in plugins)
 
-`POST /api/v1/chat/button-callbacks` with `{ callbackData }` upserts the conversation, writes a `Message { senderRole: USER, kind: BUTTON, content: <callbackData> }` and publishes a `ChatEvent` with `kind: BUTTON`. **No `BotPluginTask` row is created** and **the plugin dispatcher is not invoked**, so `ping` written into a button's `callbackData` will _not_ trigger the PingPong reply — plugins only react to typed `sendMessage` traffic. The response is the persisted message DTO; the frontend chat calls `sendButtonCallback` and discards the result (only refreshing the operator-side stream via the SSE bus), so the user's bubble list never grows from a click. The operator's `/mock-bot` stream does receive the event and shows the pressed `callbackData` as a USER message.
+`POST /api/v1/chat/button-callbacks` with `{ callbackData }` upserts the conversation and writes a `Message { senderRole: USER, kind: BUTTON, content: <callbackData> }` **together with its `BotPluginTask` in one transaction** — the same crash-safe acceptance path as a typed message — then publishes a `ChatEvent` with `kind: BUTTON` and runs the plugin dispatcher with `kind: 'BUTTON'`. A dispatch error is caught and logged, so the click itself always returns `201`.
+
+Only plugins that declare `handlesCallbacks = true` are offered a button payload, so `ping` written into a button's `callbackData` still _does not_ trigger the PingPong reply — the payload never reaches a plugin without the opt-in. `SettingsPlugin` is the opted-in example: `settings:language:ru` switches the stored language and answers with a confirmation, `settings:language:de` answers with a refusal and changes nothing.
+
+Whatever the plugin decides travels the same way as any other reply, never inside the click response: the dispatcher persists a `BOT` message in the transaction that closes the `BotPluginTask` and publishes it to the bus, so the client picks it up over SSE (and the recovery sweep replays it if the process died in between). That is why the click endpoint cannot report a plugin error — a plugin exception is logged and closes the task without a message, while an intentional refusal is a reply.
+
+The response is the persisted callback message DTO; the frontend chat calls `sendButtonCallback` and discards the result (a plugin confirmation arrives as an ordinary `BOT` message over SSE), so the user's bubble list never grows from a click. The operator's `/mock-bot` stream does receive the event and shows the pressed `callbackData` as a USER message.
 
 ### Button presets
 

@@ -49,10 +49,11 @@
     BotPluginsService,
     PingPongPlugin,
     TimePlugin,
+    SettingsPlugin,
     {
       provide: BOT_PLUGINS,
-      useFactory: (pingPong, time) => [pingPong, time],
-      inject: [PingPongPlugin, TimePlugin], // order == dispatch priority
+      useFactory: (pingPong, time, settings) => [pingPong, time, settings],
+      inject: [PingPongPlugin, TimePlugin, SettingsPlugin], // order == dispatch priority
     },
   ],
 })
@@ -87,12 +88,15 @@ export class AppModule {}
   `ApiKey`** — use-case, а не CRUD.
 - `AuthService.profile` собирает `User` + `ApiKey` из `ApiKeyGuard`.
 - `AuthService.updateProfile` + `normalizeTimezone` — IANA-валидация через
-  `Intl.DateTimeFormat`.
+  `Intl.DateTimeFormat`; `normalizeLanguage` (`utils/language.ts`) — проверка
+  `language` против поддерживаемого набора, `BadRequestException` иначе.
 - `MockBotService.replyAsBot(userId, content?, buttons?)` — use-case: находит
   диалог, пишет `Message(BOT)`, публикует событие.
 - `ChatService.sendMessage` — use-case с транзакцией (message + outbox).
-- `ChatService.submitButtonCallback` — use-case: пишет `Message(BUTTON)` и **не**
-  заводит `BotPluginTask` (без эха и без реакции плагинов).
+- `ChatService.submitButtonCallback` — use-case: пишет `Message(BUTTON)` и
+  `BotPluginTask` одной транзакцией (общий хелпер `createMessageWithTask`),
+  затем синхронно диспатчит нажатие плагинам с `kind=BUTTON`. Эхо нажатия по
+  прежнему скрыто из user-history и SSE пользователя.
 - `ButtonPresetsService` — owner-scope CRUD с проверкой `ownerId`.
 
 ## 3. URL-контракт и версионирование
@@ -121,19 +125,19 @@ await app.listen(process.env.PORT ?? 3000);
 
 Итоговые маршруты:
 
-| Префикс                                | Что                                           |
-| -------------------------------------- | --------------------------------------------- |
-| `/api/v1/time`, `/api/v1/time/stream`  | SSE серверного времени (публичный)            |
-| `/api/v1/health`                       | Health-check (публичный)                      |
-| `/api/v1/auth/register`, `/auth/login` | Публичные точки входа                         |
-| `/api/v1/auth/me`, `PATCH /auth/me`    | Профиль по `x-api-key`                        |
-| `/api/v1/api-keys*`                    | CRUD ключей владельца                         |
-| `/api/v1/admin/users*`                 | Админ-эндпоинты под `AdminGuard`              |
-| `/api/v1/chat/messages`, `chat/stream` | Web-chat: история, отправка, SSE              |
-| `/api/v1/chat/button-callbacks`        | Нажатие inline-кнопки (без эха, без плагинов) |
-| `/api/v1/mock-bot/*`                   | Консоль оператора (списки, reply, стрим)      |
-| `/api/v1/mock-bot/presets*`            | CRUD button-presets с owner-scope             |
-| `/swagger`                             | Swagger UI (без `/api/v1`)                    |
+| Префикс                                | Что                                             |
+| -------------------------------------- | ----------------------------------------------- |
+| `/api/v1/time`, `/api/v1/time/stream`  | SSE серверного времени (публичный)              |
+| `/api/v1/health`                       | Health-check (публичный)                        |
+| `/api/v1/auth/register`, `/auth/login` | Публичные точки входа                           |
+| `/api/v1/auth/me`, `PATCH /auth/me`    | Профиль по `x-api-key`                          |
+| `/api/v1/api-keys*`                    | CRUD ключей владельца                           |
+| `/api/v1/admin/users*`                 | Админ-эндпоинты под `AdminGuard`                |
+| `/api/v1/chat/messages`, `chat/stream` | Web-chat: история, отправка, SSE                |
+| `/api/v1/chat/button-callbacks`        | Нажатие inline-кнопки (без эха, плагины-opt-in) |
+| `/api/v1/mock-bot/*`                   | Консоль оператора (списки, reply, стрим)        |
+| `/api/v1/mock-bot/presets*`            | CRUD button-presets с owner-scope               |
+| `/swagger`                             | Swagger UI (без `/api/v1`)                      |
 
 **Прокси фронта.** `frontend/proxy.conf.json` перенаправляет `/api` на
 `http://localhost:3000`; базовый URL хранится в
@@ -217,14 +221,14 @@ e2e-тесты (ActivityHelper поверх SDK)
 Только через `prisma migrate` (см.
 [`prisma-migrations-only`](../.agents/skills/prisma-migrations-only/SKILL.md)).
 
-| Модель          | Назначение                                                                                                          |
-| --------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `User`          | `email` unique, `password` (scrypt-hex), `role` enum, `isActive`, **`timezone`** (IANA или null → UTC)              |
-| `ApiKey`        | `key` unique, `name`, `isActive`, `expiresAt?`, FK → `User` (`onDelete: Cascade`)                                   |
-| `Conversation`  | `userId` unique — один диалог на пользователя, FK → `User` (`onDelete: Cascade`)                                    |
-| `Message`       | `conversationId`, `senderRole` (`USER`/`BOT`), `kind` (`TEXT`/`BUTTON`), `content`, **`buttons: Json?`**, `readAt?` |
-| `BotPluginTask` | Outbox-строка: `messageId` unique, `status` enum `PENDING`/`PROCESSING`/`DONE`, индекс `[status, updatedAt]`        |
-| `ButtonPreset`  | `ownerId` FK, `name`, `buttons: Json` — набор inline-кнопок, принадлежащий ADMIN-пользователю                       |
+| Модель          | Назначение                                                                                                                                            |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `User`          | `email` unique, `password` (scrypt-hex), `role` enum, `isActive`, **`timezone`** (IANA или null → UTC), **`language`** (enum `en`/`ru`, default `en`) |
+| `ApiKey`        | `key` unique, `name`, `isActive`, `expiresAt?`, FK → `User` (`onDelete: Cascade`)                                                                     |
+| `Conversation`  | `userId` unique — один диалог на пользователя, FK → `User` (`onDelete: Cascade`)                                                                      |
+| `Message`       | `conversationId`, `senderRole` (`USER`/`BOT`), `kind` (`TEXT`/`BUTTON`), `content`, **`buttons: Json?`**, `readAt?`                                   |
+| `BotPluginTask` | Outbox-строка: `messageId` unique, `status` enum `PENDING`/`PROCESSING`/`DONE`, индекс `[status, updatedAt]`                                          |
+| `ButtonPreset`  | `ownerId` FK, `name`, `buttons: Json` — набор inline-кнопок, принадлежащий ADMIN-пользователю                                                         |
 
 Ключевые semantics:
 
@@ -234,10 +238,12 @@ e2e-тесты (ActivityHelper поверх SDK)
   (Telegram-like).
 - **`MessageKind.BUTTON`** означает «пользователь нажал кнопку». Такой
   `Message` виден в консоли оператора, но **скрыт** из user-history и
-  SSE-потока пользователя (без эха и без `BotPluginTask`).
+  SSE-потока пользователя. Нажатие проходит тот же outbox-путь, что и текст:
+  `BotPluginTask` заводится, а `dispatchAndReply` получает `kind=BUTTON` и
+  предлагает payload только плагинам с `handlesCallbacks`.
 - **`BotPluginTask`** — транзакционный outbox. Создаётся в той же
-  `prisma.$transaction`, что и `Message(USER)`, и закрывается в той же
-  транзакции, что и `Message(BOT)`.
+  `prisma.$transaction`, что и `Message(USER)` любого `kind`, и закрывается в
+  той же транзакции, что и `Message(BOT)`.
 - **`onDelete: Cascade`** — на `ApiKey.user`, `Message.conversation`,
   `BotPluginTask.message`, `ButtonPreset.owner` — админ-удаление аккаунта
   сносит всё зависимое.
@@ -246,25 +252,42 @@ e2e-тесты (ActivityHelper поверх SDK)
 
 Расширение точки «бот отвечает на сообщения пользователя». Полный контракт:
 
-- Интерфейс `BotPlugin { name; canHandle(content); handle({user, content}) }`
+- Интерфейс
+  `BotPlugin { name; handlesCallbacks?; canHandle(content, kind); handle({user, content, kind}) }`
   — [`backend/src/plugins/bot-plugin.interface.ts`](../backend/src/plugins/bot-plugin.interface.ts).
+  Ответ — `BotPluginReply` (`string` или `{ text, buttons }`, когда ответ несёт
+  inline-клавиатуру).
+- `kind` (`BotPluginSourceKind` = `TEXT` / `BUTTON`) различает набранный текст
+  и payload нажатой кнопки. Нажатия доходят **только** до плагинов, объявивших
+  `handlesCallbacks = true`; иначе диспетчер даже не вызывает `canHandle`,
+  поэтому payload, совпадающий с текстовым триггером (например кнопка пресета
+  `ping`), остаётся тихим.
 - DI-токен `BOT_PLUGINS = Symbol('BOT_PLUGINS')` предоставляется **один раз**
   через `useFactory` + `inject` (порядок = приоритет).
 - Диспетчер `BotPluginsService` —
   [`backend/src/plugins/bot-plugins.service.ts`](../backend/src/plugins/bot-plugins.service.ts).
 
-Поток `dispatchAndReply`:
+Поток `dispatchAndReply(conversationId, user, content, messageId, kind)`:
 
 1. `prisma.botPluginTask.updateMany({ messageId, status: PENDING } →
 PROCESSING)` — cluster-safe захват; `count === 0` → задача уже занята.
-2. Ищем `plugins.find((p) => p.canHandle(content))`.
+2. Ищем `plugins.find((p) => (kind === 'TEXT' || p.handlesCallbacks === true)
+&& p.canHandle(content, kind))`.
 3. Если совпадения нет — `completeTask(messageId)` (DONE), выходим без reply.
-4. `plugin.handle(...)` в `try/catch`:
+4. `plugin.handle({user, content, kind})` в `try/catch`:
    - ошибка плагина → `Logger.error` + `completeTask(messageId)` **без reply**
      (изоляция — падающий плагин не влияет на пользователя и не ретраится);
-   - успех → `$transaction`: `message.create(senderRole=BOT)` +
-     `botPluginTask.updateMany(PROCESSING → DONE)`.
-5. `chatEvents.publish(ChatEvent)` — та же шина, что у `MockBotService.replyAsBot`.
+   - успех → ответ проходит `prepareReply` (текст после trim обязан непустым,
+     кнопки — те же `validateButtons`/`normalizeButtons`, что и клавиатуры
+     оператора); невалидный ответ = `Logger.error` + закрытая задача **без
+     сообщения**, частичных ответов не бывает;
+   - валидный → `$transaction`: `message.create(senderRole=BOT, content,
+buttons)` + `botPluginTask.updateMany(PROCESSING → DONE)`.
+5. `chatEvents.publish(ChatEvent)` — та же шина, что у `MockBotService.replyAsBot`;
+   в событие кладутся и `buttons` ответа.
+6. `processPendingTask` восстанавливает `kind` из `message.kind`
+   (`BUTTON → 'BUTTON'`), поэтому sweep приводит к тому же плагину, что и
+   живой путь.
 
 Восстановление после рестартов:
 
@@ -277,27 +300,53 @@ PROCESSING)` — cluster-safe захват; `count === 0` → задача уж�
   переходе на Redis флаг заменяется на Redlock (
   [`../BACKLOG.md`](../BACKLOG.md#2) — «now / do / when»).
 
-Приёмка сообщения:
+Приёмка сообщения (общий хелпер `createMessageWithTask`, его используют и
+`sendMessage`, и `submitButtonCallback`):
 
 ```ts
 // backend/src/services/chat.service.ts
-const message = await this.prisma.$transaction(async (tx) => {
-  const created = await tx.message.create({ data: { conversationId, senderRole: USER, content, kind: TEXT } });
+const message = await this.createMessageWithTask({
+  conversationId,
+  senderRole: MessageSenderRole.USER,
+  kind: MessageKind.TEXT, // или MessageKind.BUTTON для нажатия кнопки
+  content,
+});
+
+// внутри — одна транзакция:
+this.prisma.$transaction(async (tx) => {
+  const created = await tx.message.create({ data });
   await tx.botPluginTask.create({ data: { messageId: created.id } });
   return created;
 });
 ```
 
-Гарантия: **или** сообщение пользователя + задача outbox, **или** ничего.
-Никакого «потерянного» сообщения, если сервер упадёт между INSERT-ом и
-publish'ем.
+Гарантия: **или** сообщение пользователя + задача outbox, **или** ничего —
+одинаково для набранного текста и для нажатия кнопки. Никакого «потерянного»
+сообщения, если сервер упадёт между INSERT-ом и publish'ем.
 
 Добавление нового плагина:
 
 1. Класс `backend/src/plugins/<name>.plugin.ts` + юнит-тест рядом.
 2. Провайдер в `AppModule.providers`.
 3. Элемент `inject`-списка в `BOT_PLUGINS`-`useFactory` (позиция = приоритет).
-4. `ChatService` и `BotPluginsService` **не трогаем**.
+4. `handlesCallbacks = true` — только если плагин правда реагирует на нажатия
+   кнопок; текстовые плагины его не объявляют.
+5. `ChatService` и `BotPluginsService` **не трогаем**.
+
+`SettingsPlugin`
+([`backend/src/plugins/settings.plugin.ts`](../backend/src/plugins/settings.plugin.ts))
+— первый плагин с `handlesCallbacks = true`: `/settings` рендерит экран
+настроек с кнопками поддерживаемых языков (текущий помечен `✓ `), а нажатие
+`settings:language:<en|ru>` сохраняет язык и подтверждает смену уже на новом
+языке. Вся область `settings:language:` принадлежит этому плагину, поэтому и
+код вне перечня (`settings:language:de`, пустой код, список `ru,en`) даёт
+ответ — сообщение об отказе на том активном языке, который остался, без
+записи в профиль; payload чужих областей (`ping`, `presets:*`,
+`settings:lang:*`) по-прежнему молчат. Отказ — обычный reply: он приходит
+отдельным `BOT`-сообщением (история + SSE, при падении процесса —
+recovery-sweep), поэтому HTTP-отклик нажатия остаётся `201` и текста ошибки не
+содержит. Тексты живут в таблице `{ en, ru }` внутри плагина — общий i18n для
+остальных строк отложен, см. [`../BACKLOG.md`](../BACKLOG.md).
 
 Автообнаружение плагинов (без правки `app.module.ts`) отложено — см.
 [`../BACKLOG.md`](../BACKLOG.md).

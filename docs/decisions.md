@@ -200,6 +200,9 @@ exactly-once в кластере.
 
 - `ChatService.sendMessage` пишет `Message(USER)` и `BotPluginTask`
   в **одной** `prisma.$transaction`.
+- `ChatService.submitButtonCallback` — тот же инвариант через общий хелпер
+  `createMessageWithTask`: нажатие кнопки (`Message(USER, kind=BUTTON)`)
+  тоже не может остаться без задачи.
 - `BotPluginsService.dispatchAndReply` захватывает задачу условным
   `updateMany(PENDING → PROCESSING)`; `count === 0` → чужая.
 - Reply + `updateMany(PROCESSING → DONE)` — в той же транзакции.
