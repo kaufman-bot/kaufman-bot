@@ -39,6 +39,19 @@ enum BotPluginTaskStatus {
   DONE
 }
 
+/**
+ * Active language of a user, used by translatable bot features (today only
+ * the settings plugin). Members are literally `en`/`ru` (no `@map`): the
+ * prisma-client generator emits the member names as the runtime values, so
+ * mapping them would make the client send `"EN"` into an `('en','ru')`
+ * column. Lowercase members keep DB domain, client type and API wire format
+ * the same string.
+ */
+enum Language {
+  en
+  ru
+}
+
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
@@ -46,6 +59,7 @@ model User {
   role      Role     @default(USER)
   isActive  Boolean  @default(true)
   timezone  String?
+  language  Language @default(en)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
