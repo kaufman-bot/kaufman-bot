@@ -159,6 +159,39 @@ The response is the persisted callback message DTO; the frontend chat calls `sen
 
 To exercise owner isolation in tests, register a second account via `POST /api/v1/auth/register` (the response carries both `user` and its `apiKey`), then promote it with `PATCH /api/v1/admin/users/:id { "role": "ADMIN" }` — do not mint an additional key through `ApiKeyService.createForUser` for the mock caller, otherwise both "admins" resolve to the same owner row.
 
+## Telegram Bots
+
+Real Telegram Bot API integration via [grammY](https://grammy.dev). Each bot is owned by an ADMIN, stores its token (masked in responses), and optionally registers a webhook for receiving updates.
+
+### Endpoints (requires ADMIN role)
+
+- `GET /api/v1/telegram/bots` — List the calling admin's bots (tokens masked)
+- `POST /api/v1/telegram/bots` — Create a bot (body: `{ name, botToken, botUsername?, settings?, isActive? }`, 201)
+- `GET /api/v1/telegram/bots/:id` — Read a single caller-owned bot (foreign/missing → 404)
+- `PATCH /api/v1/telegram/bots/:id` — Update bot fields (partial body; foreign/missing → 404)
+- `DELETE /api/v1/telegram/bots/:id` — Delete a caller-owned bot (204; webhook best-effort unregistered)
+
+### Key behaviours
+
+- **Owner-scope**: every read/write is scoped by `ownerId`; a foreign bot id is indistinguishable from a missing one (404).
+- **Token masking**: `botToken` is stored verbatim but only returned as `first6…last4`; the per-bot `webhookSecret` is never surfaced in DTOs.
+- **Settings**: arbitrary JSON object (`settings: { ... }`) stored/returned as-is; `null` clears it.
+- **isActive toggle**: handled through the regular `PATCH` endpoint.
+- **Webhook lifecycle** (`TelegramWebhookService`): on app start, best-effort `setWebhook` for all active bots; on create/update/enable → set, on disable → delete, on delete → unregister. Errors are logged, never thrown. When `TELEGRAM_WEBHOOK_BASE_URL` is empty, registration is skipped with a warning.
+- **Environment**: `TELEGRAM_WEBHOOK_BASE_URL` (public HTTPS origin; e.g. `https://your-domain.com` → webhook URL becomes `https://your-domain.com/api/telegram/webhook/<botId>`).
+
+### Target assignment & deep-link binding
+
+Each user has a **transport target**: either a Telegram bot (identified by `telegramBotId` on the User row) or the mock-server (`telegramBotId = null`). An admin assigns or resets the target:
+
+- `PUT /api/v1/admin/users/:id/telegram-target` — body `{ telegramBotId: string | null }` (requires ADMIN). Assigning a foreign or nonexistent bot → `404`. Target changes never clear `telegramChatId`: an existing chat binding is preserved and can only be rebound to a different chat id via the `/start <token>` deep-link flow.
+
+Once a user's target is a bot, the user obtains a one-time **deep-link** to start the Telegram conversation:
+
+- `POST /api/v1/telegram/launch` — (requires authenticated user with a bot target). Returns `{ url, token }` where `url` is `https://t.me/<botUsername>?start=<token>`. Returns `400` when target is mock-server or the bot has no `botUsername`.
+
+The **transport gate** (`ChatService.assertTransportActive`): when the user's target bot exists and `isActive === false`, `POST /api/v1/chat/messages` and `POST /api/v1/chat/button-callbacks` return `409 Conflict` before persisting anything. Active bots and mock-server targets pass through normally (201).
+
 ## Project setup
 
 ```bash

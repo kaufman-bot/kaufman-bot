@@ -37,7 +37,7 @@
         ]
       : []),
   ],
-  controllers: [TimeController, HealthController, AuthController, ApiKeysController, AdminUsersController, ChatController, MockBotController, ButtonPresetsController],
+  controllers: [TimeController, HealthController, AuthController, ApiKeysController, AdminUsersController, ChatController, MockBotController, ButtonPresetsController, TelegramBotsController, TelegramLaunchController],
   providers: [
     ApiKeysService,
     AuthService,
@@ -46,6 +46,9 @@
     ChatService,
     MockBotService,
     UsersService,
+    TelegramBotsService,
+    TelegramBindingService,
+    TelegramWebhookService,
     BotPluginsService,
     PingPongPlugin,
     TimePlugin,
@@ -76,11 +79,11 @@ export class AppModule {}
 Два вида сервисов, не смешиваются (полное правило —
 [`service-layer-split`](../.agents/skills/service-layer-split/SKILL.md)):
 
-| Вид                  | Примеры                                                             | Ответственность                                             |
-| -------------------- | ------------------------------------------------------------------- | ----------------------------------------------------------- |
-| **Entity-CRUD**      | `UsersService`, `ApiKeysService`, `ButtonPresetsService`            | list/get/update/remove одного Prisma-без фоновой композиции |
-| **Use-case**         | `AuthService`, `ChatService`, `MockBotService`, `BotPluginsService` | Мультисетевой сценарий: compose + side effects + валидация  |
-| **Инфраструктурный** | `ChatEventsService`, `PrismaService`, `SeedService`                 | Шины, драйверы, bootstrap                                   |
+| Вид                  | Примеры                                                                                                | Ответственность                                             |
+| -------------------- | ------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------- |
+| **Entity-CRUD**      | `UsersService`, `ApiKeysService`, `ButtonPresetsService`, `TelegramBotsService`                        | list/get/update/remove одного Prisma-без фоновой композиции |
+| **Use-case**         | `AuthService`, `ChatService`, `MockBotService`, `BotPluginsService`, `TelegramBindingService`          | Мультисетевой сценарий: compose + side effects + валидация  |
+| **Инфраструктурный** | `ChatEventsService`, `PrismaService`, `SeedService`, `TelegramWebhookService`, `TelegramBridgeService` | Шины, драйверы, bootstrap                                   |
 
 Конкретные примеры:
 
@@ -125,19 +128,23 @@ await app.listen(process.env.PORT ?? 3000);
 
 Итоговые маршруты:
 
-| Префикс                                | Что                                             |
-| -------------------------------------- | ----------------------------------------------- |
-| `/api/v1/time`, `/api/v1/time/stream`  | SSE серверного времени (публичный)              |
-| `/api/v1/health`                       | Health-check (публичный)                        |
-| `/api/v1/auth/register`, `/auth/login` | Публичные точки входа                           |
-| `/api/v1/auth/me`, `PATCH /auth/me`    | Профиль по `x-api-key`                          |
-| `/api/v1/api-keys*`                    | CRUD ключей владельца                           |
-| `/api/v1/admin/users*`                 | Админ-эндпоинты под `AdminGuard`                |
-| `/api/v1/chat/messages`, `chat/stream` | Web-chat: история, отправка, SSE                |
-| `/api/v1/chat/button-callbacks`        | Нажатие inline-кнопки (без эха, плагины-opt-in) |
-| `/api/v1/mock-bot/*`                   | Консоль оператора (списки, reply, стрим)        |
-| `/api/v1/mock-bot/presets*`            | CRUD button-presets с owner-scope               |
-| `/swagger`                             | Swagger UI (без `/api/v1`)                      |
+| Префикс                                   | Что                                                   |
+| ----------------------------------------- | ----------------------------------------------------- |
+| `/api/v1/time`, `/api/v1/time/stream`     | SSE серверного времени (публичный)                    |
+| `/api/v1/health`                          | Health-check (публичный)                              |
+| `/api/v1/auth/register`, `/auth/login`    | Публичные точки входа                                 |
+| `/api/v1/auth/me`, `PATCH /auth/me`       | Профиль по `x-api-key`                                |
+| `/api/v1/api-keys*`                       | CRUD ключей владельца                                 |
+| `/api/v1/admin/users*`                    | Админ-эндпоинты под `AdminGuard`                      |
+| `/api/v1/chat/messages`, `chat/stream`    | Web-chat: история, отправка, SSE                      |
+| `/api/v1/chat/button-callbacks`           | Нажатие inline-кнопки (без эха, плагины-opt-in)       |
+| `/api/v1/mock-bot/*`                      | Консоль оператора (списки, reply, стрим)              |
+| `/api/v1/mock-bot/presets*`               | CRUD button-presets с owner-scope                     |
+| `/api/v1/telegram/bots*`                  | CRUD Telegram-ботов с owner-scope                     |
+| `/api/v1/admin/users/:id/telegram-target` | Назначение/сброс цели транспорта (ADMIN)              |
+| `/api/v1/telegram/launch`                 | Deep-link привязки (AUTH, возвращает url+token)       |
+| `/api/telegram/webhook/:botId`            | Публичный приём Telegram-обновлений (VERSION_NEUTRAL) |
+| `/swagger`                                | Swagger UI (без `/api/v1`)                            |
 
 **Прокси фронта.** `frontend/proxy.conf.json` перенаправляет `/api` на
 `http://localhost:3000`; базовый URL хранится в
@@ -221,14 +228,16 @@ e2e-тесты (ActivityHelper поверх SDK)
 Только через `prisma migrate` (см.
 [`prisma-migrations-only`](../.agents/skills/prisma-migrations-only/SKILL.md)).
 
-| Модель          | Назначение                                                                                                                                            |
-| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `User`          | `email` unique, `password` (scrypt-hex), `role` enum, `isActive`, **`timezone`** (IANA или null → UTC), **`language`** (enum `en`/`ru`, default `en`) |
-| `ApiKey`        | `key` unique, `name`, `isActive`, `expiresAt?`, FK → `User` (`onDelete: Cascade`)                                                                     |
-| `Conversation`  | `userId` unique — один диалог на пользователя, FK → `User` (`onDelete: Cascade`)                                                                      |
-| `Message`       | `conversationId`, `senderRole` (`USER`/`BOT`), `kind` (`TEXT`/`BUTTON`), `content`, **`buttons: Json?`**, `readAt?`                                   |
-| `BotPluginTask` | Outbox-строка: `messageId` unique, `status` enum `PENDING`/`PROCESSING`/`DONE`, индекс `[status, updatedAt]`                                          |
-| `ButtonPreset`  | `ownerId` FK, `name`, `buttons: Json` — набор inline-кнопок, принадлежащий ADMIN-пользователю                                                         |
+| Модель                 | Назначение                                                                                                                                                    |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `User`                 | `email` unique, `password` (scrypt-hex), `role` enum, `isActive`, **`timezone`** (IANA или null → UTC), **`language`** (enum `en`/`ru`, default `en`)         |
+| `ApiKey`               | `key` unique, `name`, `isActive`, `expiresAt?`, FK → `User` (`onDelete: Cascade`)                                                                             |
+| `Conversation`         | `userId` unique — один диалог на пользователя, FK → `User` (`onDelete: Cascade`)                                                                              |
+| `Message`              | `conversationId`, `senderRole` (`USER`/`BOT`), `kind` (`TEXT`/`BUTTON`), `content`, **`buttons: Json?`**, `readAt?`                                           |
+| `BotPluginTask`        | Outbox-строка: `messageId` unique, `status` enum `PENDING`/`PROCESSING`/`DONE`, индекс `[status, updatedAt]`                                                  |
+| `ButtonPreset`         | `ownerId` FK, `name`, `buttons: Json` — набор inline-кнопок, принадлежащий ADMIN-пользователю                                                                 |
+| `TelegramBot`          | `ownerId` FK → User (`onDelete: Cascade`), `name`, `botToken`, `botUsername?`, `isActive`, `webhookSecret` (cuid), `settings: Json?` — Telegram-бот оператора |
+| `TelegramBindingToken` | `token` unique (крипто-случайный), `userId`, `telegramBotId`, `expiresAt`, `usedAt?` — одноразовый токен привязки chat                                        |
 
 Ключевые semantics:
 
@@ -366,7 +375,50 @@ recovery-sweep), поэтому HTTP-отклик нажатия остаётс�
 - Долг: RxJS Subject не масштабируется на cluster-режим; при внедрении Redis
   заменяется на event bus / очередь (см. [`../BACKLOG.md`](../BACKLOG.md#1)).
 
-## 9. Guards и роли
+## 9. Telegram Bridge (двусторонний мост)
+
+[`backend/src/services/telegram-bridge.service.ts`](../backend/src/services/telegram-bridge.service.ts)
+— инфраструктурный сервис, связывающий внутренний chat-движок с Telegram Bot API.
+
+**Поток вебхука:**
+
+- `TelegramWebhookController` (`POST /api/telegram/webhook/:botId`,
+  `VERSION_NEUTRAL`) принимает JSON `Update` от Telegram; без `ApiKeyGuard`.
+- Аутентификация — заголовок `X-Telegram-Bot-Api-Secret-Token`, сверяемый с
+  `TelegramBot.webhookSecret`. Несовпадение → `403`, update не обрабатывается.
+- `VERSION_NEUTRAL` гарантирует стабильность URL: уже зарегистрированные в
+  Telegram вебхуки не «отвалятся» при переходе API на v2.
+
+**Исходящие (BOT → Telegram):**
+
+- `onApplicationBootstrap` подписывается на `chatEvents.streamAll()`;
+  фильтр `senderRole === 'BOT'`.
+- Резолвит `conversationId → user`; пропускает только при
+  `telegramBotId != null` **и** `telegramChatId` непуст **и** `bot.isActive`.
+- Текст + `buttons` (из `ChatEvent`) → `TelegramSender.sendMessage`; кнопки с
+  `callbackData` > 64 **байт** в разметку не кладутся (лимит Telegram), чтобы
+  `sendMessage` не получил `400`.
+- Реестр `TelegramSender` (grammy `Bot` per bot id) кешируется; при смене
+  токена (`invalidateSender`) пересоздаётся.
+
+**Входящие (Telegram → internal):**
+
+- `/start <token>` → `TelegramBindingService.consumeToken(token, chatId)` →
+  `user.telegramChatId = chatId` + подтверждение в чат.
+- Текст от привязанного `chatId` → тот же outbox-путь, что
+  `ChatService.sendMessage(user, text)`; ответ бота уходит по исходящей подписке.
+- `callback_query` от привязанного `chatId` → `answerCallbackQuery` (снять
+  спиннер) + `ChatService.submitButtonCallback(user, { callbackData })`.
+- От непривязанного `chatId` / выключенного бота — тихий игнор.
+
+**Почему `instances: 1` в `ecosystem-prod.config.cjs`:**
+
+`ChatEventsService` — in-memory RxJS `Subject`. При cluster-режиме (>1 воркер)
+каждый процесс получает свою копию события и отправляет исходящее в Telegram
+повторно. До внедрения Redis-дедупликации (см.
+[`BACKLOG.md`](../BACKLOG.md) #1/#2) удерживается `instances: 1`.
+
+## 10. Guards и роли
 
 - `ApiKeyGuard` — читает `x-api-key` **или** `?apiKey=`, резолвит
   `findActiveByKey(key) → KeyLookupResult` (`{apiKey,user}` | `{error: '...'}`
@@ -376,16 +428,20 @@ recovery-sweep), поэтому HTTP-отклик нажатия остаётс�
 - Роли: `USER`, `ADMIN`, `GUEST` (Prisma enum `Role`). Дефолт при
   регистрации — `USER`.
 
-## 10. Frontend-структура (Angular)
+## 11. Frontend-структура (Angular)
 
 Standalone-компоненты + `signal()` + `@if/@for`-контроль. Ключевые места:
 
 - [`frontend/src/app/app.routes.ts`](../frontend/src/app/app.routes.ts) —
   `/login`, `/chat`, `/mock-bot`, дашборд под `requireAuthGuard` /
   `adminAuthGuard`.
-- `SessionService` — signal + `localStorage`; `syncTimezone()` вызывает
-  `PATCH /auth/me` после логина при несовпадении IANA-таймзоны браузера.
-- `auth.interceptor.ts` — подмешивает `x-api-key`.
+- `SessionService` — signal + `localStorage`; `restore()` (идемпотентный,
+  вызывается из `provideAppInitializer`, а не из конструктора —
+  см. [http-in-constructor-interceptor-cycle](pitfalls.md#http-in-constructor-interceptor-cycle))
+  возвращает в сессию сохранённый ключ после F5, `whenReady()` — точка
+  ожидания для guards; `syncTimezone()` вызывает `PATCH /auth/me` после
+  логина при несовпадении IANA-таймзоны браузера.
+- `auth.interceptor.ts` — подмешивает `x-api-key`; `401` завершает сессию.
 - `ChatService` — `EventSource` на `/api/v1/chat/stream?apiKey=…`, сигнал
   `reconnected` и refetch истории.
 - `MockBotService`, `ButtonPresetsService` — консоль оператора: переключение
