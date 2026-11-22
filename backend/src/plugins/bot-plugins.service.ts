@@ -11,6 +11,7 @@ import type {
   Message,
   User,
 } from '../generated/prisma/client.js';
+import { Prisma } from '../generated/prisma/client.js';
 import {
   BotPluginTaskStatus,
   MessageKind,
@@ -48,7 +49,12 @@ type PendingTask = BotPluginTask & { message: Message };
 
 /** Result of validating a plugin reply before anything is persisted. */
 type PreparedReply =
-  | { ok: true; text: string; buttons?: KeyboardButtonDto[] }
+  | {
+      ok: true;
+      text: string;
+      buttons?: KeyboardButtonDto[];
+      editLast: boolean;
+    }
   | { ok: false; reason: string };
 
 /**
@@ -191,30 +197,61 @@ export class BotPluginsService
     // (design D3) is resolved from the trigger's channel context — the same
     // gate the Telegram bridge honors via the event snapshot; plugin replies
     // have no operator behind them, so `operatorEmail` stays null.
+    //
+    // With `editLast` (design D12) the reply rewrites the conversation's
+    // latest BOT message (text + buttons) in the same transaction; without
+    // an editable target it falls back to a regular new message. The edit is
+    // idempotent across recovery-sweep replays: the plugin re-renders the
+    // step from the draft and the row converges to the same content.
     const delivery = await this.messageChannel.resolveDelivery(
       contextChannel,
       user,
     );
-    const message = await this.prisma.$transaction(async (tx) => {
-      const created = await tx.message.create({
-        data: {
-          conversationId,
-          senderRole: MessageSenderRole.BOT,
-          content: prepared.text,
-          buttons: prepared.buttons
-            ? (prepared.buttons as unknown as object)
-            : undefined,
-          channel: delivery.channel,
-          botName: delivery.botName,
-          operatorEmail: null,
-        },
-      });
-      await tx.botPluginTask.updateMany({
-        where: { messageId, status: BotPluginTaskStatus.PROCESSING },
-        data: { status: BotPluginTaskStatus.DONE },
-      });
-      return created;
-    });
+    const { message, edited } = await this.prisma.$transaction(
+      async (tx): Promise<{ message: Message; edited: boolean }> => {
+        if (prepared.editLast) {
+          const target = await tx.message.findFirst({
+            where: { conversationId, senderRole: MessageSenderRole.BOT },
+            orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+          });
+          if (target) {
+            const updated = await tx.message.update({
+              where: { id: target.id },
+              data: {
+                content: prepared.text,
+                // An edited text-only step clears the previous keyboard.
+                buttons: prepared.buttons
+                  ? (prepared.buttons as unknown as object)
+                  : Prisma.DbNull,
+              },
+            });
+            await tx.botPluginTask.updateMany({
+              where: { messageId, status: BotPluginTaskStatus.PROCESSING },
+              data: { status: BotPluginTaskStatus.DONE },
+            });
+            return { message: updated, edited: true };
+          }
+        }
+        const created = await tx.message.create({
+          data: {
+            conversationId,
+            senderRole: MessageSenderRole.BOT,
+            content: prepared.text,
+            buttons: prepared.buttons
+              ? (prepared.buttons as unknown as object)
+              : undefined,
+            channel: delivery.channel,
+            botName: delivery.botName,
+            operatorEmail: null,
+          },
+        });
+        await tx.botPluginTask.updateMany({
+          where: { messageId, status: BotPluginTaskStatus.PROCESSING },
+          data: { status: BotPluginTaskStatus.DONE },
+        });
+        return { message: created, edited: false };
+      },
+    );
 
     const event: ChatEvent = {
       conversationId,
@@ -226,6 +263,7 @@ export class BotPluginsService
       channel: message.channel,
       botName: message.botName,
       operatorEmail: message.operatorEmail,
+      ...(edited ? { edited: true } : {}),
     };
     this.chatEvents.publish(event);
   }
@@ -284,20 +322,27 @@ export class BotPluginsService
    * reply produces no bot message at all instead of a partial one.
    */
   private prepareReply(reply: BotPluginReply): PreparedReply {
-    const { text, buttons } =
-      typeof reply === 'string' ? { text: reply, buttons: undefined } : reply;
+    const { text, buttons, editLast } =
+      typeof reply === 'string'
+        ? { text: reply, buttons: undefined, editLast: false }
+        : reply;
 
     const content = text.trim();
     if (!content) {
       return { ok: false, reason: 'reply text is empty' };
     }
     if (!buttons || buttons.length === 0) {
-      return { ok: true, text: content };
+      return { ok: true, text: content, editLast: editLast === true };
     }
 
     try {
       validateButtons(buttons);
-      return { ok: true, text: content, buttons: normalizeButtons(buttons) };
+      return {
+        ok: true,
+        text: content,
+        buttons: normalizeButtons(buttons),
+        editLast: editLast === true,
+      };
     } catch (error) {
       return {
         ok: false,

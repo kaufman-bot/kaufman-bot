@@ -661,23 +661,34 @@ describe('Taxi admin console (e2e, running backend)', () => {
   };
 
   /**
-   * Waits for a BOT message newer than `previousId`. The backend normally
+   * Stable identity of one wizard screen: navigation presses EDIT the
+   * current bot row in place (chat-message-editing), so a fresh screen is
+   * detected by its (id, content, buttons) signature — the id alone never
+   * changes on an edit, and equal content alone would miss a fresh row
+   * (e.g. a /taxi resume that re-renders the same step).
+   */
+  const screenSignature = (message: ChatMessageDto): string =>
+    `${message.id}|${message.content}|${JSON.stringify(message.buttons ?? [])}`;
+
+  /**
+   * Waits for a BOT screen different from `previous`. The backend normally
    * persists the plugin reply before the POST returns, but the periodic
    * recovery sweep may claim a just-created task first and deliver the
    * reply a moment later (bot-plugins.service.ts, SWEEP_INTERVAL_MS) — the
    * poll absorbs that race.
    */
   const waitForBotReply = async (
-    previousId: string | null,
+    previous: ChatMessageDto | null,
   ): Promise<ChatMessageDto> => {
     const deadline = Date.now() + 10_000;
+    const baseline = previous ? screenSignature(previous) : null;
     for (;;) {
       const history = unwrap(
         await rider.sdk.chatControllerGetMessagesV1({}),
         'GET /chat/messages',
       );
       const reply = [...history].reverse().find((m) => m.senderRole === 'BOT');
-      if (reply && reply.id !== previousId) {
+      if (reply && screenSignature(reply) !== baseline) {
         // Design D4: every wizard step must stay within the platform's
         // 12-button cap — the dispatcher silently drops invalid replies, so
         // a violation here means a broken (unanswered) step elsewhere.
@@ -686,20 +697,20 @@ describe('Taxi admin console (e2e, running backend)', () => {
       }
       if (Date.now() > deadline) {
         throw new Error(
-          `the taxi plugin did not reply within 10s (previous bot message: ${previousId ?? 'none'})`,
+          `the taxi plugin did not reply within 10s (previous bot screen: ${previous?.id ?? 'none'})`,
         );
       }
       await new Promise((resolve) => setTimeout(resolve, 150));
     }
   };
 
-  /** Performs one wizard interaction and waits for its fresh reply. */
+  /** Performs one wizard interaction and waits for its fresh screen. */
   const wizardStep = async (
-    previousId: string | null,
+    previous: ChatMessageDto | null,
     action: () => Promise<void>,
   ): Promise<ChatMessageDto> => {
     await action();
-    return waitForBotReply(previousId);
+    return waitForBotReply(previous);
   };
 
   const buttonOf = (
@@ -731,6 +742,15 @@ describe('Taxi admin console (e2e, running backend)', () => {
   }> => {
     let reply = startReply;
     for (let hop = 0; hop < 10; hop += 1) {
+      // Re-anchor on the live row: page presses EDIT the shared wizard row
+      // in place, so the caller's snapshot may lag the screen the row
+      // actually shows right now.
+      const history = unwrap(
+        await rider.sdk.chatControllerGetMessagesV1({}),
+        'GET /chat/messages',
+      );
+      reply =
+        [...history].reverse().find((m) => m.senderRole === 'BOT') ?? reply;
       const button = reply.buttons?.find((b) => matchesPayload(b, target));
       if (button) {
         return { reply, button };
@@ -744,7 +764,7 @@ describe('Taxi admin console (e2e, running backend)', () => {
           `wizard button ${target} unreachable: no page navigation on "${reply.content.slice(0, 60)}"`,
         );
       }
-      reply = await wizardStep(reply.id, () =>
+      reply = await wizardStep(reply, () =>
         press(`taxi:page:${Math.max(...navPages)}`),
       );
     }
@@ -757,7 +777,7 @@ describe('Taxi admin console (e2e, running backend)', () => {
     target: string,
   ): Promise<ChatMessageDto> => {
     const found = await findButtonAcrossPages(reply, target);
-    return wizardStep(found.reply.id, () => press(found.button.callbackData));
+    return wizardStep(found.reply, () => press(found.button.callbackData));
   };
 
   /** Sends a text as the rider; the plugin reply is persisted inline. */
@@ -817,11 +837,11 @@ describe('Taxi admin console (e2e, running backend)', () => {
     );
     expect(marked.button.title.startsWith('✓ ')).toBe(true);
 
-    reply = await wizardStep(marked.reply.id, () => press('taxi:done'));
+    reply = await wizardStep(marked.reply, () => press('taxi:done'));
     expect(reply.content).toContain('Step 6/6');
     expect(buttonOf(reply, 'taxi:confirm')).toBeDefined();
 
-    return wizardStep(reply.id, () => press('taxi:confirm'));
+    return wizardStep(reply, () => press('taxi:confirm'));
   };
 
   // Two full wizard drives live here — far above the default 5s test budget.

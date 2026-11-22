@@ -175,6 +175,14 @@ export class MockBotStreamEventDto {
 
   @ApiProperty({
     description:
+      'True when the event updates an existing bot message in place (plugin ' +
+      'edit-in-place) instead of appending a new message; the console ' +
+      'replaces the row content by messageId',
+  })
+  edited: boolean;
+
+  @ApiProperty({
+    description:
       'Snapshot of the message this reply quotes (null when the reply was ' +
       'sent without quoting a message)',
     type: MessageQuoteDto,
@@ -209,6 +217,9 @@ export class MockBotStreamEventDto {
     }
     if (this.operatorEmail === undefined) {
       this.operatorEmail = null;
+    }
+    if (this.edited === undefined) {
+      this.edited = false;
     }
     if (this.replyTo === undefined) {
       this.replyTo = null;

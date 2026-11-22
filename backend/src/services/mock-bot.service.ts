@@ -351,6 +351,7 @@ export class MockBotService {
       channel: event.channel ?? null,
       botName: event.botName ?? null,
       operatorEmail: event.operatorEmail ?? null,
+      edited: event.edited ?? false,
       replyTo: event.replyTo ? this.toQuoteDto(event.replyTo) : null,
       deliveredTo: deriveDeliveredTo(event.channel ?? null, event.senderRole),
       createdAt: event.createdAt,

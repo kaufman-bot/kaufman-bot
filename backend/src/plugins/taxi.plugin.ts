@@ -173,6 +173,12 @@ function parsePage(raw: string | undefined): number {
  * user's single DRAFT TaxiOrder row, driven by `taxi:*` button payloads.
  * Every outcome — including refusals — is returned as a BotPluginReply,
  * never thrown, so the dispatcher can persist it as a bot message.
+ *
+ * Navigation flows (step transitions, page navigation, service toggle,
+ * «Готово» and the «Назад» step rollback) mark the reply with `editLast`
+ * (design D12): the dispatcher rewrites the wizard's screen message in
+ * place. Terminal replies (success, noPrice/noCar refusals, stale-button
+ * refusal, cancellation) and the /taxi entry stay regular new messages.
  */
 @Injectable()
 export class TaxiPlugin implements BotPlugin {
@@ -258,6 +264,9 @@ export class TaxiPlugin implements BotPlugin {
       // unlike `taxi:svc:<serviceId>:<page>` where pagePart is the page.
       return this.handlePage(user, id, texts);
     }
+    if (action === 'back') {
+      return this.handleBack(user, texts);
+    }
 
     const step = ACTION_STEP[action];
     if (step === undefined) {
@@ -326,7 +335,34 @@ export class TaxiPlugin implements BotPlugin {
     if (!draft || draft.draftStep > 5) {
       return texts.inactive;
     }
-    return this.renderStep(draft, user, texts, parsePage(pagePart));
+    // Page navigation is an in-place edit of the screen message (design D12).
+    return this.renderStep(draft, user, texts, parsePage(pagePart), true);
+  }
+
+  /**
+   * «Назад» to the previous step (design D13): page 1 of every step ≥ 2
+   * renders the button, and the press rolls `draftStep` one step back
+   * without touching the saved fields — re-picking the parameter resets
+   * the lower-priority ones instead. Presses without a draft, from step 1
+   * or from the confirmation screen (which renders no «Назад») are stale
+   * by definition. The re-render edits the screen message in place
+   * (design D12).
+   */
+  private async handleBack(
+    user: User,
+    texts: (typeof TEXTS)[Language],
+  ): Promise<BotPluginReply> {
+    const draft = await this.prisma.taxiOrder.findFirst({
+      where: { userId: user.id, status: 'DRAFT' },
+    });
+    if (!draft || draft.draftStep < 2 || draft.draftStep > 5) {
+      return texts.inactive;
+    }
+    const updated = await this.prisma.taxiOrder.update({
+      where: { id: draft.id },
+      data: { draftStep: draft.draftStep - 1 },
+    });
+    return this.renderStep(updated, user, texts, 1, true);
   }
 
   private async selectCity(
@@ -345,9 +381,22 @@ export class TaxiPlugin implements BotPlugin {
     }
     const updated = await this.prisma.taxiOrder.update({
       where: { id: draft.id },
-      data: { [field]: city.id, draftStep: nextStep },
+      data: {
+        [field]: city.id,
+        draftStep: nextStep,
+        // Re-picking a route point resets every lower-priority choice
+        // (design D13) — a changed route must not carry a stale pair.
+        ...(field === 'fromCityId'
+          ? {
+              toCityId: null,
+              departureSlotId: null,
+              passengerCount: null,
+              serviceIds: [],
+            }
+          : { departureSlotId: null, passengerCount: null, serviceIds: [] }),
+      },
     });
-    return this.renderStep(updated, user, texts);
+    return this.renderStep(updated, user, texts, 1, true);
   }
 
   private async selectSlot(
@@ -366,9 +415,15 @@ export class TaxiPlugin implements BotPlugin {
     }
     const updated = await this.prisma.taxiOrder.update({
       where: { id: draft.id },
-      data: { departureSlotId: slot.id, draftStep: 4 },
+      // Re-picking resets the lower-priority choices (design D13).
+      data: {
+        departureSlotId: slot.id,
+        draftStep: 4,
+        passengerCount: null,
+        serviceIds: [],
+      },
     });
-    return this.renderStep(updated, user, texts);
+    return this.renderStep(updated, user, texts, 1, true);
   }
 
   private async selectPassengers(
@@ -387,9 +442,14 @@ export class TaxiPlugin implements BotPlugin {
     }
     const updated = await this.prisma.taxiOrder.update({
       where: { id: draft.id },
-      data: { passengerCount: option.count, draftStep: 5 },
+      // Re-picking resets the lower-priority choices (design D13).
+      data: {
+        passengerCount: option.count,
+        draftStep: 5,
+        serviceIds: [],
+      },
     });
-    return this.renderStep(updated, user, texts);
+    return this.renderStep(updated, user, texts, 1, true);
   }
 
   private async toggleService(
@@ -417,8 +477,9 @@ export class TaxiPlugin implements BotPlugin {
     });
     // The toggle re-renders the same page the pressed button came from (the
     // page rides in the payload — design D4), so the marker is visible where
-    // the user just was.
-    return this.renderStep(updated, user, texts, page);
+    // the user just was. An in-place edit (design D12): the screen message is
+    // rewritten, not appended.
+    return this.renderStep(updated, user, texts, page, true);
   }
 
   private async finishServices(
@@ -430,7 +491,7 @@ export class TaxiPlugin implements BotPlugin {
       where: { id: draft.id },
       data: { draftStep: 6 },
     });
-    return this.renderStep(updated, user, texts);
+    return this.renderStep(updated, user, texts, 1, true);
   }
 
   /* ------------------------------- confirm ---------------------------------- */
@@ -540,12 +601,21 @@ export class TaxiPlugin implements BotPlugin {
     });
   }
 
+  /**
+   * Renders the screen for the draft's current step. `editLast` (design D12)
+   * marks the rendered step screen as an in-place edit of the wizard's
+   * message; refusal strings (empty dictionaries) stay new messages — they
+   * are terminal replies, not step screens.
+   */
   private async renderStep(
     draft: TaxiOrder,
     user: User,
     texts: (typeof TEXTS)[Language],
     page = 1,
+    editLast = false,
   ): Promise<BotPluginReply> {
+    // «Назад» renders on page 1 of steps ≥ 2 (design D13); step 1 has none.
+    const stepBack = draft.draftStep >= 2;
     switch (draft.draftStep) {
       case 1: {
         const cities = await this.activeCities();
@@ -557,6 +627,9 @@ export class TaxiPlugin implements BotPlugin {
           page,
           texts.from,
           texts,
+          undefined,
+          stepBack,
+          editLast,
         );
       }
       case 2: {
@@ -574,6 +647,9 @@ export class TaxiPlugin implements BotPlugin {
           page,
           texts.to,
           texts,
+          undefined,
+          stepBack,
+          editLast,
         );
       }
       case 3: {
@@ -592,6 +668,9 @@ export class TaxiPlugin implements BotPlugin {
           page,
           texts.slot,
           texts,
+          undefined,
+          stepBack,
+          editLast,
         );
       }
       case 4: {
@@ -610,6 +689,9 @@ export class TaxiPlugin implements BotPlugin {
           page,
           texts.pax,
           texts,
+          undefined,
+          stepBack,
+          editLast,
         );
       }
       case 5: {
@@ -627,10 +709,12 @@ export class TaxiPlugin implements BotPlugin {
           texts.svc,
           texts,
           { title: texts.svcDone, callbackData: 'taxi:done' },
+          stepBack,
+          editLast,
         );
       }
       default:
-        return this.renderConfirmation(draft, texts);
+        return this.renderConfirmation(draft, texts, editLast);
     }
   }
 
@@ -639,7 +723,11 @@ export class TaxiPlugin implements BotPlugin {
    * item buttons plus navigation and control buttons, staying within
    * MAX_BUTTONS on every page — 8 items + back + next + done + cancel = 12.
    * The page lives in the button payloads only; the draft row is untouched,
-   * and the title gains a «page N of M» suffix only when paginated.
+   * and the title gains a «page N of M» suffix only when paginated. With
+   * `stepBack` (design D13) page 1 renders «Назад» as a step rollback
+   * (`taxi:back`) — later pages keep the page-nav «Назад»; step 1 passes
+   * false and never shows the button. With `editLast` (design D12) the
+   * screen reply is an in-place edit of the wizard's message.
    */
   private pagedReply(
     items: KeyboardButtonDto[],
@@ -647,6 +735,8 @@ export class TaxiPlugin implements BotPlugin {
     title: string,
     texts: (typeof TEXTS)[Language],
     done?: KeyboardButtonDto,
+    stepBack = false,
+    editLast = false,
   ): BotPluginReply {
     const pages = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
     const current = Math.min(Math.max(1, page), pages);
@@ -659,6 +749,9 @@ export class TaxiPlugin implements BotPlugin {
         title: texts.backBtn,
         callbackData: `taxi:page:${current - 1}`,
       });
+    } else if (stepBack) {
+      // Page 1 of a step ≥ 2: «Назад» rolls back one step (design D13).
+      buttons.push({ title: texts.backBtn, callbackData: 'taxi:back' });
     }
     if (current < pages) {
       buttons.push({
@@ -679,12 +772,14 @@ export class TaxiPlugin implements BotPlugin {
             })})`
           : title,
       buttons,
+      ...(editLast ? { editLast: true } : {}),
     };
   }
 
   private async renderConfirmation(
     draft: TaxiOrder,
     texts: (typeof TEXTS)[Language],
+    editLast: boolean,
   ): Promise<BotPluginReply> {
     const [from, to] = await Promise.all([
       draft.fromCityId
@@ -731,6 +826,7 @@ export class TaxiPlugin implements BotPlugin {
         { title: texts.confirmBtn, callbackData: 'taxi:confirm' },
         { title: texts.cancelBtn, callbackData: 'taxi:cancel' },
       ],
+      ...(editLast ? { editLast: true } : {}),
     };
   }
 }

@@ -236,6 +236,76 @@ describe('ChatComponent', () => {
     expect(chatService.messages().length).toBe(1);
   }));
 
+  it('should replace the bubble in place on an edit event without adding a duplicate', fakeAsync(() => {
+    const streamSubject = new Subject<ChatStreamEvent>();
+    jest
+      .spyOn(chatService, 'connectStream')
+      .mockReturnValue(streamSubject.asObservable());
+
+    fixture.detectChanges();
+    httpMock.expectOne('/api/v1/chat/messages').flush(mockMessages);
+    tick();
+    fixture.detectChanges();
+    expect(chatService.messages().length).toBe(2);
+
+    // The wizard screen is rewritten in place (design D12): same message id,
+    // new text and buttons, the list length stays unchanged.
+    streamSubject.next({
+      messageId: '2',
+      conversationId: 'conv1',
+      senderRole: 'BOT',
+      content: 'Step 2/6: Куда едем?',
+      buttons: [{ title: 'Тверь', callbackData: 'taxi:to:c-tvr' }],
+      channel: 'WEB',
+      botName: null,
+      operatorEmail: null,
+      edited: true,
+      createdAt: '2026-01-01T00:03:00Z',
+    });
+    tick();
+    fixture.detectChanges();
+
+    expect(chatService.messages().length).toBe(2);
+    const edited = chatService.messages()[1];
+    expect(edited.content).toBe('Step 2/6: Куда едем?');
+    expect(edited.buttons?.map((b) => b.callbackData)).toEqual([
+      'taxi:to:c-tvr',
+    ]);
+  }));
+
+  it('should drop an edit event for a message the client does not have yet', fakeAsync(() => {
+    const streamSubject = new Subject<ChatStreamEvent>();
+    jest
+      .spyOn(chatService, 'connectStream')
+      .mockReturnValue(streamSubject.asObservable());
+
+    fixture.detectChanges();
+    httpMock.expectOne('/api/v1/chat/messages').flush(mockMessages);
+    tick();
+    fixture.detectChanges();
+    expect(chatService.messages().length).toBe(2);
+
+    // No duplicate bubble: the next history reload delivers the final state.
+    streamSubject.next({
+      messageId: 'unknown-edit',
+      conversationId: 'conv1',
+      senderRole: 'BOT',
+      content: 'Orphan edit',
+      channel: 'WEB',
+      botName: null,
+      operatorEmail: null,
+      edited: true,
+      createdAt: '2026-01-01T00:03:00Z',
+    });
+    tick();
+    fixture.detectChanges();
+
+    expect(chatService.messages().length).toBe(2);
+    expect(
+      chatService.messages().some((m) => m.content === 'Orphan edit'),
+    ).toBe(false);
+  }));
+
   it('should reload history after the SSE stream reconnects', fakeAsync(() => {
     const streamSubject = new Subject<ChatStreamEvent>();
     jest

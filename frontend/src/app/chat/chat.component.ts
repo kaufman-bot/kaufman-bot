@@ -353,6 +353,25 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
   }
 
   private handleStreamEvent(event: ChatStreamEvent): void {
+    const current = this.chatService.messages();
+    // An edit event rewrites an existing bot message in place (design D12):
+    // the bubble content is replaced by messageId, no new bubble is added.
+    // An edit for a message the client does not have yet is dropped — the
+    // next history reload delivers the final (edited) content.
+    if (event.edited) {
+      const idx = current.findIndex((m) => m.id === event.messageId);
+      if (idx >= 0) {
+        const next = [...current];
+        next[idx] = {
+          ...next[idx],
+          content: event.content,
+          buttons: event.buttons ?? null,
+        };
+        this.chatService.messages.set(next);
+      }
+      return;
+    }
+
     const newMsg: ChatMessage = {
       id: event.messageId,
       conversationId: event.conversationId,
@@ -368,7 +387,6 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
       createdAt: event.createdAt,
     };
 
-    const current = this.chatService.messages();
     // Avoid duplicates
     if (!current.find((m) => m.id === newMsg.id)) {
       this.chatService.messages.set([...current, newMsg]);

@@ -1011,25 +1011,42 @@ export class MockBotComponent implements OnInit, OnDestroy, AfterViewChecked {
   private handleStreamEvent(event: MockBotStreamEvent): void {
     const selectedUserId = this.mockBotService.selectedUserId();
     if (selectedUserId && event.userId === selectedUserId) {
-      const newMsg: ConversationMessage = {
-        id: event.messageId,
-        conversationId: event.conversationId,
-        senderRole: event.senderRole,
-        content: event.content,
-        buttons: event.buttons ?? null,
-        channel: event.channel ?? null,
-        botName: event.botName ?? null,
-        operatorEmail: event.operatorEmail ?? null,
-        replyTo: event.replyTo ?? null,
-        deliveredTo: event.deliveredTo ?? [],
-        readAt: null,
-        createdAt: event.createdAt,
-      };
-
       const current = this.mockBotService.messages();
-      if (!current.find((m) => m.id === newMsg.id)) {
-        this.mockBotService.messages.set([...current, newMsg]);
-        this.shouldScroll = true;
+      // An edit event rewrites an existing bot message in place (design
+      // D12): the row content is replaced by messageId, no new row is
+      // added. An edit for a row the console does not have yet is dropped —
+      // the next history reload delivers the final (edited) content.
+      if (event.edited) {
+        const idx = current.findIndex((m) => m.id === event.messageId);
+        if (idx >= 0) {
+          const next = [...current];
+          next[idx] = {
+            ...next[idx],
+            content: event.content,
+            buttons: event.buttons ?? null,
+          };
+          this.mockBotService.messages.set(next);
+        }
+      } else {
+        const newMsg: ConversationMessage = {
+          id: event.messageId,
+          conversationId: event.conversationId,
+          senderRole: event.senderRole,
+          content: event.content,
+          buttons: event.buttons ?? null,
+          channel: event.channel ?? null,
+          botName: event.botName ?? null,
+          operatorEmail: event.operatorEmail ?? null,
+          replyTo: event.replyTo ?? null,
+          deliveredTo: event.deliveredTo ?? [],
+          readAt: null,
+          createdAt: event.createdAt,
+        };
+
+        if (!current.find((m) => m.id === newMsg.id)) {
+          this.mockBotService.messages.set([...current, newMsg]);
+          this.shouldScroll = true;
+        }
       }
     }
 

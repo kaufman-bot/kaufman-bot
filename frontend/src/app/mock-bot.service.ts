@@ -87,6 +87,12 @@ export interface MockBotStreamEvent {
   replyTo?: MessageQuote | null;
   /** Delivery channels (absent on payloads recorded before the field). */
   deliveredTo?: Array<'WEB' | 'TELEGRAM'>;
+  /**
+   * True when the event updates an existing bot message in place (plugin
+   * edit-in-place) instead of appending a new row; the console replaces the
+   * row content by messageId. Absent on regular (new) messages.
+   */
+  edited?: boolean;
   createdAt: string;
 }
 

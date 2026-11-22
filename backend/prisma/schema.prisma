@@ -158,10 +158,12 @@ model Message {
    */
   replyToId         String?
   /**
-   * Snapshot of the Telegram `message_id` for inbound messages received via
-   * the bridge (typed text or button callback). Null for WEB messages and
-   * rows written before the snapshot existed; lets a reply reference the
-   * exact Telegram message (`reply_to_message_id`).
+   * Snapshot of the Telegram `message_id`. On inbound USER rows it is taken
+   * from the update and lets a reply reference the exact Telegram message
+   * (`reply_to_message_id`); on BOT rows the bridge stores the id of the
+   * delivered message after sending, so plugin edit-in-place events are
+   * delivered via `editMessageText` (design D12). Null for WEB messages and
+   * rows written before the snapshot existed.
    */
   telegramMessageId Int?
   readAt            DateTime?

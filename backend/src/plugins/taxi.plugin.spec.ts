@@ -365,6 +365,294 @@ describe('TaxiPlugin', () => {
     });
   });
 
+  /* --------------------------- editLast flag (D12) -------------------------- */
+
+  describe('editLast flag (chat-message-editing)', () => {
+    it('marks step transitions as in-place edits', async () => {
+      prisma.orderFindFirst.mockResolvedValue(draftRow({ draftStep: 1 }));
+      prisma.orderUpdate.mockResolvedValue(
+        draftRow({ draftStep: 2, fromCityId: 'c-msk' }),
+      );
+
+      const reply = (await plugin.handle({
+        user: ruUser(),
+        content: 'taxi:from:c-msk',
+        kind: 'BUTTON',
+      })) as { editLast?: boolean };
+
+      expect(reply.editLast).toBe(true);
+    });
+
+    it('marks page navigation and the service toggle as in-place edits', async () => {
+      prisma.orderFindFirst.mockResolvedValue(draftRow({ draftStep: 1 }));
+      const pageReply = (await plugin.handle({
+        user: ruUser(),
+        content: 'taxi:page:1',
+        kind: 'BUTTON',
+      })) as { editLast?: boolean };
+      expect(pageReply.editLast).toBe(true);
+
+      prisma.orderFindFirst.mockResolvedValue(
+        draftRow({ draftStep: 5, passengerCount: 2 }),
+      );
+      prisma.orderUpdate.mockResolvedValue(
+        draftRow({ draftStep: 5, serviceIds: ['svc-seat'] }),
+      );
+      const toggleReply = (await plugin.handle({
+        user: ruUser(),
+        content: 'taxi:svc:svc-seat:1',
+        kind: 'BUTTON',
+      })) as { editLast?: boolean };
+      expect(toggleReply.editLast).toBe(true);
+    });
+
+    it('marks the confirmation screen reached via Готово as an in-place edit', async () => {
+      prisma.orderFindFirst.mockResolvedValue(
+        draftRow({
+          draftStep: 5,
+          fromCityId: 'c-msk',
+          toCityId: 'c-spb',
+          departureSlotId: 's-12',
+          passengerCount: 2,
+        }),
+      );
+      prisma.orderUpdate.mockResolvedValue(
+        draftRow({
+          draftStep: 6,
+          fromCityId: 'c-msk',
+          toCityId: 'c-spb',
+          departureSlotId: 's-12',
+          passengerCount: 2,
+        }),
+      );
+      prisma.cityFindUnique.mockResolvedValue(CITIES[0]);
+      prisma.slotFindUnique.mockResolvedValue(SLOTS[1]);
+
+      const reply = (await plugin.handle({
+        user: ruUser(),
+        content: 'taxi:done',
+        kind: 'BUTTON',
+      })) as { text: string; editLast?: boolean };
+
+      expect(reply.text).toContain('Шаг 6/6: Подтверждение');
+      expect(reply.editLast).toBe(true);
+    });
+
+    it('keeps the /taxi entry and terminal replies as new messages', async () => {
+      prisma.orderFindFirst.mockResolvedValue(draftRow({ draftStep: 1 }));
+      const startReply = (await plugin.handle({
+        user: ruUser(),
+        content: '/taxi',
+        kind: 'TEXT',
+      })) as { editLast?: boolean };
+      expect(startReply.editLast).toBeUndefined();
+
+      prisma.orderFindFirst.mockResolvedValue(draftRow({ draftStep: 4 }));
+      const cancelReply = await plugin.handle({
+        user: ruUser(),
+        content: 'taxi:cancel',
+        kind: 'BUTTON',
+      });
+      // Terminal replies are plain strings — no edit flag at all.
+      expect(typeof cancelReply).toBe('string');
+    });
+  });
+
+  /* -------------------------- back navigation (D13) ------------------------- */
+
+  describe('back navigation (design D13)', () => {
+    it('rolls the draft one step back and re-renders the previous step in place', async () => {
+      prisma.orderFindFirst.mockResolvedValue(
+        draftRow({ draftStep: 3, fromCityId: 'c-msk', toCityId: 'c-spb' }),
+      );
+      prisma.orderUpdate.mockResolvedValue(
+        draftRow({ draftStep: 2, fromCityId: 'c-msk' }),
+      );
+
+      const reply = (await plugin.handle({
+        user: ruUser(),
+        content: 'taxi:back',
+        kind: 'BUTTON',
+      })) as { text: string; editLast?: boolean };
+
+      expect(reply.text).toBe('Шаг 2/6: Куда едем?');
+      expect(reply.editLast).toBe(true);
+      // Saved fields are untouched — only the step marker rolls back.
+      expect(prisma.orderUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'ord-draft' },
+          data: { draftStep: 2 },
+        }),
+      );
+    });
+
+    it('shows «Назад» (taxi:back) on page 1 of steps ≥ 2 and page-nav «Назад» on later pages', async () => {
+      // Ten cities minus the excluded departure = nine options → two pages.
+      prisma.cityFindMany.mockResolvedValue(
+        Array.from({ length: 10 }, (_, i) => ({
+          id: `c-${i}`,
+          name: `Город ${i}`,
+          distanceKm: i,
+          isActive: true,
+        })),
+      );
+      prisma.orderFindFirst.mockResolvedValue(
+        draftRow({ draftStep: 2, fromCityId: 'c-0' }),
+      );
+      const page1 = (await plugin.handle({
+        user: ruUser(),
+        content: '/taxi',
+        kind: 'TEXT',
+      })) as { buttons: Array<{ title: string; callbackData: string }> };
+      expect(page1.buttons.find((b) => b.title === 'Назад')?.callbackData).toBe(
+        'taxi:back',
+      );
+
+      const page2 = (await plugin.handle({
+        user: ruUser(),
+        content: 'taxi:page:2',
+        kind: 'BUTTON',
+      })) as { buttons: Array<{ title: string; callbackData: string }> };
+      expect(page2.buttons.find((b) => b.title === 'Назад')?.callbackData).toBe(
+        'taxi:page:1',
+      );
+    });
+
+    it('step 1 has no «Назад» button', async () => {
+      prisma.orderFindFirst.mockResolvedValue(null);
+      prisma.orderCreate.mockResolvedValue(draftRow());
+
+      const reply = (await plugin.handle({
+        user: ruUser(),
+        content: '/taxi',
+        kind: 'TEXT',
+      })) as { buttons: Array<{ title: string; callbackData: string }> };
+
+      expect(reply.buttons.map((b) => b.callbackData)).not.toContain(
+        'taxi:back',
+      );
+      expect(reply.buttons.find((b) => b.title === 'Назад')).toBeUndefined();
+    });
+
+    it('re-picking the departure resets every lower-priority field', async () => {
+      prisma.orderFindFirst.mockResolvedValue(
+        draftRow({
+          draftStep: 1,
+          fromCityId: 'c-msk',
+          toCityId: 'c-spb',
+          departureSlotId: 's-12',
+          passengerCount: 2,
+          serviceIds: ['svc-seat'],
+        }),
+      );
+      prisma.orderUpdate.mockResolvedValue(
+        draftRow({ draftStep: 2, fromCityId: 'c-tvr' }),
+      );
+
+      const reply = (await plugin.handle({
+        user: ruUser(),
+        content: 'taxi:from:c-tvr',
+        kind: 'BUTTON',
+      })) as { text: string };
+
+      expect(reply.text).toBe('Шаг 2/6: Куда едем?');
+      expect(prisma.orderUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            fromCityId: 'c-tvr',
+            draftStep: 2,
+            toCityId: null,
+            departureSlotId: null,
+            passengerCount: null,
+            serviceIds: [],
+          }),
+        }),
+      );
+    });
+
+    it('re-picking slot or passengers resets their lower fields only', async () => {
+      prisma.orderFindFirst.mockResolvedValue(
+        draftRow({ draftStep: 3, fromCityId: 'c-msk', toCityId: 'c-spb' }),
+      );
+      prisma.slotFindFirst.mockResolvedValue(SLOTS[1]);
+      prisma.orderUpdate.mockResolvedValue(draftRow({ draftStep: 4 }));
+      await plugin.handle({
+        user: ruUser(),
+        content: 'taxi:slot:s-12',
+        kind: 'BUTTON',
+      });
+      expect(prisma.orderUpdate).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            departureSlotId: 's-12',
+            draftStep: 4,
+            passengerCount: null,
+            serviceIds: [],
+          }),
+        }),
+      );
+
+      prisma.orderFindFirst.mockResolvedValue(draftRow({ draftStep: 4 }));
+      prisma.optionFindFirst.mockResolvedValue(OPTIONS[1]);
+      prisma.orderUpdate.mockResolvedValue(
+        draftRow({ draftStep: 5, passengerCount: 2 }),
+      );
+      await plugin.handle({
+        user: ruUser(),
+        content: 'taxi:pax:o-2',
+        kind: 'BUTTON',
+      });
+      expect(prisma.orderUpdate).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            passengerCount: 2,
+            draftStep: 5,
+            serviceIds: [],
+          }),
+        }),
+      );
+    });
+
+    it('stale presses after a step-back stay inactive', async () => {
+      // A step-4 button of the old screen after returning to step 1.
+      prisma.orderFindFirst.mockResolvedValue(draftRow({ draftStep: 1 }));
+      const lowerStep = await plugin.handle({
+        user: ruUser(),
+        content: 'taxi:pax:o-2',
+        kind: 'BUTTON',
+      });
+      expect(String(lowerStep)).toContain('неактивен');
+
+      // «Назад» itself has no button on step 1, on the confirmation or
+      // without an active draft — all stale by definition.
+      const fromStepOne = await plugin.handle({
+        user: ruUser(),
+        content: 'taxi:back',
+        kind: 'BUTTON',
+      });
+      expect(String(fromStepOne)).toContain('неактивен');
+
+      prisma.orderFindFirst.mockResolvedValue(
+        draftRow({ draftStep: 6, fromCityId: 'c-msk', toCityId: 'c-spb' }),
+      );
+      const fromConfirmation = await plugin.handle({
+        user: ruUser(),
+        content: 'taxi:back',
+        kind: 'BUTTON',
+      });
+      expect(String(fromConfirmation)).toContain('неактивен');
+
+      prisma.orderFindFirst.mockResolvedValue(null);
+      const noDraft = await plugin.handle({
+        user: ruUser(),
+        content: 'taxi:back',
+        kind: 'BUTTON',
+      });
+      expect(String(noDraft)).toContain('неактивен');
+      expect(prisma.orderUpdate).not.toHaveBeenCalled();
+    });
+  });
+
   /* ------------------------------ confirmation ------------------------------ */
 
   describe('confirmation', () => {

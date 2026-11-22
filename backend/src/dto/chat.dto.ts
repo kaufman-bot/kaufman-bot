@@ -239,6 +239,14 @@ export class ChatStreamEventDto {
 
   @ApiProperty({
     description:
+      'True when the event updates an existing bot message in place (plugin ' +
+      'edit-in-place) instead of appending a new message; consumers replace ' +
+      'the bubble content by messageId',
+  })
+  edited: boolean;
+
+  @ApiProperty({
+    description:
       'Snapshot of the message this reply quotes (null when the reply was ' +
       'sent without quoting a message)',
     type: MessageQuoteDto,
@@ -273,6 +281,9 @@ export class ChatStreamEventDto {
     }
     if (this.operatorEmail === undefined) {
       this.operatorEmail = null;
+    }
+    if (this.edited === undefined) {
+      this.edited = false;
     }
     if (this.replyTo === undefined) {
       this.replyTo = null;

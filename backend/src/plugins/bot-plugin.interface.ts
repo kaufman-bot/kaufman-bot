@@ -36,6 +36,13 @@ export type BotPluginReply =
       text: string;
       /** Inline keyboard sent with the reply (optional). */
       buttons?: KeyboardButtonDto[];
+      /**
+       * Edit-in-place request (design D12): rewrite the conversation's latest
+       * BOT message (text + buttons) instead of creating a new one. The
+       * dispatcher falls back to a regular new message when there is no BOT
+       * message to edit; string replies never edit.
+       */
+      editLast?: boolean;
     };
 
 /**

@@ -13,6 +13,18 @@ import { TelegramBindingService } from './telegram-binding.service.js';
 /** Telegram's hard limit on `callback_data` (bytes). */
 const TG_CALLBACK_DATA_MAX_BYTES = 64;
 
+/** Builds a Telegram inline keyboard from plugin/operator buttons. */
+function buildInlineKeyboard(
+  buttons?: KeyboardButtonDto[],
+): InlineKeyboard | undefined {
+  if (!buttons?.length) return undefined;
+  const markup = new InlineKeyboard();
+  for (const btn of buttons) {
+    markup.text(btn.title, btn.callbackData).row();
+  }
+  return markup;
+}
+
 /**
  * Infrastructure service that bridges the internal chat engine and the
  * Telegram Bot API. Handles both directions:
@@ -24,6 +36,10 @@ const TG_CALLBACK_DATA_MAX_BYTES = 64;
  *   Telegram chat when the user is bound and the bot is active. A reply
  *   quoting a Telegram message additionally carries `reply_to_message_id`,
  *   with a one-shot fallback without the reference when Telegram rejects it.
+ *   After a successful send the Telegram `message_id` is stored on the
+ *   message row; an `edited` event (design D12) is delivered in place via
+ *   `editMessageText` using that stored id, falling back to a new message
+ *   (with id backfill) when no id is known or Telegram rejects the edit.
  * - **Incoming**: processes Telegram updates (text messages, `/start` binding,
  *   callback queries) by delegating to `ChatService` and `TelegramBindingService`.
  *
@@ -104,15 +120,45 @@ export class TelegramBridgeService implements OnApplicationBootstrap {
       );
       const buttons = tgButtons?.length ? tgButtons : undefined;
 
+      // Edit-in-place (design D12): an `edited` event rewrites an already
+      // delivered Telegram message instead of appending a new one. Without a
+      // stored id (never delivered, or delivery failed earlier) — or when
+      // Telegram rejects the edit — the regular new-message path below runs
+      // as the fallback and backfills the fresh id.
+      if (event.edited === true) {
+        const row = await this.prisma.message.findUnique({
+          where: { id: event.messageId },
+          select: { telegramMessageId: true },
+        });
+        const tgMessageId = row?.telegramMessageId ?? undefined;
+        if (tgMessageId !== undefined) {
+          try {
+            await sender.editMessageText(
+              telegramChatId,
+              tgMessageId,
+              event.content,
+              buttons,
+            );
+            // The Telegram message_id is unchanged by an edit.
+            return;
+          } catch (err) {
+            this.logger.warn(
+              `In-place edit of Telegram message ${tgMessageId} failed (${String(err)}); falling back to a new message`,
+            );
+          }
+        }
+      }
+
       const replyToMessageId = event.replyTo?.telegramMessageId ?? undefined;
       if (replyToMessageId !== undefined) {
         try {
-          await sender.sendMessage(
+          const sentId = await sender.sendMessage(
             telegramChatId,
             event.content,
             buttons,
             replyToMessageId,
           );
+          await this.backfillTelegramMessageId(event.messageId, sentId);
           return;
         } catch (err) {
           // One-shot fallback: Telegram rejects reply_to_message_id when the
@@ -124,9 +170,36 @@ export class TelegramBridgeService implements OnApplicationBootstrap {
         }
       }
 
-      await sender.sendMessage(telegramChatId, event.content, buttons);
+      const sentId = await sender.sendMessage(
+        telegramChatId,
+        event.content,
+        buttons,
+      );
+      await this.backfillTelegramMessageId(event.messageId, sentId);
     } catch (err) {
       this.logger.error(`Outgoing forward failed: ${String(err)}`);
+    }
+  }
+
+  /**
+   * Stores the Telegram `message_id` of a delivered BOT message on its row
+   * (best effort): the id enables later in-place edits (design D12). A lost
+   * id only disables those edits, so a failure stays a warning.
+   */
+  private async backfillTelegramMessageId(
+    messageId: string,
+    telegramMessageId: number | null,
+  ): Promise<void> {
+    if (!telegramMessageId) return;
+    try {
+      await this.prisma.message.update({
+        where: { id: messageId },
+        data: { telegramMessageId },
+      });
+    } catch (err) {
+      this.logger.warn(
+        `Failed to store telegramMessageId for message ${messageId}: ${String(err)}`,
+      );
     }
   }
 
@@ -290,14 +363,8 @@ export class TelegramBridgeService implements OnApplicationBootstrap {
         text: string,
         buttons?: KeyboardButtonDto[],
         replyToMessageId?: number,
-      ): Promise<void> {
-        let reply_markup: InlineKeyboard | undefined;
-        if (buttons?.length) {
-          reply_markup = new InlineKeyboard();
-          for (const btn of buttons) {
-            reply_markup.text(btn.title, btn.callbackData).row();
-          }
-        }
+      ): Promise<number | null> {
+        const reply_markup = buildInlineKeyboard(buttons);
         const options: {
           reply_markup?: InlineKeyboard;
           reply_to_message_id?: number;
@@ -308,8 +375,27 @@ export class TelegramBridgeService implements OnApplicationBootstrap {
         if (replyToMessageId !== undefined) {
           options.reply_to_message_id = replyToMessageId;
         }
-        await bot.api.sendMessage(
+        const sent = await bot.api.sendMessage(
           chatId,
+          text,
+          Object.keys(options).length ? options : undefined,
+        );
+        return sent.message_id;
+      },
+      async editMessageText(
+        chatId: string,
+        telegramMessageId: number,
+        text: string,
+        buttons?: KeyboardButtonDto[],
+      ): Promise<void> {
+        const reply_markup = buildInlineKeyboard(buttons);
+        const options: { reply_markup?: InlineKeyboard } = {};
+        if (reply_markup) {
+          options.reply_markup = reply_markup;
+        }
+        await bot.api.editMessageText(
+          chatId,
+          telegramMessageId,
           text,
           Object.keys(options).length ? options : undefined,
         );

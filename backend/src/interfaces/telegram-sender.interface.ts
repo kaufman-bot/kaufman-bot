@@ -13,12 +13,29 @@ export interface TelegramSender {
    * (the caller is responsible for compliance). `replyToMessageId` maps to
    * the Telegram `reply_to_message_id` option, so the client renders the
    * message as a quote of the referenced one.
+   *
+   * Resolves with the Telegram `message_id` of the sent message (so the
+   * caller can persist it for later in-place edits) or `null` when the API
+   * response carries no usable id.
    */
   sendMessage(
     chatId: string,
     text: string,
     buttons?: KeyboardButtonDto[],
     replyToMessageId?: number,
+  ): Promise<number | null>;
+
+  /**
+   * Rewrites the text and inline keyboard of an already sent message
+   * (Telegram `editMessageText`). Throws when Telegram rejects the edit
+   * (message deleted, inaccessible, or identical content) — the caller is
+   * responsible for the new-message fallback with id backfill.
+   */
+  editMessageText(
+    chatId: string,
+    telegramMessageId: number,
+    text: string,
+    buttons?: KeyboardButtonDto[],
   ): Promise<void>;
 
   /**

@@ -69,6 +69,12 @@ export interface ChatStreamEvent {
   operatorEmail: string | null;
   replyTo?: MessageQuote | null;
   deliveredTo?: Array<'WEB' | 'TELEGRAM'>;
+  /**
+   * True when the event updates an existing bot message in place (plugin
+   * edit-in-place) instead of appending a new one; consumers replace the
+   * bubble content by messageId. Absent on regular (new) messages.
+   */
+  edited?: boolean;
   createdAt: string;
 }
 

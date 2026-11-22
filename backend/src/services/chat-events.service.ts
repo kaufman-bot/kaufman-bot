@@ -26,6 +26,11 @@ import { KeyboardButtonDto } from '../dto/keyboard.dto.js';
  * with `reply_to_message_id`. Null/omitted for replies without a quote and
  * for USER messages; SSE mappers strip it to the {id, senderRole, content}
  * subset exposed in the DTOs.
+ *
+ * `edited` marks an edit-in-place event (design D12): the reply rewrote the
+ * latest BOT message of the conversation instead of creating a new one, so
+ * consumers replace the bubble content by `messageId` rather than appending.
+ * Omitted for ordinary messages.
  */
 export interface ChatEvent {
   conversationId: string;
@@ -39,6 +44,7 @@ export interface ChatEvent {
   botName?: string | null;
   operatorEmail?: string | null;
   replyTo?: MessageReplySnapshot | null;
+  edited?: boolean;
 }
 
 /** Full snapshot of the quoted message carried on a BOT reply event. */

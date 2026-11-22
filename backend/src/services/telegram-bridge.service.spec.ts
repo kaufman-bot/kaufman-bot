@@ -20,10 +20,19 @@ const makePrismaMock = () => ({
   user: {
     findFirst: vi.fn(),
   },
+  message: {
+    findUnique: vi.fn(),
+    update: vi.fn().mockResolvedValue({}),
+  },
 });
 
-const makeSenderMock = (): TelegramSender & { sendMessage: Mock } => ({
-  sendMessage: vi.fn().mockResolvedValue(undefined),
+const makeSenderMock = (): TelegramSender & {
+  sendMessage: Mock;
+  editMessageText: Mock;
+} => ({
+  // grammY resolves with the sent message; the sender narrows it to message_id.
+  sendMessage: vi.fn().mockResolvedValue(101),
+  editMessageText: vi.fn().mockResolvedValue(undefined),
   answerCallbackQuery: vi.fn().mockResolvedValue(undefined),
 });
 
@@ -49,7 +58,10 @@ describe('TelegramBridgeService', () => {
     submitButtonCallback: ReturnType<typeof vi.fn>;
   };
   let bindingMock: { consumeToken: ReturnType<typeof vi.fn> };
-  let senderMock: TelegramSender & { sendMessage: Mock };
+  let senderMock: TelegramSender & {
+    sendMessage: Mock;
+    editMessageText: Mock;
+  };
   let service: TelegramBridgeService;
 
   beforeEach(() => {
@@ -101,6 +113,11 @@ describe('TelegramBridgeService', () => {
         'Hi there',
         undefined,
       );
+      // The delivered id is stored on the row for later in-place edits.
+      expect(prismaMock.message.update).toHaveBeenCalledWith({
+        where: { id: 'msg-1' },
+        data: { telegramMessageId: 101 },
+      });
     });
 
     it('does NOT forward events whose channel snapshot is not TELEGRAM', async () => {
@@ -196,6 +213,75 @@ describe('TelegramBridgeService', () => {
         'Hello from bot',
         undefined,
       );
+    });
+
+    it('delivers an edited event in place when the row has a telegramMessageId', async () => {
+      prismaMock.message.findUnique.mockResolvedValue({
+        telegramMessageId: 555,
+      });
+
+      subject.next(
+        makeChatEvent({
+          content: 'Step 2',
+          channel: 'TELEGRAM',
+          edited: true,
+          buttons: [{ title: 'Next', callbackData: 'taxi:page:2' }],
+        }),
+      );
+      await new Promise((r) => setImmediate(r));
+
+      expect(senderMock.editMessageText).toHaveBeenCalledWith(
+        '999',
+        555,
+        'Step 2',
+        [{ title: 'Next', callbackData: 'taxi:page:2' }],
+      );
+      expect(senderMock.sendMessage).not.toHaveBeenCalled();
+      // The Telegram message_id is unchanged by an edit — no backfill.
+      expect(prismaMock.message.update).not.toHaveBeenCalled();
+    });
+
+    it('falls back to a new message with id backfill when the edited row has no telegramMessageId', async () => {
+      prismaMock.message.findUnique.mockResolvedValue({
+        telegramMessageId: null,
+      });
+
+      subject.next(
+        makeChatEvent({ content: 'Step 2', channel: 'TELEGRAM', edited: true }),
+      );
+      await new Promise((r) => setImmediate(r));
+
+      expect(senderMock.editMessageText).not.toHaveBeenCalled();
+      expect(senderMock.sendMessage).toHaveBeenCalledWith(
+        '999',
+        'Step 2',
+        undefined,
+      );
+      expect(prismaMock.message.update).toHaveBeenCalledWith({
+        where: { id: 'msg-1' },
+        data: { telegramMessageId: 101 },
+      });
+    });
+
+    it('falls back to a new message with id backfill when Telegram rejects the edit', async () => {
+      prismaMock.message.findUnique.mockResolvedValue({
+        telegramMessageId: 555,
+      });
+      senderMock.editMessageText.mockRejectedValue(
+        new Error('Bad Request: message is not modified'),
+      );
+
+      subject.next(
+        makeChatEvent({ content: 'Step 2', channel: 'TELEGRAM', edited: true }),
+      );
+      await new Promise((r) => setImmediate(r));
+
+      expect(senderMock.editMessageText).toHaveBeenCalledTimes(1);
+      expect(senderMock.sendMessage).toHaveBeenCalledTimes(1);
+      expect(prismaMock.message.update).toHaveBeenCalledWith({
+        where: { id: 'msg-1' },
+        data: { telegramMessageId: 101 },
+      });
     });
 
     it('does NOT forward when telegramBotId is null (mock target)', async () => {

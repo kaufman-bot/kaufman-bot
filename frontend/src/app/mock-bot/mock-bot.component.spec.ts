@@ -997,4 +997,96 @@ describe('MockBotComponent', () => {
       ).toBe('доставлено в веб + Telegram · Support Bot');
     }));
   });
+
+  describe('edit events (chat-message-editing)', () => {
+    /** Boot the component, select user1 and flush the initial state. */
+    function openUser1(stream: Subject<MockBotStreamEvent>): void {
+      jest
+        .spyOn(mockBotService, 'connectStream')
+        .mockReturnValue(stream.asObservable());
+      fixture.detectChanges();
+      httpMock
+        .expectOne('/api/v1/mock-bot/conversations')
+        .flush(mockConversations);
+      tick();
+      component.onSelectConversation('user1');
+      httpMock
+        .expectOne('/api/v1/mock-bot/conversations/user1/messages')
+        .flush([]);
+      httpMock
+        .expectOne('/api/v1/mock-bot/conversations')
+        .flush(mockConversations);
+      tick();
+      fixture.detectChanges();
+    }
+
+    const wizardStepEvent = (
+      content: string,
+      edited: boolean,
+    ): MockBotStreamEvent => ({
+      messageId: 'msg-wiz',
+      conversationId: 'conv1',
+      userId: 'user1',
+      senderRole: 'BOT',
+      content,
+      buttons: [{ title: 'Тверь', callbackData: 'taxi:to:c-tvr' }],
+      channel: 'WEB',
+      botName: null,
+      operatorEmail: null,
+      edited,
+      createdAt: '2026-01-01T00:11:00Z',
+    });
+
+    it('replaces the wizard row in place on an edit event without adding a new row', fakeAsync(() => {
+      const stream = new Subject<MockBotStreamEvent>();
+      openUser1(stream);
+
+      // The step screen arrives as a regular message first.
+      stream.next(wizardStepEvent('Шаг 1/6: Откуда едем?', false));
+      httpMock
+        .expectOne('/api/v1/mock-bot/conversations')
+        .flush(mockConversations);
+      tick();
+      expect(mockBotService.messages().length).toBe(1);
+
+      stream.next(wizardStepEvent('Шаг 2/6: Куда едем?', true));
+      httpMock
+        .expectOne('/api/v1/mock-bot/conversations')
+        .flush(mockConversations);
+      tick();
+      fixture.detectChanges();
+
+      const messages = mockBotService.messages();
+      expect(messages.length).toBe(1);
+      expect(messages[0].content).toBe('Шаг 2/6: Куда едем?');
+      expect(messages[0].buttons?.[0].callbackData).toBe('taxi:to:c-tvr');
+    }));
+
+    it('keeps a single row across a series of edits', fakeAsync(() => {
+      const stream = new Subject<MockBotStreamEvent>();
+      openUser1(stream);
+
+      stream.next(wizardStepEvent('Шаг 1/6: Откуда едем?', false));
+      httpMock
+        .expectOne('/api/v1/mock-bot/conversations')
+        .flush(mockConversations);
+      tick();
+
+      stream.next(wizardStepEvent('Шаг 3/6: Время выезда?', true));
+      httpMock
+        .expectOne('/api/v1/mock-bot/conversations')
+        .flush(mockConversations);
+      tick();
+      stream.next(wizardStepEvent('Шаг 4/6: Сколько человек поедет?', true));
+      httpMock
+        .expectOne('/api/v1/mock-bot/conversations')
+        .flush(mockConversations);
+      tick();
+      fixture.detectChanges();
+
+      const messages = mockBotService.messages();
+      expect(messages.length).toBe(1);
+      expect(messages[0].content).toBe('Шаг 4/6: Сколько человек поедет?');
+    }));
+  });
 });

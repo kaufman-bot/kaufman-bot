@@ -165,7 +165,17 @@ describe('Taxi wizard over the chat API (e2e, running backend)', () => {
   /* ------------------------------ chat helpers ------------------------------ */
 
   /**
-   * Waits for a BOT message newer than `previousId`. The backend normally
+   * Stable identity of one wizard screen: navigation presses EDIT the
+   * current bot row in place (chat-message-editing), so a fresh screen is
+   * detected by its (id, content, buttons) signature — the id alone never
+   * changes on an edit, and equal content alone would miss a fresh row
+   * (e.g. a /taxi resume that re-renders the same step).
+   */
+  const screenSignature = (message: ChatMessageDto): string =>
+    `${message.id}|${message.content}|${JSON.stringify(message.buttons ?? [])}`;
+
+  /**
+   * Waits for a BOT screen different from `previous`. The backend normally
    * persists the plugin reply before the POST returns, but the periodic
    * recovery sweep may claim a just-created task first and deliver the
    * reply a moment later (bot-plugins.service.ts, SWEEP_INTERVAL_MS) — the
@@ -173,9 +183,10 @@ describe('Taxi wizard over the chat API (e2e, running backend)', () => {
    */
   const waitForBotReply = async (
     rider: ActivityHelper,
-    previousId: string | null,
+    previous: ChatMessageDto | null,
   ): Promise<ChatMessageDto> => {
     const deadline = Date.now() + 10_000;
+    const baseline = previous ? screenSignature(previous) : null;
     for (;;) {
       const history = unwrap(
         await rider.sdk.chatControllerGetMessagesV1({}),
@@ -184,7 +195,7 @@ describe('Taxi wizard over the chat API (e2e, running backend)', () => {
       const reply = [...history]
         .reverse()
         .find((message) => message.senderRole === 'BOT');
-      if (reply && reply.id !== previousId) {
+      if (reply && screenSignature(reply) !== baseline) {
         // Design D4: every wizard step must stay within the platform's
         // 12-button cap — the dispatcher silently drops invalid replies, so
         // a violation here means a broken (unanswered) step elsewhere.
@@ -193,21 +204,21 @@ describe('Taxi wizard over the chat API (e2e, running backend)', () => {
       }
       if (Date.now() > deadline) {
         throw new Error(
-          `the taxi plugin did not reply within 10s (previous bot message: ${previousId ?? 'none'})`,
+          `the taxi plugin did not reply within 10s (previous bot screen: ${previous?.id ?? 'none'})`,
         );
       }
       await new Promise((resolve) => setTimeout(resolve, 150));
     }
   };
 
-  /** Performs one wizard interaction and waits for its fresh reply. */
+  /** Performs one wizard interaction and waits for its fresh screen. */
   const wizardStep = async (
     rider: ActivityHelper,
-    previousId: string | null,
+    previous: ChatMessageDto | null,
     action: () => Promise<void>,
   ): Promise<ChatMessageDto> => {
     await action();
-    return waitForBotReply(rider, previousId);
+    return waitForBotReply(rider, previous);
   };
 
   const buttonOf = (
@@ -240,6 +251,17 @@ describe('Taxi wizard over the chat API (e2e, running backend)', () => {
   }> => {
     let reply = startReply;
     for (let hop = 0; hop < 10; hop += 1) {
+      // Re-anchor on the live row: page presses EDIT the shared wizard row
+      // in place, so the caller's snapshot may lag the screen the row
+      // actually shows right now.
+      const history = unwrap(
+        await rider.sdk.chatControllerGetMessagesV1({}),
+        'GET /chat/messages',
+      );
+      reply =
+        [...history]
+          .reverse()
+          .find((message) => message.senderRole === 'BOT') ?? reply;
       const button = reply.buttons?.find((b) => matchesPayload(b, target));
       if (button) {
         return { reply, button };
@@ -253,7 +275,7 @@ describe('Taxi wizard over the chat API (e2e, running backend)', () => {
           `wizard button ${target} unreachable: no page navigation on "${reply.content.slice(0, 60)}"`,
         );
       }
-      reply = await wizardStep(rider, reply.id, () =>
+      reply = await wizardStep(rider, reply, () =>
         press(rider, `taxi:page:${Math.max(...navPages)}`),
       );
     }
@@ -267,7 +289,7 @@ describe('Taxi wizard over the chat API (e2e, running backend)', () => {
     target: string,
   ): Promise<ChatMessageDto> => {
     const found = await findButtonAcrossPages(rider, reply, target);
-    return wizardStep(rider, found.reply.id, () =>
+    return wizardStep(rider, found.reply, () =>
       press(rider, found.button.callbackData),
     );
   };
@@ -355,7 +377,7 @@ describe('Taxi wizard over the chat API (e2e, running backend)', () => {
     rider: ActivityHelper,
     servicesReply: ChatMessageDto,
   ): Promise<ChatMessageDto> => {
-    const reply = await wizardStep(rider, servicesReply.id, () =>
+    const reply = await wizardStep(rider, servicesReply, () =>
       press(rider, 'taxi:done'),
     );
     expect(reply.content).toContain('Step 6/6');
@@ -471,30 +493,102 @@ describe('Taxi wizard over the chat API (e2e, running backend)', () => {
           matchesPayload(button, 'taxi:to'),
         ),
       ).toBe(true);
+      // The step arrived as an EDIT of the wizard row, not a new message
+      // (chat-message-editing): same row id, edit flag set.
+      expect(stepTwo!.event.edited).toBe(true);
+      expect(stepTwo!.event.messageId).toBe(stepOne!.event.messageId);
     } finally {
       subscription.unsubscribe();
     }
 
-    // The same steps are persisted for later history reads.
+    // The same steps are persisted, but navigation EDITED the single
+    // wizard row in place: one bot wizard screen remains, already showing
+    // the final step (chat-message-editing).
     const history = unwrap(
       await riderA.sdk.chatControllerGetMessagesV1({}),
       'GET /chat/messages',
     );
-    const botContents = history
-      .filter((message) => message.senderRole === 'BOT')
-      .map((message) => message.content);
-    expect(botContents.some((content) => content.includes('Step 1/6'))).toBe(
-      true,
+    const wizardScreens = history.filter(
+      (message) =>
+        message.senderRole === 'BOT' && /Step \d\/6/.test(message.content),
     );
-    expect(botContents.some((content) => content.includes('Step 2/6'))).toBe(
-      true,
-    );
+    expect(wizardScreens.length).toBe(1);
+    expect(wizardScreens[0]!.id).toBe(reply.id);
+    expect(wizardScreens[0]!.content).toContain('Step 2/6');
+    expect(wizardScreens[0]!.content).not.toContain('Step 1/6');
 
     // Cleanup: leave no draft for the next test.
-    const cancelReply = await wizardStep(riderA, reply.id, () =>
+    const cancelReply = await wizardStep(riderA, reply, () =>
       press(riderA, 'taxi:cancel'),
     );
     expect(cancelReply.content).toBe(CANCELLED_TEXT);
+  }, 30_000);
+
+  it('edits the wizard screen in place across transitions (chat-message-editing)', async () => {
+    const events: ChatStreamEventDto[] = [];
+    const subscription = riderA
+      .sse<ChatStreamEventDto>({ url: '/api/v1/chat/stream' })
+      .subscribe((event) => events.push(event));
+
+    /** BOT rows currently in the rider's history. */
+    const botCount = async (): Promise<number> => {
+      const history = unwrap(
+        await riderA.sdk.chatControllerGetMessagesV1({}),
+        'GET /chat/messages',
+      );
+      return history.filter((message) => message.senderRole === 'BOT').length;
+    };
+
+    try {
+      const fromIndex = await ensureSseLive(events);
+      const baseBotCount = await botCount();
+
+      let reply = await wizardStep(riderA, null, () =>
+        sendText(riderA, '/taxi'),
+      );
+      expect(reply.content).toContain('Step 1/6');
+
+      // From → to: every navigation press EDITs the same bot row, so the
+      // history still holds exactly one wizard screen.
+      reply = await pressViaPages(riderA, reply, `taxi:from:${cityA.id}`);
+      expect(reply.content).toContain('Step 2/6');
+      reply = await pressViaPages(riderA, reply, `taxi:to:${cityB.id}`);
+      expect(reply.content).toContain('Step 3/6');
+      expect(await botCount()).toBe(baseBotCount + 1);
+
+      // The SSE stream carries the in-place edit of the current screen.
+      const editEvent = await waitForSseEvent(
+        events,
+        fromIndex,
+        (event) =>
+          event.senderRole === 'BOT' &&
+          event.edited === true &&
+          event.messageId === reply.id &&
+          event.content.includes('Step 3/6'),
+        'edited wizard screen (step 3/6)',
+      );
+      expect(editEvent).not.toBeNull();
+      expect(editEvent!.event.messageId).toBe(reply.id);
+
+      // Design D12: callback payloads stay within Telegram's 64-byte
+      // callback_data budget, so the Telegram branch applies the same edit
+      // without dropping the keyboard.
+      for (const button of reply.buttons ?? []) {
+        expect(
+          Buffer.byteLength(button.callbackData, 'utf8'),
+        ).toBeLessThanOrEqual(64);
+      }
+
+      // «Отмена» is terminal: a NEW bot message, not another edit.
+      const cancelReply = await wizardStep(riderA, reply, () =>
+        press(riderA, 'taxi:cancel'),
+      );
+      expect(cancelReply.content).toBe(CANCELLED_TEXT);
+      expect(await botCount()).toBe(baseBotCount + 2);
+      expect(cancelReply.id).not.toBe(reply.id);
+    } finally {
+      subscription.unsubscribe();
+    }
   }, 30_000);
 
   it('resumes a half-finished draft, hides the picked city and starts fresh after cancel', async () => {
@@ -505,7 +599,7 @@ describe('Taxi wizard over the chat API (e2e, running backend)', () => {
     expect(reply.content).toContain('Step 2/6');
 
     // Another /taxi resumes exactly at the saved step (task 5.1).
-    reply = await wizardStep(riderA, reply.id, () => sendText(riderA, '/taxi'));
+    reply = await wizardStep(riderA, reply, () => sendText(riderA, '/taxi'));
     expect(reply.content).toContain('Step 2/6');
 
     // The picked city is not offered as a destination — on any page.
@@ -521,19 +615,131 @@ describe('Taxi wizard over the chat API (e2e, running backend)', () => {
     );
     expect(cityBHit.button.callbackData.startsWith('taxi:to:')).toBe(true);
 
-    reply = await wizardStep(riderA, cityBHit.reply.id, () =>
+    reply = await wizardStep(riderA, cityBHit.reply, () =>
       press(riderA, 'taxi:cancel'),
     );
     expect(reply.content).toBe(CANCELLED_TEXT);
 
     // After cancel the wizard starts from scratch.
-    reply = await wizardStep(riderA, reply.id, () => sendText(riderA, '/taxi'));
+    reply = await wizardStep(riderA, reply, () => sendText(riderA, '/taxi'));
     expect(reply.content).toContain('Step 1/6');
 
-    reply = await wizardStep(riderA, reply.id, () =>
+    reply = await wizardStep(riderA, reply, () => press(riderA, 'taxi:cancel'));
+    expect(reply.content).toBe(CANCELLED_TEXT);
+  }, 30_000);
+
+  it('walks back to the first step, re-picks the route and refills the draft (design D13)', async () => {
+    const cities = unwrap(
+      await adminA.sdk.taxiCatalogControllerListCitiesV1({}),
+      'GET /taxi/cities',
+    );
+    const moscow = cities.cities.find((city) => city.name === 'Москва');
+    expect(moscow).toBeDefined();
+
+    const slots = unwrap(
+      await adminA.sdk.taxiCatalogControllerListDepartureSlotsV1({}),
+      'GET /taxi/departure-slots',
+    );
+    const noon = slots.slots.find((slot) => slot.time === '12:00');
+    expect(noon).toBeDefined();
+
+    const options = unwrap(
+      await adminA.sdk.taxiCatalogControllerListPassengerOptionsV1({}),
+      'GET /taxi/passenger-options',
+    );
+    const twoPassengers = options.options.find((option) => option.count === 2);
+    expect(twoPassengers).toBeDefined();
+
+    // A distinct price for the NEW pair — the confirmation must show it,
+    // proving the refill used the re-picked route, not the stale one.
+    unwrap(
+      await adminA.sdk.taxiPriceMatrixControllerSetPairPriceV1({
+        path: { fromCityId: moscow!.id, toCityId: cityB.id },
+        body: { price: 7000 },
+      }),
+      'PUT /taxi/price-matrix (back-nav route)',
+    );
+
+    const services = await driveToServices(riderA, {
+      fromCityId: cityA.id,
+      toCityId: cityB.id,
+      slotId: noon!.id,
+      passengerOptionId: twoPassengers!.id,
+    });
+    expect(services.content).toContain('Step 5/6');
+    // Page 1 of a step ≥ 2 renders «Назад» as the step rollback (D13).
+    expect(buttonOf(services, 'taxi:back')).toBeDefined();
+    const wizardRowId = services.id;
+
+    /** Wizard screens (/Step \d\/6/) currently in the rider's history. */
+    const countWizardScreens = async (): Promise<number> => {
+      const history = unwrap(
+        await riderA.sdk.chatControllerGetMessagesV1({}),
+        'GET /chat/messages',
+      );
+      return history.filter(
+        (message) =>
+          message.senderRole === 'BOT' && /Step \d\/6/.test(message.content),
+      ).length;
+    };
+    const screensBefore = await countWizardScreens();
+
+    // «Назад» walks the same row back step by step (in-place edits).
+    let reply = await wizardStep(riderA, services, () =>
+      press(riderA, 'taxi:back'),
+    );
+    expect(reply.content).toContain('Step 4/6');
+    expect(reply.id).toBe(wizardRowId);
+
+    reply = await wizardStep(riderA, reply, () => press(riderA, 'taxi:back'));
+    expect(reply.content).toContain('Step 3/6');
+    expect(reply.id).toBe(wizardRowId);
+
+    reply = await wizardStep(riderA, reply, () => press(riderA, 'taxi:back'));
+    expect(reply.content).toContain('Step 2/6');
+    expect(reply.id).toBe(wizardRowId);
+
+    reply = await wizardStep(riderA, reply, () => press(riderA, 'taxi:back'));
+    expect(reply.content).toContain('Step 1/6');
+    expect(reply.id).toBe(wizardRowId);
+    // Step 1 renders no «Назад» (design D13).
+    expect(buttonOf(reply, 'taxi:back')).toBeUndefined();
+
+    // Re-picking the departure resets the lower-priority draft fields:
+    // the refill collects them anew and the summary proves it below.
+    reply = await pressViaPages(riderA, reply, `taxi:from:${moscow!.id}`);
+    expect(reply.content).toContain('Step 2/6');
+    expect(reply.id).toBe(wizardRowId);
+
+    reply = await pressViaPages(riderA, reply, `taxi:to:${cityB.id}`);
+    expect(reply.content).toContain('Step 3/6');
+
+    reply = await pressViaPages(riderA, reply, `taxi:slot:${noon!.id}`);
+    expect(reply.content).toContain('Step 4/6');
+
+    reply = await pressViaPages(riderA, reply, `taxi:pax:${twoPassengers!.id}`);
+    expect(reply.content).toContain('Step 5/6');
+
+    const confirmation = await wizardStep(riderA, reply, () =>
+      press(riderA, 'taxi:done'),
+    );
+    expect(confirmation.id).toBe(wizardRowId);
+    expect(confirmation.content).toContain('Route: Москва');
+    expect(confirmation.content).toContain(cityB.name);
+    // The old departure is gone from the summary — the reset worked.
+    expect(confirmation.content).not.toContain(cityA.name);
+    // The pair price is the NEW route's, not the stale A↔B one.
+    expect(confirmation.content).toContain('Base price: 7000 ₽');
+    expect(confirmation.content).toContain('Total: 7000 ₽');
+
+    // Back navigation and the refill never created a new wizard row.
+    expect(await countWizardScreens()).toBe(screensBefore);
+
+    // Cleanup: delete the refilled draft.
+    const cancelReply = await wizardStep(riderA, confirmation, () =>
       press(riderA, 'taxi:cancel'),
     );
-    expect(reply.content).toBe(CANCELLED_TEXT);
+    expect(cancelReply.content).toBe(CANCELLED_TEXT);
   }, 30_000);
 
   it('refuses an unpriced route at the confirmation screen and keeps the draft', async () => {
@@ -578,16 +784,16 @@ describe('Taxi wizard over the chat API (e2e, running backend)', () => {
       passengerOptionId: twoPassengers!.id,
     });
 
-    let reply = await wizardStep(riderA, services.id, () =>
+    let reply = await wizardStep(riderA, services, () =>
       press(riderA, 'taxi:done'),
     );
     expect(reply.content).toBe(NO_PRICE_TEXT);
 
     // The draft is kept: /taxi resumes at the confirmation step and the
     // refusal repeats; the literal «Подтвердить» press refuses too.
-    reply = await wizardStep(riderA, reply.id, () => sendText(riderA, '/taxi'));
+    reply = await wizardStep(riderA, reply, () => sendText(riderA, '/taxi'));
     expect(reply.content).toBe(NO_PRICE_TEXT);
-    reply = await wizardStep(riderA, reply.id, () =>
+    reply = await wizardStep(riderA, reply, () =>
       press(riderA, 'taxi:confirm'),
     );
     expect(reply.content).toBe(NO_PRICE_TEXT);
@@ -602,9 +808,7 @@ describe('Taxi wizard over the chat API (e2e, running backend)', () => {
     ).toBe(false);
 
     // Cleanup: delete the kept draft.
-    reply = await wizardStep(riderA, reply.id, () =>
-      press(riderA, 'taxi:cancel'),
-    );
+    reply = await wizardStep(riderA, reply, () => press(riderA, 'taxi:cancel'));
     expect(reply.content).toBe(CANCELLED_TEXT);
   }, 45_000);
 
@@ -684,7 +888,7 @@ describe('Taxi wizard over the chat API (e2e, running backend)', () => {
         serviceId: service.id,
       }),
     );
-    const first = await wizardStep(riderA, confirmationA.id, () =>
+    const first = await wizardStep(riderA, confirmationA, () =>
       press(riderA, 'taxi:confirm'),
     );
     // Order ids are cuids, so the shortened suffix is base36.
@@ -730,14 +934,12 @@ describe('Taxi wizard over the chat API (e2e, running backend)', () => {
         serviceId: service.id,
       }),
     );
-    let replyB = await wizardStep(riderB, confirmationB.id, () =>
+    let replyB = await wizardStep(riderB, confirmationB, () =>
       press(riderB, 'taxi:confirm'),
     );
     expect(replyB.content).toBe(NO_CAR_TEXT);
 
-    replyB = await wizardStep(riderB, replyB.id, () =>
-      sendText(riderB, '/taxi'),
-    );
+    replyB = await wizardStep(riderB, replyB, () => sendText(riderB, '/taxi'));
     expect(replyB.content).toContain('Step 6/6');
 
     const during = unwrap(
@@ -760,7 +962,7 @@ describe('Taxi wizard over the chat API (e2e, running backend)', () => {
 
     // B's draft still sits at the confirmation step: the repeated press
     // succeeds now and receives the same, just-freed car.
-    const retried = await wizardStep(riderB, replyB.id, () =>
+    const retried = await wizardStep(riderB, replyB, () =>
       press(riderB, 'taxi:confirm'),
     );
     expect(retried.content).toMatch(/Order #[0-9A-Z]{6} submitted!/);

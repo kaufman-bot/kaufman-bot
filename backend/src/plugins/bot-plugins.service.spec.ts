@@ -1,6 +1,7 @@
 import { Logger } from '@nestjs/common';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { User } from '../generated/prisma/client.js';
+import { Prisma } from '../generated/prisma/client.js';
 import {
   BotPluginTaskStatus,
   MessageSenderRole,
@@ -13,26 +14,38 @@ import { BotPluginsService } from './bot-plugins.service.js';
 
 const makePrismaMock = () => {
   const messageCreate = vi.fn();
+  const messageFindFirst = vi.fn();
+  const messageUpdate = vi.fn();
   const taskUpdateMany = vi.fn().mockResolvedValue({ count: 1 });
   const taskFindMany = vi.fn().mockResolvedValue([]);
   const conversationFindUnique = vi.fn();
   const userFindUnique = vi.fn();
   const $transaction = vi.fn(async (fn: (tx: unknown) => unknown) =>
     fn({
-      message: { create: messageCreate },
+      message: {
+        create: messageCreate,
+        findFirst: messageFindFirst,
+        update: messageUpdate,
+      },
       botPluginTask: { updateMany: taskUpdateMany },
     }),
   );
 
   return {
     messageCreate,
+    messageFindFirst,
+    messageUpdate,
     taskUpdateMany,
     taskFindMany,
     conversationFindUnique,
     userFindUnique,
     $transaction,
     instance: {
-      message: { create: messageCreate },
+      message: {
+        create: messageCreate,
+        findFirst: messageFindFirst,
+        update: messageUpdate,
+      },
       botPluginTask: { updateMany: taskUpdateMany, findMany: taskFindMany },
       conversation: { findUnique: conversationFindUnique },
       user: { findUnique: userFindUnique },
@@ -278,6 +291,112 @@ describe('BotPluginsService', () => {
       expect(prismaMock.taskUpdateMany).toHaveBeenCalledWith({
         where: { messageId: 'msg-in', status: BotPluginTaskStatus.PROCESSING },
         data: { status: BotPluginTaskStatus.DONE },
+      });
+    });
+
+    it('rewrites the latest bot message when the reply requests editLast', async () => {
+      const stepButtons = [{ title: 'Next', callbackData: 'taxi:page:2' }];
+      prismaMock.messageFindFirst.mockResolvedValue({
+        id: 'msg-prev',
+        conversationId: 'conv-1',
+        senderRole: MessageSenderRole.BOT,
+        content: 'Step 1',
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        channel: 'WEB',
+        botName: null,
+        operatorEmail: null,
+      });
+      prismaMock.messageUpdate.mockResolvedValue({
+        id: 'msg-prev',
+        conversationId: 'conv-1',
+        senderRole: MessageSenderRole.BOT,
+        content: 'Step 2',
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        channel: 'WEB',
+        botName: null,
+        operatorEmail: null,
+      });
+      const plugin = {
+        ...makePlugin('taxi', true, {
+          text: 'Step 2',
+          buttons: stepButtons,
+          editLast: true,
+        }),
+        handlesCallbacks: true,
+      };
+
+      const service = createService(plugin as BotPlugin);
+      await service.dispatchAndReply(
+        'conv-1',
+        user,
+        'taxi:from:1',
+        'msg-in',
+        'BUTTON',
+      );
+
+      expect(prismaMock.messageFindFirst).toHaveBeenCalledWith({
+        where: { conversationId: 'conv-1', senderRole: MessageSenderRole.BOT },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      });
+      expect(prismaMock.messageUpdate).toHaveBeenCalledWith({
+        where: { id: 'msg-prev' },
+        data: { content: 'Step 2', buttons: stepButtons },
+      });
+      expect(prismaMock.messageCreate).not.toHaveBeenCalled();
+      expect(chatEventsMock.publish).toHaveBeenCalledWith(
+        expect.objectContaining({ messageId: 'msg-prev', edited: true }),
+      );
+    });
+
+    it('falls back to a new message when there is no bot message to edit', async () => {
+      prismaMock.messageFindFirst.mockResolvedValue(null);
+      prismaMock.messageCreate.mockResolvedValue({
+        id: 'msg-bot',
+        content: 'Step 2',
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+      });
+      const plugin = makePlugin('taxi', true, {
+        text: 'Step 2',
+        editLast: true,
+      });
+
+      const service = createService(plugin as BotPlugin);
+      await service.dispatchAndReply('conv-1', user, '/taxi', 'msg-in');
+
+      expect(prismaMock.messageCreate).toHaveBeenCalledTimes(1);
+      const event = chatEventsMock.publish.mock.calls[0][0] as {
+        edited?: boolean;
+      };
+      expect(event.edited).toBeUndefined();
+    });
+
+    it('clears the previous keyboard when the edited reply has no buttons', async () => {
+      prismaMock.messageFindFirst.mockResolvedValue({
+        id: 'msg-prev',
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+      });
+      prismaMock.messageUpdate.mockResolvedValue({
+        id: 'msg-prev',
+        conversationId: 'conv-1',
+        senderRole: MessageSenderRole.BOT,
+        content: 'cancelled',
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        channel: 'WEB',
+        botName: null,
+        operatorEmail: null,
+      });
+      const plugin = makePlugin('taxi', true, {
+        text: 'cancelled',
+        editLast: true,
+      });
+
+      const service = createService(plugin as BotPlugin);
+      await service.dispatchAndReply('conv-1', user, '/taxi', 'msg-in');
+
+      expect(prismaMock.messageUpdate).toHaveBeenCalledWith({
+        where: { id: 'msg-prev' },
+        // The nullable Json column is cleared via the DbNull sentinel.
+        data: { content: 'cancelled', buttons: Prisma.DbNull },
       });
     });
   });

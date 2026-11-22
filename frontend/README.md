@@ -121,7 +121,8 @@ with `400`/`409` errors surfaced through the shared `ApiError` helper:
 - **Departure slots** / **Passenger options** — dictionary rows for the
   wizard steps;
 - **Drivers** — driver cards with nested cars (plate, seats, feature
-  checkboxes);
+  checkboxes); the card header carries «Изменить» (activates the bottom edit
+  form and scrolls to it) and «Удалить» (delete with confirmation);
 - **Prices** — the symmetric city-pair matrix with manual pair editing and a
   «Рассчитать автоматически» button;
 - **Orders** — the order table with passenger, route, prices and the assigned

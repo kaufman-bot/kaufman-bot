@@ -474,6 +474,10 @@ export type ChatStreamEventDto = {
      */
     operatorEmail: string | null;
     /**
+     * True when the event updates an existing bot message in place (plugin edit-in-place) instead of appending a new message; consumers replace the bubble content by messageId
+     */
+    edited: boolean;
+    /**
      * Snapshot of the message this reply quotes (null when the reply was sent without quoting a message)
      */
     replyTo: MessageQuoteDto | null;
@@ -586,6 +590,10 @@ export type MockBotStreamEventDto = {
      * Email of the console operator who sent a BOT reply (null when none)
      */
     operatorEmail: string | null;
+    /**
+     * True when the event updates an existing bot message in place (plugin edit-in-place) instead of appending a new message; the console replaces the row content by messageId
+     */
+    edited: boolean;
     /**
      * Snapshot of the message this reply quotes (null when the reply was sent without quoting a message)
      */

@@ -327,7 +327,8 @@ e2e-тесты (ActivityHelper поверх SDK)
   `BotPlugin { name; handlesCallbacks?; canHandle(content, kind); handle({user, content, kind}) }`
   — [`backend/src/plugins/bot-plugin.interface.ts`](../backend/src/plugins/bot-plugin.interface.ts).
   Ответ — `BotPluginReply` (`string` или `{ text, buttons }`, когда ответ несёт
-  inline-клавиатуру).
+  inline-клавиатуру; объектная форма может нести `editLast: true` —
+  «обнови последнее BOT-сообщение вместо добавления нового»).
 - `kind` (`BotPluginSourceKind` = `TEXT` / `BUTTON`) различает набранный текст
   и payload нажатой кнопки. Нажатия доходят **только** до плагинов, объявивших
   `handlesCallbacks = true`; иначе диспетчер даже не вызывает `canHandle`,
@@ -352,10 +353,14 @@ PROCESSING)` — cluster-safe захват; `count === 0` → задача уж�
      кнопки — те же `validateButtons`/`normalizeButtons`, что и клавиатуры
      оператора); невалидный ответ = `Logger.error` + закрытая задача **без
      сообщения**, частичных ответов не бывает;
-   - валидный → `$transaction`: `message.create(senderRole=BOT, content,
-buttons)` + `botPluginTask.updateMany(PROCESSING → DONE)`.
+   - валидный → `$transaction` + `botPluginTask.updateMany(PROCESSING → DONE)`;
+     тело транзакции зависит от `editLast`: без него — `message.create(
+senderRole=BOT, content, buttons)`, с ним — обновление последнего
+     `BOT`-сообщения диалога (новые `content` + снимок `buttons`), цели нет —
+     фолбэк `message.create`.
 5. `chatEvents.publish(ChatEvent)` — та же шина, что у `MockBotService.replyAsBot`;
-   в событие кладутся и `buttons` ответа.
+   в событие кладутся и `buttons` ответа; правка несёт `edited: true` и
+   `messageId` переписанной строки.
 6. `processPendingTask` восстанавливает `kind` из `message.kind`
    (`BUTTON → 'BUTTON'`), поэтому sweep приводит к тому же плагину, что и
    живой путь.
@@ -428,7 +433,14 @@ recovery-sweep), поэтому HTTP-отклик нажатия остаётс�
 Кнопки `taxi:from/to/slot/pax/svc/done/confirm/cancel` ведут черновик; шаги
 1–5 пагинируются по 8 пунктов (`taxi:page:<n>` с клэмпом страниц,
 `taxi:svc:<id>:<page>` несёт страницу toggle-а) — словарь любого размера
-укладывается в лимит `MAX_BUTTONS = 12`. Подтверждение одной транзакцией
+укладывается в лимит `MAX_BUTTONS = 12`. Навигационные ветки (шаги, страницы,
+toggle услуг, «Готово») возвращают `editLast: true` — визард живёт одним
+переписываемым «пузырём» (SSE-события несут `edited`/`messageId`), терминальные
+реплики (отказы, «визард не активен», `taxi:cancel`) приходят новыми
+сообщениями; на шагах ≥ 2 рисуется «Назад»: страница > 1 — предыдущая порция
+(`taxi:page:<n-1>`), страница 1 — `taxi:back` с откатом `draftStep` на шаг
+назад (поля сохраняются, повторный выбор сбрасывает нижестоящие).
+Подтверждение одной транзакцией
 считает цену пары (`TaxiPriceMatrixService.pairPrice`), наценки услуг и
 подбирает машину (`TaxiCarAssignmentService.findFreeCar`, design D11): нет
 цены или свободной машины — отказ-реплика с сохранением черновика (после
@@ -451,6 +463,9 @@ recovery-sweep), поэтому HTTP-отклик нажатия остаётс�
 - `ChatEvent` несёт канальный снимок (`channel`/`botName`/`operatorEmail`),
   поэтому оба SSE-потока (`/chat` и `/mock-bot`) рендерят бейджи без
   дополнительного запроса.
+- Правка (`editLast`) публикуется тем же `ChatEvent` с `edited: true` и
+  `messageId` обновлённой строки — `/chat` и `/mock-bot` заменяют существующий
+  пузырь вместо добавления нового.
 - Клиент фронта — `EventSource` с `?apiKey=` (query-параметр разрешён
   `ApiKeyGuard`-ом; сам заголовок EventSource выставить не может).
 - При `es.onopen` выставляется флаг `reconnected` и фронт **перезагружает
@@ -484,6 +499,9 @@ recovery-sweep), поэтому HTTP-отклик нажатия остаётс�
 - Текст + `buttons` (из `ChatEvent`) → `TelegramSender.sendMessage`; кнопки с
   `callbackData` > 64 **байт** в разметку не кладутся (лимит Telegram), чтобы
   `sendMessage` не получил `400`.
+- Правки (`ChatEvent` с `edited: true`) доставляются через `editMessageText`
+  по сохранённому `telegramMessageId` BOT-строки; без id или при отказе
+  Telegram — фолбэк новым сообщением с обратной записью нового id.
 - Реестр `TelegramSender` (grammy `Bot` per bot id) кешируется; при смене
   токена (`invalidateSender`) пересоздаётся.
 
@@ -549,13 +567,13 @@ Jest-тесты компонентов, Playwright-e2e — см. [`testing.md`](
 
 ## 11. Тестовый контур (краткий обзор)
 
-- **Backend unit** (`vitest`) — `backend/src/**/*.spec.ts`; 329 тестов на
+- **Backend unit** (`vitest`) — `backend/src/**/*.spec.ts`; 345 тестов на
   момент написания документа.
 - **Backend e2e** — `backend/test/*.e2e-spec.ts` против **живого** бэкенда
-  через сгенерированный OpenAPI SDK. 159 тестов (15 файлов), без
+  через сгенерированный OpenAPI SDK. 161 тест (15 файлов), без
   `Test.createTestingModule`; файлы идут строго друг за другом
   (`fileParallelism: false` — общая dev-БД и пересекающиеся домены).
-- **Frontend unit** — Jest + `jest-preset-angular`; 179 тестов.
+- **Frontend unit** — Jest + `jest-preset-angular`; 187 тестов.
 - **Frontend e2e** — Playwright против прод-стека (`start:prod`) или dev
   (`:4200`);详见 [`testing.md`](testing.md).
 

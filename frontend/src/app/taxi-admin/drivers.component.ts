@@ -1,5 +1,13 @@
 import { CommonModule } from '@angular/common';
-import { Component, computed, inject, OnInit, signal } from '@angular/core';
+import {
+  Component,
+  computed,
+  ElementRef,
+  inject,
+  OnInit,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import type { TaxiCarDto, TaxiDriverDto } from './taxi.service';
 import { TaxiService } from './taxi.service';
@@ -112,8 +120,15 @@ const pageStyles = [
     }
 
     .driver-card h2 {
-      margin: 0 0 0.25rem;
+      margin: 0;
       font-size: 1.125rem;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 0.75rem;
     }
 
     .driver-meta {
@@ -140,8 +155,10 @@ const pageStyles = [
 /**
  * Admin page of taxi drivers with their nested cars (design D8): driver
  * cards each carrying a car table, an inline add-car form (seats + car-
- * feature checkboxes) and deletion with confirmation. Car-feature services
- * come from the services dictionary (`isCarFeature`), matching design D11.
+ * feature checkboxes) and deletion with confirmation. The card header
+ * carries the «Изменить»/«Удалить» buttons (design D14): «Изменить» prefills
+ * the bottom form and scrolls to it. Car-feature services come from the
+ * services dictionary (`isCarFeature`), matching design D11.
  */
 @Component({
   selector: 'app-taxi-drivers',
@@ -163,7 +180,21 @@ const pageStyles = [
 
     @for (driver of service.drivers(); track driver.id) {
       <section class="driver-card">
-        <h2>{{ driver.fullName }}</h2>
+        <div class="card-header">
+          <h2>{{ driver.fullName }}</h2>
+          <div class="row-actions">
+            <button type="button" class="link" (click)="onDriverEdit(driver)">
+              Изменить
+            </button>
+            <button
+              type="button"
+              class="link danger"
+              (click)="onDriverDelete(driver)"
+            >
+              Удалить
+            </button>
+          </div>
+        </div>
         <p class="driver-meta">
           {{ driver.phone }} · {{ driver.isActive ? 'активен' : 'скрыт' }} ·
           машин: {{ driver.cars.length }}
@@ -313,7 +344,7 @@ const pageStyles = [
       <p class="form-error">{{ carDeleteError() }}</p>
     }
 
-    <form class="entity-form" (ngSubmit)="onDriverSubmit()">
+    <form #driverForm class="entity-form" (ngSubmit)="onDriverSubmit()">
       <h3>
         {{ editingDriverId() ? 'Редактировать водителя' : 'Новый водитель' }}
       </h3>
@@ -373,6 +404,10 @@ const pageStyles = [
 })
 export class TaxiDriversComponent implements OnInit {
   readonly service = inject(TaxiService);
+
+  /** Bottom edit-form anchor the card's «Изменить» button scrolls to (D14). */
+  readonly driverFormEl =
+    viewChild.required<ElementRef<HTMLFormElement>>('driverForm');
 
   /* ----------------------------- driver form ------------------------------ */
 
@@ -479,6 +514,11 @@ export class TaxiDriversComponent implements OnInit {
     this.driverFormError.set(null);
     this.driverDeleteError.set(null);
     this.driverSubmitAttempted.set(false);
+    // The form sits at the bottom of the page: bring it into view (D14).
+    this.driverFormEl().nativeElement.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start',
+    });
   }
 
   resetDriverForm(): void {

@@ -90,7 +90,7 @@ Reactions to user chat messages live in pluggable services (`backend/src/plugins
 
 `kind` is `TEXT` for a typed message and `BUTTON` for a pressed button (its `callbackData` arrives as `content`).
 
-When a user sends a chat message or presses a button, `ChatService` hands it to the plugin dispatcher (`BotPluginsService`): the first plugin whose `canHandle` matches produces the reply, which is persisted as a `BOT` message and delivered over the chat SSE stream like any other bot reply. Buttons of a reply are validated with the same rules as operator keyboards (`validateButtons` / `normalizeButtons`) and stored as an immutable snapshot on the message row; an invalid reply is logged and sends nothing. A plugin failure never fails the user's own message; plugin order in `AppModule` is the dispatch priority.
+When a user sends a chat message or presses a button, `ChatService` hands it to the plugin dispatcher (`BotPluginsService`): the first plugin whose `canHandle` matches produces the reply, which is persisted as a `BOT` message and delivered over the chat SSE stream like any other bot reply. A reply object may set `editLast: true`: the dispatcher then rewrites the conversation's latest `BOT` message in place (new text + buttons snapshot) instead of appending a row — falling back to a new message when there is nothing to update — and the chat DTOs / SSE events flag such updates with `edited: true` plus the updated row's `messageId`. Buttons of a reply are validated with the same rules as operator keyboards (`validateButtons` / `normalizeButtons`) and stored as an immutable snapshot on the message row; an invalid reply is logged and sends nothing. A plugin failure never fails the user's own message; plugin order in `AppModule` is the dispatch priority.
 
 Built-in plugins:
 
@@ -289,6 +289,8 @@ On **Confirm** the plugin computes the route price from the price matrix, adds s
 
 `taxi:cancel` deletes the draft; stale payloads (draft gone or already submitted) answer with the "wizard is not active" reply instead of throwing.
 
+**Edit-in-place and «Back».** Step transitions, page navigation, service toggles and «Done» return replies with `editLast: true`, so the whole wizard lives in a single bot bubble that is rewritten as the user walks through it; clients replace the bubble instead of adding one (`edited` + `messageId` on the SSE event). Terminal replies — both refusals, "wizard is not active", `taxi:cancel` — and a fresh `/taxi` still arrive as **new** messages. Delivered to Telegram, an edit goes through `editMessageText` on the stored `message_id` of that bot row (fallback: a fresh message). Every page of steps ≥ 2 also carries «Back»: on a page > 1 it shows the previous portion (`taxi:page:<n-1>`), on page 1 it rolls the draft back one step (`taxi:back`) keeping the saved fields; re-picking a value at any step clears everything below it (a new departure clears destination/slot/passengers/services, a new destination clears slot/passengers/services, a new slot clears passengers/services, a new passenger count clears services). Step 1 renders no «Back».
+
 ### Car auto-assignment
 
 `TaxiCarAssignmentService.findFreeCar` picks the car for a confirmed order:
@@ -303,7 +305,7 @@ On **Confirm** the plugin computes the route price from the price matrix, adds s
 
 `SeedService` seeds the default taxi dictionaries on startup **only when the table is empty** (7 cities with kilometrage, 9 extra services, 4 departure slots, passenger options 1–4): a restart never duplicates or rewrites rows, and admin edits survive. E2E specs use the seeds read-only.
 
-Unit tests live next to the services and the plugin; e2e coverage is split into `backend/test/taxi-admin.e2e-spec.ts` (admin CRUD, matrix auto-calc, orders) and `backend/test/taxi-wizard.e2e-spec.ts` (SSE/history delivery, draft resume, both refusals, the busy/free assignment cycle).
+Unit tests live next to the services and the plugin; e2e coverage is split into `backend/test/taxi-admin.e2e-spec.ts` (admin CRUD, matrix auto-calc, orders) and `backend/test/taxi-wizard.e2e-spec.ts` (SSE/history delivery, draft resume, both refusals, the busy/free assignment cycle, edit-in-place, back navigation).
 
 ## Project setup
 
