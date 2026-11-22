@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
-import { ChatMessageDto } from '../dto/chat.dto.js';
+import { ChatMessageDto, MessageQuoteDto } from '../dto/chat.dto.js';
 import { KeyboardButtonDto } from '../dto/keyboard.dto.js';
 import {
   ConversationSummaryDto,
@@ -18,8 +18,15 @@ import {
   toButtons,
   validateButtons,
 } from '../utils/keyboard-buttons.js';
-import { ChatEvent, ChatEventsService } from './chat-events.service.js';
-import { MessageChannelService } from './message-channel.service.js';
+import {
+  ChatEvent,
+  ChatEventsService,
+  MessageReplySnapshot,
+} from './chat-events.service.js';
+import {
+  deriveDeliveredTo,
+  MessageChannelService,
+} from './message-channel.service.js';
 
 /** Maximum length of a reply content after trimming. */
 const MAX_CONTENT_LENGTH = 4000;
@@ -113,6 +120,9 @@ export class MockBotService {
       include: {
         messages: {
           orderBy: { createdAt: 'asc' },
+          include: {
+            replyTo: { select: { id: true, senderRole: true, content: true } },
+          },
         },
       },
     });
@@ -131,21 +141,7 @@ export class MockBotService {
       data: { readAt: new Date() },
     });
 
-    return conversation.messages.map(
-      (msg) =>
-        new ChatMessageDto({
-          id: msg.id,
-          conversationId: msg.conversationId,
-          senderRole: msg.senderRole as 'USER' | 'BOT',
-          content: msg.content,
-          buttons: toButtons(msg.buttons),
-          channel: msg.channel ?? null,
-          botName: msg.botName ?? null,
-          operatorEmail: msg.operatorEmail ?? null,
-          readAt: msg.readAt?.toISOString() ?? null,
-          createdAt: msg.createdAt.toISOString(),
-        }),
-    );
+    return conversation.messages.map((msg) => this.toMessageDto(msg));
   }
 
   /**
@@ -160,15 +156,23 @@ export class MockBotService {
    * edits or deletion of the source preset never rewrite this row.
    *
    * `operatorEmail` is the admin who sent the reply from the console; it is
-   * persisted as the reply's identity snapshot (design D2). The delivery
-   * channel is resolved through `MessageChannelService`, the same gate the
-   * Telegram bridge uses, so the snapshot matches the actual delivery.
+   * persisted as the reply's identity snapshot (design D2).
+   *
+   * `replyToMessageId` (design D1/D3) links the reply to a USER message of
+   * this conversation — validated before anything is written (missing,
+   * foreign-conversation or non-USER targets raise 400 and never create an
+   * empty conversation as a side effect). The delivery context is the
+   * channel of the message the reply responds to: the quoted target for a
+   * quoted reply, the last USER message for a plain reply, the binding
+   * itself when there is none; the bridge suppresses Telegram forwarding
+   * for non-Telegram contexts.
    */
   async replyAsBot(
     userId: string,
     content: string | undefined,
     buttons?: KeyboardButtonDto[],
     operatorEmail?: string | null,
+    replyToMessageId?: string | null,
   ): Promise<ChatMessageDto> {
     const trimmed = typeof content === 'string' ? content.trim() : '';
     validateButtons(buttons);
@@ -185,12 +189,71 @@ export class MockBotService {
       );
     }
 
-    // Ensure conversation exists (create lazily if needed)
-    const conversation = await this.prisma.conversation.upsert({
+    // Resolve the conversation first: the reply target (if any) must belong
+    // to it, and an invalid target must not leave an empty conversation
+    // behind as a side effect.
+    const existingConversation = await this.prisma.conversation.findUnique({
       where: { userId },
-      update: {},
-      create: { userId },
     });
+
+    // Validate the reply target (design D3): exists, same conversation,
+    // sent by the user — otherwise the reply is rejected before writing.
+    let replyTarget: {
+      id: string;
+      senderRole: MessageSenderRole;
+      content: string;
+      channel: 'WEB' | 'TELEGRAM' | null;
+      telegramMessageId: number | null;
+    } | null = null;
+    if (replyToMessageId) {
+      const target = await this.prisma.message.findUnique({
+        where: { id: replyToMessageId },
+      });
+      if (
+        !target ||
+        !existingConversation ||
+        target.conversationId !== existingConversation.id ||
+        target.senderRole !== MessageSenderRole.USER
+      ) {
+        throw new BadRequestException(
+          'Reply target must be an existing USER message of this conversation',
+        );
+      }
+      replyTarget = {
+        id: target.id,
+        senderRole: target.senderRole,
+        content: target.content,
+        channel: target.channel ?? null,
+        telegramMessageId: target.telegramMessageId ?? null,
+      };
+    }
+
+    // Ensure conversation exists (create lazily if needed)
+    const conversation =
+      existingConversation ??
+      (await this.prisma.conversation.upsert({
+        where: { userId },
+        update: {},
+        create: { userId },
+      }));
+
+    // Delivery context (design D3): a quoted reply follows the target's
+    // channel; a plain reply follows the conversation's last USER message;
+    // with no user messages at all the binding itself is the context (null).
+    let contextChannel: 'WEB' | 'TELEGRAM' | null = null;
+    if (replyTarget) {
+      contextChannel = replyTarget.channel;
+    } else {
+      const lastUserMessage = await this.prisma.message.findFirst({
+        where: {
+          conversationId: conversation.id,
+          senderRole: MessageSenderRole.USER,
+        },
+        orderBy: { createdAt: 'desc' },
+        select: { channel: true },
+      });
+      contextChannel = lastUserMessage?.channel ?? null;
+    }
 
     // Where this reply actually lands at write time (same gate as the
     // Telegram bridge), plus who sent it — design D2 snapshots.
@@ -198,7 +261,10 @@ export class MockBotService {
       where: { id: userId },
       select: { telegramBotId: true, telegramChatId: true },
     });
-    const delivery = await this.messageChannel.resolveDelivery(owner);
+    const delivery = await this.messageChannel.resolveDelivery(
+      contextChannel,
+      owner,
+    );
 
     const message = await this.prisma.message.create({
       data: {
@@ -212,6 +278,7 @@ export class MockBotService {
         channel: delivery.channel,
         botName: delivery.botName,
         operatorEmail: operatorEmail ?? null,
+        replyToId: replyTarget ? replyTarget.id : undefined,
       },
     });
 
@@ -225,12 +292,25 @@ export class MockBotService {
       channel: message.channel ?? null,
       botName: message.botName ?? null,
       operatorEmail: message.operatorEmail ?? null,
+      replyTo: replyTarget
+        ? new MessageQuoteDto({
+            id: replyTarget.id,
+            senderRole: replyTarget.senderRole as 'USER' | 'BOT',
+            content: replyTarget.content,
+          })
+        : null,
+      deliveredTo: deriveDeliveredTo(
+        message.channel ?? null,
+        message.senderRole as 'USER' | 'BOT',
+      ),
       readAt: message.readAt?.toISOString() ?? null,
       createdAt: message.createdAt.toISOString(),
     });
 
     // Publish event for real-time delivery (kind=TEXT: this is a normal
-    // bot reply, visible to both the operator console and the user).
+    // bot reply, visible to both the operator console and the user). The
+    // event carries the full reply snapshot (design D2): the bridge needs
+    // the target's Telegram message_id to send `reply_to_message_id`.
     const event: ChatEvent = {
       conversationId: conversation.id,
       messageId: message.id,
@@ -242,6 +322,7 @@ export class MockBotService {
       channel: message.channel ?? null,
       botName: message.botName ?? null,
       operatorEmail: message.operatorEmail ?? null,
+      replyTo: replyTarget ? this.toReplySnapshot(replyTarget) : null,
     };
     this.chatEvents.publish(event);
 
@@ -270,7 +351,78 @@ export class MockBotService {
       channel: event.channel ?? null,
       botName: event.botName ?? null,
       operatorEmail: event.operatorEmail ?? null,
+      replyTo: event.replyTo ? this.toQuoteDto(event.replyTo) : null,
+      deliveredTo: deriveDeliveredTo(event.channel ?? null, event.senderRole),
       createdAt: event.createdAt,
+    });
+  }
+
+  /** Full snapshot of the quoted message, as carried on a chat event. */
+  private toReplySnapshot(target: {
+    id: string;
+    senderRole: MessageSenderRole;
+    content: string;
+    channel: 'WEB' | 'TELEGRAM' | null;
+    telegramMessageId: number | null;
+  }): MessageReplySnapshot {
+    return {
+      id: target.id,
+      senderRole: target.senderRole as 'USER' | 'BOT',
+      content: target.content,
+      channel: target.channel ?? null,
+      telegramMessageId: target.telegramMessageId ?? null,
+    };
+  }
+
+  /** User-facing subset of the reply snapshot exposed in DTOs. */
+  private toQuoteDto(replyTo: MessageReplySnapshot): MessageQuoteDto {
+    return new MessageQuoteDto({
+      id: replyTo.id,
+      senderRole: replyTo.senderRole,
+      content: replyTo.content,
+    });
+  }
+
+  /** Maps a persisted message row (with its joined replyTo) to the DTO. */
+  private toMessageDto(msg: {
+    id: string;
+    conversationId: string;
+    senderRole: MessageSenderRole;
+    content: string;
+    buttons?: unknown;
+    channel?: 'WEB' | 'TELEGRAM' | null;
+    botName?: string | null;
+    operatorEmail?: string | null;
+    readAt: Date | null;
+    createdAt: Date;
+    replyTo?: {
+      id: string;
+      senderRole: MessageSenderRole;
+      content: string;
+    } | null;
+  }): ChatMessageDto {
+    return new ChatMessageDto({
+      id: msg.id,
+      conversationId: msg.conversationId,
+      senderRole: msg.senderRole as 'USER' | 'BOT',
+      content: msg.content,
+      buttons: toButtons(msg.buttons),
+      channel: msg.channel ?? null,
+      botName: msg.botName ?? null,
+      operatorEmail: msg.operatorEmail ?? null,
+      replyTo: msg.replyTo
+        ? new MessageQuoteDto({
+            id: msg.replyTo.id,
+            senderRole: msg.replyTo.senderRole as 'USER' | 'BOT',
+            content: msg.replyTo.content,
+          })
+        : null,
+      deliveredTo: deriveDeliveredTo(
+        msg.channel ?? null,
+        msg.senderRole as 'USER' | 'BOT',
+      ),
+      readAt: msg.readAt?.toISOString() ?? null,
+      createdAt: msg.createdAt.toISOString(),
     });
   }
 

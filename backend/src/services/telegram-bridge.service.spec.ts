@@ -1,4 +1,5 @@
 import { Subject } from 'rxjs';
+import type { Mock } from 'vitest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TelegramSender } from '../interfaces/telegram-sender.interface.js';
 import type { PrismaService } from '../prisma/prisma.service.js';
@@ -21,7 +22,7 @@ const makePrismaMock = () => ({
   },
 });
 
-const makeSenderMock = (): TelegramSender => ({
+const makeSenderMock = (): TelegramSender & { sendMessage: Mock } => ({
   sendMessage: vi.fn().mockResolvedValue(undefined),
   answerCallbackQuery: vi.fn().mockResolvedValue(undefined),
 });
@@ -48,7 +49,7 @@ describe('TelegramBridgeService', () => {
     submitButtonCallback: ReturnType<typeof vi.fn>;
   };
   let bindingMock: { consumeToken: ReturnType<typeof vi.fn> };
-  let senderMock: TelegramSender;
+  let senderMock: TelegramSender & { sendMessage: Mock };
   let service: TelegramBridgeService;
 
   beforeEach(() => {
@@ -91,7 +92,7 @@ describe('TelegramBridgeService', () => {
     });
 
     it('forwards BOT message to Telegram when user is bound and bot is active', async () => {
-      subject.next(makeChatEvent({ content: 'Hi there' }));
+      subject.next(makeChatEvent({ content: 'Hi there', channel: 'TELEGRAM' }));
       // Allow microtask to resolve.
       await new Promise((r) => setImmediate(r));
 
@@ -102,12 +103,107 @@ describe('TelegramBridgeService', () => {
       );
     });
 
+    it('does NOT forward events whose channel snapshot is not TELEGRAM', async () => {
+      // WEB snapshot (operator reply to a web target) and legacy null
+      // snapshots both stay web-only (design D3).
+      subject.next(makeChatEvent({ channel: 'WEB' }));
+      await new Promise((r) => setImmediate(r));
+      subject.next(makeChatEvent({ channel: null }));
+      await new Promise((r) => setImmediate(r));
+
+      expect(senderMock.sendMessage).not.toHaveBeenCalled();
+      // The gate runs before any lookup.
+      expect(prismaMock.conversation.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('forwards a reply with reply_to_message_id when the quoted target has a telegramMessageId snapshot', async () => {
+      subject.next(
+        makeChatEvent({
+          channel: 'TELEGRAM',
+          replyTo: {
+            id: 'msg-u1',
+            senderRole: 'USER',
+            content: 'question',
+            channel: 'TELEGRAM',
+            telegramMessageId: 42,
+          },
+        }),
+      );
+      await new Promise((r) => setImmediate(r));
+
+      expect(senderMock.sendMessage).toHaveBeenCalledWith(
+        '999',
+        'Hello from bot',
+        undefined,
+        42,
+      );
+    });
+
+    it('omits reply_to_message_id when the quoted target has no telegramMessageId snapshot', async () => {
+      subject.next(
+        makeChatEvent({
+          channel: 'TELEGRAM',
+          replyTo: {
+            id: 'msg-u1',
+            senderRole: 'USER',
+            content: 'question',
+            channel: 'WEB',
+            telegramMessageId: null,
+          },
+        }),
+      );
+      await new Promise((r) => setImmediate(r));
+
+      expect(senderMock.sendMessage).toHaveBeenCalledWith(
+        '999',
+        'Hello from bot',
+        undefined,
+      );
+    });
+
+    it('retries without reply_to_message_id when Telegram rejects the reply reference', async () => {
+      senderMock.sendMessage
+        .mockRejectedValueOnce(
+          new Error('Bad Request: message to be replied not found'),
+        )
+        .mockResolvedValue(undefined);
+
+      subject.next(
+        makeChatEvent({
+          channel: 'TELEGRAM',
+          replyTo: {
+            id: 'msg-u1',
+            senderRole: 'USER',
+            content: 'question',
+            channel: 'TELEGRAM',
+            telegramMessageId: 42,
+          },
+        }),
+      );
+      await new Promise((r) => setImmediate(r));
+
+      expect(senderMock.sendMessage).toHaveBeenCalledTimes(2);
+      expect(senderMock.sendMessage).toHaveBeenNthCalledWith(
+        1,
+        '999',
+        'Hello from bot',
+        undefined,
+        42,
+      );
+      expect(senderMock.sendMessage).toHaveBeenNthCalledWith(
+        2,
+        '999',
+        'Hello from bot',
+        undefined,
+      );
+    });
+
     it('does NOT forward when telegramBotId is null (mock target)', async () => {
       prismaMock.conversation.findUnique.mockResolvedValue({
         user: { id: 'user-1', telegramBotId: null, telegramChatId: null },
       });
 
-      subject.next(makeChatEvent());
+      subject.next(makeChatEvent({ channel: 'TELEGRAM' }));
       await new Promise((r) => setImmediate(r));
 
       expect(senderMock.sendMessage).not.toHaveBeenCalled();
@@ -120,7 +216,7 @@ describe('TelegramBridgeService', () => {
         botToken: 'fake-token',
       });
 
-      subject.next(makeChatEvent());
+      subject.next(makeChatEvent({ channel: 'TELEGRAM' }));
       await new Promise((r) => setImmediate(r));
 
       expect(senderMock.sendMessage).not.toHaveBeenCalled();
@@ -131,14 +227,14 @@ describe('TelegramBridgeService', () => {
         user: { id: 'user-1', telegramBotId: 'bot-1', telegramChatId: null },
       });
 
-      subject.next(makeChatEvent());
+      subject.next(makeChatEvent({ channel: 'TELEGRAM' }));
       await new Promise((r) => setImmediate(r));
 
       expect(senderMock.sendMessage).not.toHaveBeenCalled();
     });
 
     it('does NOT forward USER messages (only BOT)', async () => {
-      subject.next(makeChatEvent({ senderRole: 'USER' }));
+      subject.next(makeChatEvent({ senderRole: 'USER', channel: 'TELEGRAM' }));
       await new Promise((r) => setImmediate(r));
 
       expect(senderMock.sendMessage).not.toHaveBeenCalled();
@@ -152,7 +248,9 @@ describe('TelegramBridgeService', () => {
         user: { id: 'user-1', telegramBotId: 'bot-1', telegramChatId: '999' },
       });
 
-      subject.next(makeChatEvent({ buttons: [shortBtn, longBtn] }));
+      subject.next(
+        makeChatEvent({ buttons: [shortBtn, longBtn], channel: 'TELEGRAM' }),
+      );
       await new Promise((r) => setImmediate(r));
 
       expect(senderMock.sendMessage).toHaveBeenCalledWith(
@@ -169,7 +267,7 @@ describe('TelegramBridgeService', () => {
         user: { id: 'user-1', telegramBotId: 'bot-1', telegramChatId: '999' },
       });
 
-      subject.next(makeChatEvent({ buttons: [longBtn] }));
+      subject.next(makeChatEvent({ buttons: [longBtn], channel: 'TELEGRAM' }));
       await new Promise((r) => setImmediate(r));
 
       // Empty array after filter → undefined passed (falsy length check).
@@ -274,9 +372,13 @@ describe('TelegramBridgeService', () => {
         prismaMock.user.findFirst.mockResolvedValue(mockUser);
       });
 
-      it('delegates to ChatService.sendMessage', async () => {
+      it('delegates to ChatService.sendMessage with the message_id snapshot', async () => {
         const update = {
-          message: { text: 'hello world', chat: { id: 12345 } },
+          message: {
+            text: 'hello world',
+            chat: { id: 12345 },
+            message_id: 77,
+          },
         } as any;
 
         await service.handleUpdate('bot-1', update, validSecret);
@@ -284,7 +386,11 @@ describe('TelegramBridgeService', () => {
         expect(chatServiceMock.sendMessage).toHaveBeenCalledWith(
           mockUser,
           'hello world',
-          { channel: 'TELEGRAM', botName: 'Kaufman Bot' },
+          {
+            channel: 'TELEGRAM',
+            botName: 'Kaufman Bot',
+            telegramMessageId: 77,
+          },
         );
       });
 
@@ -316,7 +422,7 @@ describe('TelegramBridgeService', () => {
           callback_query: {
             id: 'cq-1',
             data: 'settings:language:ru',
-            message: { chat: { id: 12345 } },
+            message: { chat: { id: 12345 }, message_id: 88 },
             from: { id: 12345 },
           },
         } as any;
@@ -329,7 +435,33 @@ describe('TelegramBridgeService', () => {
           {
             callbackData: 'settings:language:ru',
           },
-          { channel: 'TELEGRAM', botName: 'Kaufman Bot' },
+          {
+            channel: 'TELEGRAM',
+            botName: 'Kaufman Bot',
+            telegramMessageId: 88,
+          },
+        );
+      });
+
+      it('passes a null message_id snapshot when the callback message is unavailable', async () => {
+        const update = {
+          callback_query: {
+            id: 'cq-3',
+            data: 'ping',
+            from: { id: 12345 },
+          },
+        } as any;
+
+        await service.handleUpdate('bot-1', update, validSecret);
+
+        expect(chatServiceMock.submitButtonCallback).toHaveBeenCalledWith(
+          mockUser,
+          { callbackData: 'ping' },
+          {
+            channel: 'TELEGRAM',
+            botName: 'Kaufman Bot',
+            telegramMessageId: null,
+          },
         );
       });
 

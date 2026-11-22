@@ -20,6 +20,12 @@ import { KeyboardButtonDto } from '../dto/keyboard.dto.js';
  * message: for USER events they describe where the user wrote from, for BOT
  * events where the reply was delivered (and which operator replied), see
  * design D2. Null when unknown (e.g. legacy messages).
+ *
+ * `replyTo` is the full snapshot of the message a BOT reply quotes (design
+ * D2): its channel and Telegram message_id let the bridge send the reply
+ * with `reply_to_message_id`. Null/omitted for replies without a quote and
+ * for USER messages; SSE mappers strip it to the {id, senderRole, content}
+ * subset exposed in the DTOs.
  */
 export interface ChatEvent {
   conversationId: string;
@@ -32,6 +38,16 @@ export interface ChatEvent {
   channel?: 'WEB' | 'TELEGRAM' | null;
   botName?: string | null;
   operatorEmail?: string | null;
+  replyTo?: MessageReplySnapshot | null;
+}
+
+/** Full snapshot of the quoted message carried on a BOT reply event. */
+export interface MessageReplySnapshot {
+  id: string;
+  senderRole: 'USER' | 'BOT';
+  content: string;
+  channel: 'WEB' | 'TELEGRAM' | null;
+  telegramMessageId: number | null;
 }
 
 /**

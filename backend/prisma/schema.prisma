@@ -120,40 +120,56 @@ model Conversation {
 }
 
 model Message {
-  id             String            @id @default(cuid())
-  conversationId String
-  senderRole     MessageSenderRole
-  kind           MessageKind       @default(TEXT)
-  content        String
+  id                String            @id @default(cuid())
+  conversationId    String
+  senderRole        MessageSenderRole
+  kind              MessageKind       @default(TEXT)
+  content           String
   /**
    * Immutable snapshot of inline keyboard buttons captured at send time.
    * An array of `{ title, callbackData }`. Kept in the row so later edits
    * or deletion of the source preset never rewrite already-sent messages
    * (Telegram-like semantics). Read-only through `toButtons()`.
    */
-  buttons        Json?
+  buttons           Json?
   /**
    * Channel snapshot at write time: for USER messages — where the user wrote
    * from; for BOT messages — where the reply was delivered (see
    * MessageChannelService, which mirrors the Telegram bridge gate).
    * Null for messages recorded before this snapshot existed.
    */
-  channel        MessageChannel?
+  channel           MessageChannel?
   /**
    * Snapshot of the Telegram bot name for the channel event: the bot that
    * received a USER message or delivered a BOT reply. Null for WEB.
    */
-  botName        String?
+  botName           String?
   /**
    * Snapshot of the console operator's email for BOT replies sent from the
    * mock-bot console; null for plugin auto-replies and all USER messages.
    */
-  operatorEmail  String?
-  readAt         DateTime?
-  createdAt      DateTime          @default(now())
+  operatorEmail     String?
+  /**
+   * Optional reference to the message this reply quotes: an operator reply
+   * sent via the console "Reply" action links the USER message it answers.
+   * A reference, not a copy — the quote snapshot is joined at read time.
+   * The reply itself never disappears; only the quote would (SetNull).
+   */
+  replyToId         String?
+  /**
+   * Snapshot of the Telegram `message_id` for inbound messages received via
+   * the bridge (typed text or button callback). Null for WEB messages and
+   * rows written before the snapshot existed; lets a reply reference the
+   * exact Telegram message (`reply_to_message_id`).
+   */
+  telegramMessageId Int?
+  readAt            DateTime?
+  createdAt         DateTime          @default(now())
 
   conversation Conversation   @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   pluginTask   BotPluginTask?
+  replyTo      Message?       @relation("MessageReply", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies      Message[]      @relation("MessageReply")
 
   @@index([conversationId, createdAt])
   @@map("messages")

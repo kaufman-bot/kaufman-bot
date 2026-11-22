@@ -54,21 +54,36 @@ ng e2e
 
 Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
 
-## Chat UI: channel badges and identity colors
+## Chat UI: badges, quotes and identity colors
 
 Both chat screens render the channel snapshot the API returns on every message
 (`channel`, `botName`, `operatorEmail`) — see the backend
-[README](../backend/README.md#message-channel-snapshot):
+[README](../backend/README.md#message-channel-snapshot). Delivery badges are
+derived from the `deliveredTo` list the API reports on every message:
 
 - **`/chat` (user)** — own messages carry `отправлено из веб-чата` or
-  `отправлено из Telegram · <bot>`; bot replies carry `доставлено в веб-чат` or
-  `доставлено в Telegram · <bot>`. A console reply is signed with the operator
-  email, a plugin reply with `Бот`.
+  `отправлено из Telegram · <bot>`; bot replies show `доставлено в Telegram`
+  only when the reply actually reached Telegram (`deliveredTo` includes
+  `TELEGRAM`) and no delivery badge for web-only replies. A console reply is
+  signed with the operator email, a plugin reply with `Бот`.
 - **`/mock-bot` (operator)** — incoming messages show the source (`из веб-чата`
   / `из Telegram · <bot>`, including pressed buttons), replies show the operator
-  email plus the delivery badge, and the conversation list marks the channel of
-  the last message with a chip (`веб-чат` / `Telegram`).
+  email plus the delivery badge (`доставлено в веб` or
+  `доставлено в веб + Telegram · <bot>` when the bot name is known), and the
+  conversation list marks the channel of the last message with a chip
+  (`веб-чат` / `Telegram`).
 - **Legacy rows** (`channel = null`) render without a badge.
+
+### Replies with a quote
+
+In `/mock-bot` every incoming user message has a **«Ответить»** button (text
+and button-press messages alike). Picking a target shows a quote preview above
+the composer with an **«Отменить»** link; the next reply is sent with
+`replyToMessageId` in the POST body, and the target resets after a successful
+send or when another conversation is opened.
+
+Both screens render the quoted sender and text in a small block above the
+reply content (`replyTo` on the message payload — history and SSE).
 
 Messages are also **color-coded by identity**:
 [`src/app/utils/message-identity.ts`](src/app/utils/message-identity.ts) derives

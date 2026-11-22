@@ -2,13 +2,43 @@ import { ApiExtraModels, ApiProperty } from '@nestjs/swagger';
 import { KeyboardButtonDto } from './keyboard.dto.js';
 
 /**
+ * Snapshot of the message a reply quotes: reference plus the minimal
+ * readable subset (who wrote it and its text). Embedded in message DTOs
+ * and SSE events; null when the reply has no quoted message.
+ */
+export class MessageQuoteDto {
+  @ApiProperty({ description: 'Identifier of the quoted message' })
+  id: string;
+
+  @ApiProperty({
+    description: 'Who sent the quoted message',
+    enum: ['USER', 'BOT'],
+  })
+  senderRole: 'USER' | 'BOT';
+
+  @ApiProperty({ description: 'Text content of the quoted message' })
+  content: string;
+
+  constructor(partial: Partial<MessageQuoteDto>) {
+    Object.assign(this, partial);
+  }
+}
+
+/**
+ * Channels a message was delivered to, derived from the channel snapshot:
+ * USER messages carry the single channel they were written from; BOT
+ * replies carry both WEB and TELEGRAM when the reply also went to Telegram.
+ */
+export type DeliveredTo = Array<'WEB' | 'TELEGRAM'>;
+
+/**
  * Shape of a single chat message returned by the API. The `senderRole`
  * distinguishes user messages from bot replies; `readAt` is null until the
  * opposite side reads the message. `buttons` is either null or the ordered
  * snapshot of inline keyboard buttons captured when the bot message was
  * sent (never mutated by later preset edits).
  */
-@ApiExtraModels(KeyboardButtonDto)
+@ApiExtraModels(KeyboardButtonDto, MessageQuoteDto)
 export class ChatMessageDto {
   @ApiProperty({ description: 'Unique message identifier' })
   id: string;
@@ -66,6 +96,25 @@ export class ChatMessageDto {
   operatorEmail: string | null;
 
   @ApiProperty({
+    description:
+      'Snapshot of the message this reply quotes (null when the reply was ' +
+      'sent without quoting a message)',
+    type: MessageQuoteDto,
+    nullable: true,
+  })
+  replyTo: MessageQuoteDto | null;
+
+  @ApiProperty({
+    description:
+      'Channels the message was delivered to: USER messages carry the ' +
+      'single channel they were written from; BOT replies carry both ' +
+      "'WEB' and 'TELEGRAM' when the reply also went to Telegram",
+    enum: ['WEB', 'TELEGRAM'],
+    isArray: true,
+  })
+  deliveredTo: DeliveredTo;
+
+  @ApiProperty({
     description: 'When the opposite side read the message (null if unread)',
     nullable: true,
     format: 'date-time',
@@ -91,6 +140,12 @@ export class ChatMessageDto {
     }
     if (this.operatorEmail === undefined) {
       this.operatorEmail = null;
+    }
+    if (this.replyTo === undefined) {
+      this.replyTo = null;
+    }
+    if (this.deliveredTo === undefined) {
+      this.deliveredTo = ['WEB'];
     }
   }
 }
@@ -131,7 +186,7 @@ export class ButtonCallbackRequestDto {
  * `kind=BUTTON` are filtered out before reaching the user stream, so
  * `buttons` here is only ever set on BOT messages.
  */
-@ApiExtraModels(KeyboardButtonDto)
+@ApiExtraModels(KeyboardButtonDto, MessageQuoteDto)
 export class ChatStreamEventDto {
   @ApiProperty({ description: 'Unique message identifier' })
   messageId: string;
@@ -183,6 +238,23 @@ export class ChatStreamEventDto {
   operatorEmail: string | null;
 
   @ApiProperty({
+    description:
+      'Snapshot of the message this reply quotes (null when the reply was ' +
+      'sent without quoting a message)',
+    type: MessageQuoteDto,
+    nullable: true,
+  })
+  replyTo: MessageQuoteDto | null;
+
+  @ApiProperty({
+    description:
+      'Channels the message was delivered to (see ChatMessageDto.deliveredTo)',
+    enum: ['WEB', 'TELEGRAM'],
+    isArray: true,
+  })
+  deliveredTo: DeliveredTo;
+
+  @ApiProperty({
     description: 'When the message was created',
     format: 'date-time',
   })
@@ -201,6 +273,12 @@ export class ChatStreamEventDto {
     }
     if (this.operatorEmail === undefined) {
       this.operatorEmail = null;
+    }
+    if (this.replyTo === undefined) {
+      this.replyTo = null;
+    }
+    if (this.deliveredTo === undefined) {
+      this.deliveredTo = ['WEB'];
     }
   }
 }

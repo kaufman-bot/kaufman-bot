@@ -40,7 +40,15 @@ import {
  *     one, and deletes a preset;
  *   - read-only rendering of `msg.buttons` on BOT messages plus plain
  *     rendering of `USER` `kind=BUTTON` callbacks. The console deliberately
- *     does NOT filter those clicks out — an operator must see every press.
+ *     does NOT filter those clicks out — an operator must see every press;
+ *   - a reply mode: the «Ответить» button on every USER message arms a
+ *     `replyTarget`, an indicator above the composer shows the quoted text
+ *     (cancelable, reset on send and on conversation switch), and the next
+ *     reply carries `replyToMessageId` so the backend links it to that
+ *     message;
+ *   - rendering of the `replyTo` quote block above quoted replies and the
+ *     `deliveredTo` delivery badge («веб» / «веб + Telegram», with the bot
+ *     name when the snapshot knows it) — in history and over SSE alike.
  */
 @Component({
   selector: 'app-mock-bot',
@@ -169,6 +177,14 @@ import {
                   [class.bot]="msg.senderRole === 'BOT'"
                 >
                   <span class="sender">{{ senderLabel(msg) }}</span>
+                  @if (msg.replyTo; as quote) {
+                    <div class="quote">
+                      <span class="quote-sender">{{
+                        quote.senderRole === 'USER' ? 'Пользователь' : 'Бот'
+                      }}</span>
+                      <span class="quote-content">{{ quote.content }}</span>
+                    </div>
+                  }
                   <span class="content">{{ msg.content }}</span>
                   @if (
                     msg.senderRole === 'BOT' &&
@@ -183,6 +199,15 @@ import {
                   }
                   @if (channelBadge(msg); as badge) {
                     <span class="channel-badge">{{ badge }}</span>
+                  }
+                  @if (msg.senderRole === 'USER') {
+                    <button
+                      type="button"
+                      class="reply-trigger"
+                      (click)="onStartReply(msg)"
+                    >
+                      Ответить
+                    </button>
                   }
                   <span class="time">{{ formatTime(msg.createdAt) }}</span>
                 </div>
@@ -260,6 +285,15 @@ import {
                 }
               </div>
             </div>
+
+            @if (replyTarget(); as target) {
+              <div class="reply-target">
+                <span class="reply-target-text">{{ target.content }}</span>
+                <button type="button" class="link" (click)="onCancelReply()">
+                  Отменить
+                </button>
+              </div>
+            }
 
             <form class="reply-form" (ngSubmit)="onSendReply()">
               <input
@@ -473,6 +507,57 @@ import {
         opacity: 0.6;
         align-self: flex-end;
       }
+      .quote {
+        border-left: 3px solid rgba(255, 255, 255, 0.6);
+        border-radius: 4px;
+        background: rgba(255, 255, 255, 0.15);
+        padding: 0.25rem 0.5rem;
+        font-size: 0.8rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.1rem;
+      }
+      .quote-sender {
+        font-size: 0.7rem;
+        font-weight: 600;
+        opacity: 0.85;
+      }
+      .quote-content {
+        word-break: break-word;
+      }
+      .reply-trigger {
+        align-self: flex-start;
+        background: none;
+        border: none;
+        color: inherit;
+        opacity: 0.7;
+        cursor: pointer;
+        font-size: 0.75rem;
+        padding: 0;
+        text-decoration: underline;
+      }
+      .reply-trigger:hover {
+        opacity: 1;
+      }
+      .reply-target {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.5rem;
+        border: 1px solid #1976d2;
+        background: #e3f2fd;
+        border-radius: 8px;
+        padding: 0.35rem 0.6rem;
+        margin-top: 0.5rem;
+        font-size: 0.85rem;
+        color: #333;
+      }
+      .reply-target-text {
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
       .composer {
         border: 1px solid #e0e0e0;
         border-radius: 8px;
@@ -621,6 +706,13 @@ export class MockBotComponent implements OnInit, OnDestroy, AfterViewChecked {
    * conversation reload so a stale id never leaks across contexts.
    */
   loadedPresetId = signal<string | null>(null);
+  /**
+   * USER message the next reply will quote. Set by the «Ответить» button,
+   * cleared by the indicator cancel button, after a successful send and
+   * when the operator switches conversations, so a stale reference never
+   * leaks into another dialog.
+   */
+  replyTarget = signal<ConversationMessage | null>(null);
 
   messagesContainer =
     viewChild<ElementRef<HTMLDivElement>>('messagesContainer');
@@ -657,6 +749,8 @@ export class MockBotComponent implements OnInit, OnDestroy, AfterViewChecked {
   }
 
   onSelectConversation(userId: string): void {
+    // Reply mode does not survive a conversation switch.
+    this.replyTarget.set(null);
     this.mockBotService.selectConversation(userId);
     this.shouldScroll = true;
     // Refresh conversations list to update unread counts
@@ -684,6 +778,16 @@ export class MockBotComponent implements OnInit, OnDestroy, AfterViewChecked {
     );
   }
 
+  /** Reply mode: arms the next reply to quote this USER message. */
+  onStartReply(msg: ConversationMessage): void {
+    this.replyTarget.set(msg);
+  }
+
+  /** Reply mode: cancels it — the next reply goes out without a reference. */
+  onCancelReply(): void {
+    this.replyTarget.set(null);
+  }
+
   onSendReply(): void {
     const userId = this.mockBotService.selectedUserId();
     if (!userId || this.sending() || !this.canReply()) return;
@@ -695,28 +799,33 @@ export class MockBotComponent implements OnInit, OnDestroy, AfterViewChecked {
           callbackData: b.callbackData.trim(),
         }))
       : undefined;
+    const replyToMessageId = this.replyTarget()?.id;
 
     this.sending.set(true);
-    this.mockBotService.sendReply(userId, content, buttons).subscribe({
-      next: (msg) => {
-        if (msg) {
-          const current = this.mockBotService.messages();
-          if (!current.find((m) => m.id === msg.id)) {
-            this.mockBotService.messages.set([...current, msg]);
+    this.mockBotService
+      .sendReply(userId, content, buttons, replyToMessageId)
+      .subscribe({
+        next: (msg) => {
+          if (msg) {
+            const current = this.mockBotService.messages();
+            if (!current.find((m) => m.id === msg.id)) {
+              this.mockBotService.messages.set([...current, msg]);
+            }
           }
-        }
-        this.replyText = '';
-        this.draftButtons.set([]);
-        this.sending.set(false);
-        this.shouldScroll = true;
-        this.mockBotService.loadConversations().subscribe((convs) => {
-          this.mockBotService.conversations.set(convs);
-        });
-      },
-      error: () => {
-        this.sending.set(false);
-      },
-    });
+          this.replyText = '';
+          this.draftButtons.set([]);
+          // Reply mode is one-shot: consumed by a successful send.
+          this.replyTarget.set(null);
+          this.sending.set(false);
+          this.shouldScroll = true;
+          this.mockBotService.loadConversations().subscribe((convs) => {
+            this.mockBotService.conversations.set(convs);
+          });
+        },
+        error: () => {
+          this.sending.set(false);
+        },
+      });
   }
 
   getCurrentUserEmail(): string {
@@ -911,6 +1020,8 @@ export class MockBotComponent implements OnInit, OnDestroy, AfterViewChecked {
         channel: event.channel ?? null,
         botName: event.botName ?? null,
         operatorEmail: event.operatorEmail ?? null,
+        replyTo: event.replyTo ?? null,
+        deliveredTo: event.deliveredTo ?? [],
         readAt: null,
         createdAt: event.createdAt,
       };

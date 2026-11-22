@@ -15,6 +15,16 @@ export interface KeyboardButton {
   callbackData: string;
 }
 
+/**
+ * Quote snapshot of the message a BOT reply answers. Matches the backend
+ * `MessageQuoteDto`.
+ */
+export interface MessageQuote {
+  id: string;
+  senderRole: 'USER' | 'BOT';
+  content: string;
+}
+
 export interface ChatMessage {
   id: string;
   conversationId: string;
@@ -36,6 +46,14 @@ export interface ChatMessage {
   botName: string | null;
   /** Email of the console operator who sent a BOT reply (else null). */
   operatorEmail: string | null;
+  /** Quote of the message this reply answers (null without a target). */
+  replyTo: MessageQuote | null;
+  /**
+   * Transports the message reached: for BOT replies — `WEB` plus
+   * `TELEGRAM` when the Telegram bridge forwarded it, for USER messages
+   * — the single channel it was written from.
+   */
+  deliveredTo: Array<'WEB' | 'TELEGRAM'>;
   readAt: string | null;
   createdAt: string;
 }
@@ -49,6 +67,8 @@ export interface ChatStreamEvent {
   channel: 'WEB' | 'TELEGRAM' | null;
   botName: string | null;
   operatorEmail: string | null;
+  replyTo?: MessageQuote | null;
+  deliveredTo?: Array<'WEB' | 'TELEGRAM'>;
   createdAt: string;
 }
 

@@ -11,6 +11,7 @@ import {
   ButtonCallbackRequestDto,
   ChatMessageDto,
   ChatStreamEventDto,
+  MessageQuoteDto,
 } from '../dto/chat.dto.js';
 import type { Message, User } from '../generated/prisma/client.js';
 import {
@@ -22,7 +23,12 @@ import type { BotPluginSourceKind } from '../plugins/bot-plugin.interface.js';
 import { BotPluginsService } from '../plugins/bot-plugins.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { MAX_CALLBACK_LENGTH, toButtons } from '../utils/keyboard-buttons.js';
-import { ChatEvent, ChatEventsService } from './chat-events.service.js';
+import {
+  ChatEvent,
+  ChatEventsService,
+  MessageReplySnapshot,
+} from './chat-events.service.js';
+import { deriveDeliveredTo } from './message-channel.service.js';
 
 /** Maximum length of a message content after trimming. */
 const MAX_CONTENT_LENGTH = 4000;
@@ -30,10 +36,16 @@ const MAX_CONTENT_LENGTH = 4000;
 /**
  * Transport source of an inbound user message. The web chat is the default;
  * the Telegram bridge passes the bot name so the snapshot records which bot
- * received the message (design D2: USER = source channel).
+ * received the message, plus the Telegram `message_id` so later replies can
+ * reference the exact message (design D1: USER = source channel + snapshot).
  */
 export type MessageSource =
-  { channel: 'WEB' } | { channel: 'TELEGRAM'; botName: string };
+  | { channel: 'WEB' }
+  | {
+      channel: 'TELEGRAM';
+      botName: string;
+      telegramMessageId: number | null;
+    };
 
 /**
  * User-side chat use cases: retrieve conversation history, send messages,
@@ -68,6 +80,9 @@ export class ChatService {
         messages: {
           where: { kind: { not: MessageKind.BUTTON } },
           orderBy: { createdAt: 'asc' },
+          include: {
+            replyTo: { select: { id: true, senderRole: true, content: true } },
+          },
         },
       },
     });
@@ -135,7 +150,14 @@ export class ChatService {
 
     const dto = this.toDto(message);
     this.publishEvent(conversation.id, message, dto.createdAt, 'TEXT');
-    await this.dispatchToPlugins(conversation.id, user, trimmed, message.id);
+    await this.dispatchToPlugins(
+      conversation.id,
+      user,
+      trimmed,
+      message.id,
+      'TEXT',
+      message.channel,
+    );
 
     return dto;
   }
@@ -212,6 +234,7 @@ export class ChatService {
       callbackData,
       message.id,
       'BUTTON',
+      message.channel,
     );
 
     return dtoResult;
@@ -230,6 +253,7 @@ export class ChatService {
     content: string;
     channel: MessageChannel;
     botName: string | null;
+    telegramMessageId: number | null;
   }): Promise<Message> {
     return this.prisma.$transaction(async (tx) => {
       const created = await tx.message.create({ data });
@@ -240,15 +264,25 @@ export class ChatService {
 
   /**
    * Maps the transport source onto the message snapshot columns: the web
-   * chat records `WEB` with no bot, Telegram records the receiving bot name.
+   * chat records `WEB` with no bot, Telegram records the receiving bot name
+   * and the Telegram `message_id` snapshot (null when unavailable).
    */
   private snapshotSource(source: MessageSource): {
     channel: MessageChannel;
     botName: string | null;
+    telegramMessageId: number | null;
   } {
     return source.channel === 'TELEGRAM'
-      ? { channel: MessageChannel.TELEGRAM, botName: source.botName }
-      : { channel: MessageChannel.WEB, botName: null };
+      ? {
+          channel: MessageChannel.TELEGRAM,
+          botName: source.botName,
+          telegramMessageId: source.telegramMessageId,
+        }
+      : {
+          channel: MessageChannel.WEB,
+          botName: null,
+          telegramMessageId: null,
+        };
   }
 
   /**
@@ -325,16 +359,20 @@ export class ChatService {
   }
 
   /**
-   * Passes a persisted user message to the plugin dispatcher. A dispatcher
-   * failure (including a failed bot-reply persistence) must never fail the
-   * user's own send: it is logged and the send response stays successful.
+   * Passes a persisted user message to the plugin dispatcher together with
+   * the trigger's channel snapshot (design D3): the plugin reply resolves its
+   * delivery from the channel the trigger arrived from, not from the current
+   * binding. A dispatcher failure (including a failed bot-reply persistence)
+   * must never fail the user's own send: it is logged and the send response
+   * stays successful.
    */
   private async dispatchToPlugins(
     conversationId: string,
     user: User,
     content: string,
     messageId: string,
-    kind: BotPluginSourceKind = 'TEXT',
+    kind: BotPluginSourceKind,
+    contextChannel: 'WEB' | 'TELEGRAM' | null,
   ): Promise<void> {
     try {
       await this.botPlugins.dispatchAndReply(
@@ -343,6 +381,7 @@ export class ChatService {
         content,
         messageId,
         kind,
+        contextChannel,
       );
     } catch (error) {
       this.logger.error(
@@ -364,6 +403,11 @@ export class ChatService {
     channel?: MessageChannel | null;
     botName?: string | null;
     operatorEmail?: string | null;
+    replyTo?: {
+      id: string;
+      senderRole: MessageSenderRole;
+      content: string;
+    } | null;
   }): ChatMessageDto {
     return new ChatMessageDto({
       id: message.id,
@@ -374,6 +418,17 @@ export class ChatService {
       channel: message.channel ?? null,
       botName: message.botName ?? null,
       operatorEmail: message.operatorEmail ?? null,
+      replyTo: message.replyTo
+        ? new MessageQuoteDto({
+            id: message.replyTo.id,
+            senderRole: message.replyTo.senderRole as 'USER' | 'BOT',
+            content: message.replyTo.content,
+          })
+        : null,
+      deliveredTo: deriveDeliveredTo(
+        message.channel ?? null,
+        message.senderRole as 'USER' | 'BOT',
+      ),
       readAt: message.readAt?.toISOString() ?? null,
       createdAt: message.createdAt.toISOString(),
     });
@@ -389,7 +444,18 @@ export class ChatService {
       channel: event.channel ?? null,
       botName: event.botName ?? null,
       operatorEmail: event.operatorEmail ?? null,
+      replyTo: event.replyTo ? this.toQuoteDto(event.replyTo) : null,
+      deliveredTo: deriveDeliveredTo(event.channel ?? null, event.senderRole),
       createdAt: event.createdAt,
+    });
+  }
+
+  /** User-facing subset of the reply snapshot exposed in DTOs. */
+  private toQuoteDto(replyTo: MessageReplySnapshot): MessageQuoteDto {
+    return new MessageQuoteDto({
+      id: replyTo.id,
+      senderRole: replyTo.senderRole,
+      content: replyTo.content,
     });
   }
 

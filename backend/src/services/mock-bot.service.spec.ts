@@ -1,5 +1,6 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { MockBotStreamEventDto } from '../dto/mock-bot.dto.js';
 import { MessageKind, MessageSenderRole } from '../generated/prisma/enums.js';
 import { ChatEventsService } from './chat-events.service.js';
 import type { MessageChannelService } from './message-channel.service.js';
@@ -12,6 +13,8 @@ const makePrismaMock = () => {
   const messageCount = vi.fn();
   const messageCreate = vi.fn();
   const messageUpdateMany = vi.fn();
+  const messageFindUnique = vi.fn();
+  const messageFindFirst = vi.fn();
   const userFindUnique = vi.fn();
 
   return {
@@ -25,6 +28,8 @@ const makePrismaMock = () => {
         count: messageCount,
         create: messageCreate,
         updateMany: messageUpdateMany,
+        findUnique: messageFindUnique,
+        findFirst: messageFindFirst,
       },
       user: { findUnique: userFindUnique },
     },
@@ -34,6 +39,8 @@ const makePrismaMock = () => {
     messageCount,
     messageCreate,
     messageUpdateMany,
+    messageFindUnique,
+    messageFindFirst,
     userFindUnique,
   };
 };
@@ -258,6 +265,60 @@ describe('MockBotService', () => {
       expect(result).toHaveLength(1);
       expect(result[0].content).toBe('ping');
     });
+
+    it('maps replyTo and deliveredTo from the joined rows and channel snapshot', async () => {
+      prismaMock.conversationFindUnique.mockResolvedValue({
+        id: 'conv-1',
+        userId: 'user-1',
+        messages: [
+          {
+            id: 'msg-1',
+            conversationId: 'conv-1',
+            senderRole: MessageSenderRole.USER,
+            kind: MessageKind.TEXT,
+            content: 'question',
+            buttons: null,
+            channel: 'TELEGRAM',
+            botName: 'Kaufman Bot',
+            operatorEmail: null,
+            readAt: null,
+            createdAt: new Date('2024-01-01'),
+          },
+          {
+            id: 'msg-2',
+            conversationId: 'conv-1',
+            senderRole: MessageSenderRole.BOT,
+            kind: MessageKind.TEXT,
+            content: 'answer',
+            buttons: null,
+            channel: 'TELEGRAM',
+            botName: 'Kaufman Bot',
+            operatorEmail: null,
+            readAt: null,
+            createdAt: new Date('2024-01-02'),
+            replyTo: {
+              id: 'msg-1',
+              senderRole: MessageSenderRole.USER,
+              content: 'question',
+            },
+          },
+        ],
+      });
+      prismaMock.messageUpdateMany.mockResolvedValue({ count: 1 });
+
+      const result = await service.getConversationMessages('user-1');
+
+      // USER message: single channel it was written from
+      expect(result[0].deliveredTo).toEqual(['TELEGRAM']);
+      expect(result[0].replyTo).toBeNull();
+      // BOT reply snapshot TELEGRAM means dual delivery + quote subset
+      expect(result[1].deliveredTo).toEqual(['WEB', 'TELEGRAM']);
+      expect(result[1].replyTo).toEqual({
+        id: 'msg-1',
+        senderRole: 'USER',
+        content: 'question',
+      });
+    });
   });
 
   describe('replyAsBot', () => {
@@ -331,6 +392,7 @@ describe('MockBotService', () => {
         channel: null,
         botName: null,
         operatorEmail: null,
+        replyTo: null,
       });
     });
 
@@ -418,6 +480,7 @@ describe('MockBotService', () => {
         channel: null,
         botName: null,
         operatorEmail: null,
+        replyTo: null,
       });
     });
 
@@ -489,7 +552,7 @@ describe('MockBotService', () => {
         'admin@kaufman.bot',
       );
 
-      expect(messageChannelMock.resolveDelivery).toHaveBeenCalledWith({
+      expect(messageChannelMock.resolveDelivery).toHaveBeenCalledWith(null, {
         telegramBotId: 'bot-1',
         telegramChatId: '999',
       });
@@ -504,6 +567,273 @@ describe('MockBotService', () => {
       expect(result.botName).toBe('Kaufman Bot');
       expect(result.operatorEmail).toBe('admin@kaufman.bot');
     });
+
+    it('keeps deliveredTo web-only and replyTo null for a plain reply', async () => {
+      prismaMock.conversationFindUnique.mockResolvedValue(null);
+      prismaMock.conversationUpsert.mockResolvedValue({
+        id: 'conv-1',
+        userId: 'user-1',
+      });
+      prismaMock.messageCreate.mockResolvedValue({
+        id: 'msg-1',
+        conversationId: 'conv-1',
+        senderRole: MessageSenderRole.BOT,
+        kind: MessageKind.TEXT,
+        content: 'Hello',
+        buttons: null,
+        channel: 'WEB',
+        botName: null,
+        operatorEmail: null,
+        readAt: null,
+        createdAt: new Date('2024-01-01'),
+      });
+
+      const result = await service.replyAsBot('user-1', 'Hello');
+
+      expect(result.deliveredTo).toEqual(['WEB']);
+      expect(result.replyTo).toBeNull();
+    });
+
+    describe('quoted replies (replyToMessageId)', () => {
+      const telegramTarget = {
+        id: 'msg-u1',
+        conversationId: 'conv-1',
+        senderRole: MessageSenderRole.USER,
+        kind: MessageKind.TEXT,
+        content: 'user question',
+        channel: 'TELEGRAM',
+        botName: 'Kaufman Bot',
+        operatorEmail: null,
+        readAt: null,
+        createdAt: new Date('2024-01-01'),
+        telegramMessageId: 42,
+      };
+
+      const prepareValidTarget = () => {
+        prismaMock.conversationFindUnique.mockResolvedValue({
+          id: 'conv-1',
+          userId: 'user-1',
+        });
+        prismaMock.messageFindUnique.mockResolvedValue(telegramTarget);
+      };
+
+      it('links the reply to the target and carries the quote snapshot in DTO and event', async () => {
+        prepareValidTarget();
+        messageChannelMock.resolveDelivery.mockResolvedValue({
+          channel: 'TELEGRAM',
+          botName: 'Kaufman Bot',
+        });
+        prismaMock.messageCreate.mockResolvedValue({
+          id: 'msg-bot',
+          conversationId: 'conv-1',
+          senderRole: MessageSenderRole.BOT,
+          kind: MessageKind.TEXT,
+          content: 'answer',
+          buttons: null,
+          channel: 'TELEGRAM',
+          botName: 'Kaufman Bot',
+          operatorEmail: 'op@kaufman.bot',
+          readAt: null,
+          createdAt: new Date('2024-01-02'),
+        });
+
+        const result = await service.replyAsBot(
+          'user-1',
+          'answer',
+          undefined,
+          'op@kaufman.bot',
+          'msg-u1',
+        );
+
+        // Context is the target's channel (design D3)
+        expect(messageChannelMock.resolveDelivery).toHaveBeenCalledWith(
+          'TELEGRAM',
+          { telegramBotId: null, telegramChatId: null },
+        );
+        // Link persisted
+        expect(prismaMock.messageCreate).toHaveBeenCalledWith({
+          data: expect.objectContaining({ replyToId: 'msg-u1' }),
+        });
+        // DTO exposes the quote subset
+        expect(result.replyTo).toEqual({
+          id: 'msg-u1',
+          senderRole: 'USER',
+          content: 'user question',
+        });
+        // Dual delivery is explicit
+        expect(result.deliveredTo).toEqual(['WEB', 'TELEGRAM']);
+        // Event carries the FULL snapshot incl. the Telegram message_id
+        expect(chatEventsMock.publish).toHaveBeenCalledWith(
+          expect.objectContaining({
+            replyTo: {
+              id: 'msg-u1',
+              senderRole: 'USER',
+              content: 'user question',
+              channel: 'TELEGRAM',
+              telegramMessageId: 42,
+            },
+          }),
+        );
+      });
+
+      it('rejects a missing target with 400 and writes nothing', async () => {
+        prismaMock.conversationFindUnique.mockResolvedValue({
+          id: 'conv-1',
+          userId: 'user-1',
+        });
+        prismaMock.messageFindUnique.mockResolvedValue(null);
+
+        await expect(
+          service.replyAsBot('user-1', 'answer', undefined, null, 'msg-nope'),
+        ).rejects.toThrow(BadRequestException);
+        expect(prismaMock.messageCreate).not.toHaveBeenCalled();
+        expect(prismaMock.conversationUpsert).not.toHaveBeenCalled();
+        expect(chatEventsMock.publish).not.toHaveBeenCalled();
+      });
+
+      it('rejects a target from another conversation with 400', async () => {
+        prismaMock.conversationFindUnique.mockResolvedValue({
+          id: 'conv-1',
+          userId: 'user-1',
+        });
+        prismaMock.messageFindUnique.mockResolvedValue({
+          ...telegramTarget,
+          conversationId: 'conv-other',
+        });
+
+        await expect(
+          service.replyAsBot('user-1', 'answer', undefined, null, 'msg-u1'),
+        ).rejects.toThrow(BadRequestException);
+        expect(prismaMock.messageCreate).not.toHaveBeenCalled();
+      });
+
+      it('rejects a BOT target with 400', async () => {
+        prismaMock.conversationFindUnique.mockResolvedValue({
+          id: 'conv-1',
+          userId: 'user-1',
+        });
+        prismaMock.messageFindUnique.mockResolvedValue({
+          ...telegramTarget,
+          senderRole: MessageSenderRole.BOT,
+        });
+
+        await expect(
+          service.replyAsBot('user-1', 'answer', undefined, null, 'msg-u1'),
+        ).rejects.toThrow(BadRequestException);
+        expect(prismaMock.messageCreate).not.toHaveBeenCalled();
+      });
+
+      it('rejects a target when the conversation does not exist yet', async () => {
+        prismaMock.conversationFindUnique.mockResolvedValue(null);
+        prismaMock.messageFindUnique.mockResolvedValue(telegramTarget);
+
+        await expect(
+          service.replyAsBot('user-1', 'answer', undefined, null, 'msg-u1'),
+        ).rejects.toThrow(BadRequestException);
+        expect(prismaMock.messageCreate).not.toHaveBeenCalled();
+      });
+
+      it('routes a quoted reply on a WEB target to WEB context even when bound', async () => {
+        prismaMock.conversationFindUnique.mockResolvedValue({
+          id: 'conv-1',
+          userId: 'user-1',
+        });
+        prismaMock.messageFindUnique.mockResolvedValue({
+          ...telegramTarget,
+          channel: 'WEB',
+          botName: null,
+          telegramMessageId: null,
+        });
+        prismaMock.userFindUnique.mockResolvedValue({
+          telegramBotId: 'bot-1',
+          telegramChatId: '999',
+        });
+        prismaMock.messageCreate.mockResolvedValue({
+          id: 'msg-bot',
+          conversationId: 'conv-1',
+          senderRole: MessageSenderRole.BOT,
+          kind: MessageKind.TEXT,
+          content: 'answer',
+          buttons: null,
+          channel: 'WEB',
+          botName: null,
+          operatorEmail: null,
+          readAt: null,
+          createdAt: new Date('2024-01-02'),
+        });
+
+        await service.replyAsBot('user-1', 'answer', undefined, null, 'msg-u1');
+
+        expect(messageChannelMock.resolveDelivery).toHaveBeenCalledWith('WEB', {
+          telegramBotId: 'bot-1',
+          telegramChatId: '999',
+        });
+      });
+    });
+
+    describe('plain reply routing (last USER message channel)', () => {
+      const preparePlainReply = () => {
+        prismaMock.conversationFindUnique.mockResolvedValue({
+          id: 'conv-1',
+          userId: 'user-1',
+        });
+        prismaMock.userFindUnique.mockResolvedValue({
+          telegramBotId: 'bot-1',
+          telegramChatId: '999',
+        });
+        prismaMock.messageCreate.mockResolvedValue({
+          id: 'msg-bot',
+          conversationId: 'conv-1',
+          senderRole: MessageSenderRole.BOT,
+          kind: MessageKind.TEXT,
+          content: 'answer',
+          buttons: null,
+          channel: 'WEB',
+          botName: null,
+          operatorEmail: null,
+          readAt: null,
+          createdAt: new Date('2024-01-02'),
+        });
+      };
+
+      it('uses the WEB context of the last user message even when bound', async () => {
+        preparePlainReply();
+        prismaMock.messageFindFirst.mockResolvedValue({ channel: 'WEB' });
+
+        await service.replyAsBot('user-1', 'answer');
+
+        expect(messageChannelMock.resolveDelivery).toHaveBeenCalledWith('WEB', {
+          telegramBotId: 'bot-1',
+          telegramChatId: '999',
+        });
+      });
+
+      it('uses the TELEGRAM context of the last user message', async () => {
+        preparePlainReply();
+        prismaMock.messageFindFirst.mockResolvedValue({
+          channel: 'TELEGRAM',
+        });
+
+        await service.replyAsBot('user-1', 'answer');
+
+        expect(messageChannelMock.resolveDelivery).toHaveBeenCalledWith(
+          'TELEGRAM',
+          { telegramBotId: 'bot-1', telegramChatId: '999' },
+        );
+      });
+
+      it('falls back to the binding context when the dialogue has no user messages', async () => {
+        preparePlainReply();
+        prismaMock.messageFindFirst.mockResolvedValue(null);
+
+        await service.replyAsBot('user-1', 'answer');
+
+        expect(messageChannelMock.resolveDelivery).toHaveBeenCalledWith(null, {
+          telegramBotId: 'bot-1',
+          telegramChatId: '999',
+        });
+      });
+    });
   });
 
   describe('enrichStreamEventWithUserId', () => {
@@ -513,7 +843,7 @@ describe('MockBotService', () => {
         userId: 'user-1',
       });
 
-      const event = {
+      const event: MockBotStreamEventDto = {
         messageId: 'msg-1',
         conversationId: 'conv-1',
         userId: '',
@@ -523,6 +853,8 @@ describe('MockBotService', () => {
         channel: 'WEB' as const,
         botName: null,
         operatorEmail: null,
+        replyTo: null,
+        deliveredTo: ['WEB'],
         createdAt: new Date().toISOString(),
       };
 
@@ -534,7 +866,7 @@ describe('MockBotService', () => {
     it('should leave userId empty when conversation not found', async () => {
       prismaMock.conversationFindUnique.mockResolvedValue(null);
 
-      const event = {
+      const event: MockBotStreamEventDto = {
         messageId: 'msg-1',
         conversationId: 'conv-1',
         userId: '',
@@ -544,6 +876,8 @@ describe('MockBotService', () => {
         channel: 'WEB' as const,
         botName: null,
         operatorEmail: null,
+        replyTo: null,
+        deliveredTo: ['WEB'],
         createdAt: new Date().toISOString(),
       };
 

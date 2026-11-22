@@ -55,7 +55,7 @@ This project includes a web chat system where users can communicate with a mock 
 
 - `GET /api/v1/mock-bot/conversations` — List all user conversations with unread counts
 - `GET /api/v1/mock-bot/conversations/:userId/messages` — Get messages for a specific user's conversation (the operator sees every message, including `kind: BUTTON` callbacks the user pressed)
-- `POST /api/v1/mock-bot/conversations/:userId/messages` — Reply as bot (body: `{ content?: string, buttons?: KeyboardButtonDto[] }`; at least one of the two must be non-empty, otherwise 400)
+- `POST /api/v1/mock-bot/conversations/:userId/messages` — Reply as bot (body: `{ content?: string, buttons?: KeyboardButtonDto[], replyToMessageId?: string }`; at least one of content/buttons must be non-empty, otherwise 400; `replyToMessageId` must point to a USER message of this conversation — a missing, foreign-conversation or BOT target is rejected with 400)
 - `GET /api/v1/mock-bot/stream` — SSE stream for all conversation events (use `?apiKey=` query param)
 - `GET /api/v1/mock-bot/presets` — List the calling admin's button presets
 - `POST /api/v1/mock-bot/presets` — Create a preset (body: `{ name: string, buttons: KeyboardButtonDto[] }`, 201)
@@ -139,7 +139,20 @@ Validation lives in `backend/src/utils/keyboard-buttons.ts` (`validateButtons`, 
 
 ### Operator reply
 
-`POST /api/v1/mock-bot/conversations/:userId/messages` accepts `{ content?, buttons? }` and is valid as long as **at least one** of them is non-empty after trimming — a buttons-only reply with empty text is allowed (`content` is persisted as `''`). The reply is stored with `kind: TEXT` and the validated `buttons` array; the resulting `ChatEvent` is published to the bus with the same `buttons` payload so the user's SSE stream and the operator's console stream render the keyboard without a refetch.
+`POST /api/v1/mock-bot/conversations/:userId/messages` accepts `{ content?, buttons?, replyToMessageId? }` and is valid as long as **at least one** of content/buttons is non-empty after trimming — a buttons-only reply with empty text is allowed (`content` is persisted as `''`). The reply is stored with `kind: TEXT` and the validated `buttons` array; the resulting `ChatEvent` is published to the bus with the same `buttons` payload so the user's SSE stream and the operator's console stream render the keyboard without a refetch.
+
+With `replyToMessageId` the reply is **linked to a USER message** (self-relation `Message.replyToId`, design D1 — a reference, not a copy; the quote subset `{ id, senderRole, content }` is joined at read time). The target is validated **before** anything is written, so an invalid request never leaves an empty conversation behind. The reply carries the quote in its DTO and SSE event (`replyTo`), and the user's chat renders it as a visual quote above the reply text.
+
+### Reply delivery routing (design D3)
+
+Every bot reply — operator reply with or without a quote, plugin reply — resolves its delivery context from **the message it responds to**:
+
+- **Quoted reply** → the channel of the quoted target message;
+- **Plain operator reply** → the channel of the conversation's last USER message (`findFirst` by `senderRole USER`, newest first);
+- **Plugin reply** → the channel of the message that triggered it (`ChatService.dispatchToPlugins` passes the trigger's snapshot);
+- **No user messages at all** → the active binding itself is the context (previous behavior).
+
+`MessageChannelService.resolveDelivery(contextChannel, owner)` then applies the binding gate: a `TELEGRAM` context + active binding delivers to Telegram (snapshot `TELEGRAM`, meaning **web + Telegram**), anything else stays web-only (`WEB`). The bridge forwards only events whose `channel` snapshot is `TELEGRAM`, so the snapshot and the actual delivery cannot drift apart; a quoted reply to a Telegram target additionally carries `reply_to_message_id` (the target's `telegramMessageId` snapshot) with a one-shot fallback without the parameter if Telegram rejects the reference.
 
 `GET /api/v1/mock-bot/conversations/:userId/messages` always returns every message — TEXT and BUTTON — because the operator needs to see which buttons the user pressed. `GET /api/v1/chat/messages` and `GET /api/v1/chat/stream` do the opposite for the user: `ChatService` filters out `kind: BUTTON` in `getHistory`, and `streamEvents` drops BUTTON events before mapping them to `ChatStreamEventDto` — this is the "no echo" rule.
 
@@ -184,17 +197,36 @@ Semantics:
 - **`channel = null`** — the row predates the snapshot (legacy message); clients render it without a channel badge.
 - **`botName`** — name of the Telegram bot that carried the message, captured at write time; `null` for web-chat-only paths.
 - **`operatorEmail`** — set only on console replies (`POST /api/v1/mock-bot/conversations/:userId/messages`) from the authenticated admin; user messages and plugin replies keep it `null`.
-- **Single delivery resolver** — `MessageChannelService.resolveDelivery(owner)`
+- **Single delivery resolver** — `MessageChannelService.resolveDelivery(contextChannel, owner)`
   ([`src/services/message-channel.service.ts`](src/services/message-channel.service.ts))
   applies the same gate as the outgoing Telegram bridge (`telegramBotId` set,
-  `telegramChatId` non-empty, `bot.isActive`), so a persisted snapshot and an
-  actual bridge delivery cannot drift apart. `MockBotService.replyAsBot` and
-  `BotPluginsService.dispatchAndReply` persist the returned snapshot in the same
-  row as the reply.
+  `telegramChatId` non-empty, `bot.isActive`) **on top of the reply's context
+  channel** (design D3): only a `TELEGRAM` context with an active binding
+  delivers to Telegram; a `WEB` context stays web-only even when bound; a
+  `null` context falls back to the binding. The legacy owner-only form
+  (`resolveDelivery(owner)`) is kept for callers without a message context.
+  `MockBotService.replyAsBot` and `BotPluginsService.dispatchAndReply` persist
+  the returned snapshot in the same row as the reply, and the bridge forwards
+  only events whose snapshot is `TELEGRAM`, so a persisted snapshot and an
+  actual bridge delivery cannot drift apart.
+- **`telegramMessageId`** — snapshot of the Telegram `message_id` on inbound
+  messages received via the bridge (typed text and, when available, button
+  callbacks); `null` for web messages and legacy rows. A quoted reply to such
+  a message is sent with `reply_to_message_id` (native Telegram quote).
+- **`replyToId`** — optional self-relation linking a BOT reply to the USER
+  message it quotes (console "Reply" action); joined at read time as the
+  `replyTo` subset, `SetNull` if the target ever disappears.
+- **`deliveredTo`** — derived (never stored) channels list in
+  `ChatMessageDto`/`ChatStreamEventDto`/`MockBotStreamEventDto`:
+  a USER message carries the single channel it was written from; a BOT reply
+  snapshot of `TELEGRAM` expands to `['WEB', 'TELEGRAM']`, anything else to
+  `['WEB']` (see `deriveDeliveredTo` in `message-channel.service.ts`).
 - **API contract** — `ChatMessageDto`, `ChatStreamEventDto` and
-  `MockBotStreamEventDto` expose `channel`, `botName` and `operatorEmail`;
+  `MockBotStreamEventDto` expose `channel`, `botName`, `operatorEmail`,
+  `replyTo` and `deliveredTo`;
   `ConversationSummaryDto` exposes `lastMessageChannel` for the conversation
-  list preview. All four fields are nullable.
+  list preview. Snapshot fields are nullable; `deliveredTo` always has at
+  least `WEB`.
 
 How the console and the user chat render this snapshot (badges, sender labels,
 identity colors) is described in [`../frontend/README.md`](../frontend/README.md).

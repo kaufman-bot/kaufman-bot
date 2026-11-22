@@ -358,6 +358,21 @@ export type KeyboardButtonDto = {
     callbackData: string;
 };
 
+export type MessageQuoteDto = {
+    /**
+     * Identifier of the quoted message
+     */
+    id: string;
+    /**
+     * Who sent the quoted message
+     */
+    senderRole: 'USER' | 'BOT';
+    /**
+     * Text content of the quoted message
+     */
+    content: string;
+};
+
 export type ChatMessageDto = {
     /**
      * Unique message identifier
@@ -391,6 +406,14 @@ export type ChatMessageDto = {
      * Email of the console operator who sent a BOT reply from the mock-bot console (null for plugin auto-replies and USER messages)
      */
     operatorEmail: string | null;
+    /**
+     * Snapshot of the message this reply quotes (null when the reply was sent without quoting a message)
+     */
+    replyTo: MessageQuoteDto | null;
+    /**
+     * Channels the message was delivered to: USER messages carry the single channel they were written from; BOT replies carry both 'WEB' and 'TELEGRAM' when the reply also went to Telegram
+     */
+    deliveredTo: Array<'WEB' | 'TELEGRAM'>;
     /**
      * When the opposite side read the message (null if unread)
      */
@@ -450,6 +473,14 @@ export type ChatStreamEventDto = {
      * Email of the console operator who sent a BOT reply (null when none)
      */
     operatorEmail: string | null;
+    /**
+     * Snapshot of the message this reply quotes (null when the reply was sent without quoting a message)
+     */
+    replyTo: MessageQuoteDto | null;
+    /**
+     * Channels the message was delivered to (see ChatMessageDto.deliveredTo)
+     */
+    deliveredTo: Array<'WEB' | 'TELEGRAM'>;
     /**
      * When the message was created
      */
@@ -512,6 +543,10 @@ export type MockBotReplyRequestDto = {
      * Optional ordered set of inline keyboard buttons attached to the reply (1..12 items). Required when `content` is empty.
      */
     buttons?: Array<KeyboardButtonDto>;
+    /**
+     * Optional identifier of a USER message of this conversation to reply to (quote). The created reply is linked to that message; a missing, foreign-conversation or non-USER target is rejected with 400.
+     */
+    replyToMessageId?: string;
 };
 
 export type MockBotStreamEventDto = {
@@ -551,6 +586,14 @@ export type MockBotStreamEventDto = {
      * Email of the console operator who sent a BOT reply (null when none)
      */
     operatorEmail: string | null;
+    /**
+     * Snapshot of the message this reply quotes (null when the reply was sent without quoting a message)
+     */
+    replyTo: MessageQuoteDto | null;
+    /**
+     * Channels the message was delivered to (see ChatMessageDto.deliveredTo)
+     */
+    deliveredTo: Array<'WEB' | 'TELEGRAM'>;
     /**
      * When the message was created
      */
@@ -1462,7 +1505,7 @@ export type MockBotControllerReplyAsBotV1Data = {
 
 export type MockBotControllerReplyAsBotV1Errors = {
     /**
-     * Reply is empty (no text and no buttons), text exceeds 4000 characters, or the buttons array fails validation
+     * Reply is empty (no text and no buttons), text exceeds 4000 characters, the buttons array fails validation, or replyToMessageId does not point to a USER message of this conversation
      */
     400: ApiErrorDto;
     /**
@@ -1479,7 +1522,7 @@ export type MockBotControllerReplyAsBotV1Error = MockBotControllerReplyAsBotV1Er
 
 export type MockBotControllerReplyAsBotV1Responses = {
     /**
-     * The persisted bot message with its server-generated fields, including the buttons snapshot when the reply carries a keyboard
+     * The persisted bot message with its server-generated fields, including the buttons snapshot when the reply carries a keyboard and the replyTo snapshot when the reply quotes a user message
      */
     201: ChatMessageDto;
 };

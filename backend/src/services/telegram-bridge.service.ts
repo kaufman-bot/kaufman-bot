@@ -5,6 +5,7 @@ import { Subscription } from 'rxjs';
 import { KeyboardButtonDto } from '../dto/keyboard.dto.js';
 import type { TelegramSender } from '../interfaces/telegram-sender.interface.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import type { ChatEvent } from './chat-events.service.js';
 import { ChatEventsService } from './chat-events.service.js';
 import { ChatService } from './chat.service.js';
 import { TelegramBindingService } from './telegram-binding.service.js';
@@ -17,8 +18,12 @@ const TG_CALLBACK_DATA_MAX_BYTES = 64;
  * Telegram Bot API. Handles both directions:
  *
  * - **Outgoing**: subscribes to `ChatEventsService.streamAll()` and forwards
- *   BOT messages to the appropriate Telegram chat when the user is bound and
- *   the bot is active.
+ *   BOT messages whose channel snapshot is `TELEGRAM` (design D3 — the
+ *   delivery decision is made by `resolveDelivery` when the reply is
+ *   persisted, the bridge only honors the snapshot) to the appropriate
+ *   Telegram chat when the user is bound and the bot is active. A reply
+ *   quoting a Telegram message additionally carries `reply_to_message_id`,
+ *   with a one-shot fallback without the reference when Telegram rejects it.
  * - **Incoming**: processes Telegram updates (text messages, `/start` binding,
  *   callback queries) by delegating to `ChatService` and `TelegramBindingService`.
  *
@@ -48,11 +53,7 @@ export class TelegramBridgeService implements OnApplicationBootstrap {
   onApplicationBootstrap(): void {
     this.subscription = this.chatEvents.streamAll().subscribe((event) => {
       if (event.senderRole === 'BOT') {
-        void this.forwardOutgoing(
-          event.conversationId,
-          event.content,
-          event.buttons,
-        );
+        void this.forwardOutgoing(event);
       }
     });
   }
@@ -61,17 +62,21 @@ export class TelegramBridgeService implements OnApplicationBootstrap {
 
   /**
    * Resolves the conversation → user → bot and sends via the sender. Only
-   * proceeds when the user has a bot target that is active and a non-empty
-   * telegramChatId.
+   * proceeds when the event's channel snapshot is `TELEGRAM` and the user has
+   * a bot target that is active and a non-empty telegramChatId. When the
+   * reply quotes a Telegram message, it is sent with `reply_to_message_id`;
+   * if Telegram rejects the reference, the text is resent once without it
+   * (best effort) so the reply is still delivered.
    */
-  private async forwardOutgoing(
-    conversationId: string,
-    content: string,
-    buttons?: KeyboardButtonDto[] | null,
-  ): Promise<void> {
+  private async forwardOutgoing(event: ChatEvent): Promise<void> {
+    // Delivery gate (design D3): events with any other snapshot (WEB or
+    // legacy null) never reach Telegram, so the persisted snapshot and the
+    // actual delivery cannot drift apart.
+    if (event.channel !== 'TELEGRAM') return;
+
     try {
       const conversation = await this.prisma.conversation.findUnique({
-        where: { id: conversationId },
+        where: { id: event.conversationId },
         select: {
           user: {
             select: { id: true, telegramBotId: true, telegramChatId: true },
@@ -92,17 +97,34 @@ export class TelegramBridgeService implements OnApplicationBootstrap {
       const sender = this.getOrCreateSender(bot.id, bot.botToken);
 
       // Filter out buttons that exceed Telegram's callback_data byte limit.
-      const tgButtons = buttons?.filter(
+      const tgButtons = event.buttons?.filter(
         (b) =>
           Buffer.byteLength(b.callbackData, 'utf-8') <=
           TG_CALLBACK_DATA_MAX_BYTES,
       );
+      const buttons = tgButtons?.length ? tgButtons : undefined;
 
-      await sender.sendMessage(
-        telegramChatId,
-        content,
-        tgButtons?.length ? tgButtons : undefined,
-      );
+      const replyToMessageId = event.replyTo?.telegramMessageId ?? undefined;
+      if (replyToMessageId !== undefined) {
+        try {
+          await sender.sendMessage(
+            telegramChatId,
+            event.content,
+            buttons,
+            replyToMessageId,
+          );
+          return;
+        } catch (err) {
+          // One-shot fallback: Telegram rejects reply_to_message_id when the
+          // referenced message is gone or inaccessible — resend without the
+          // reference so the reply is still delivered (best effort).
+          this.logger.warn(
+            `Outgoing forward with reply_to_message_id failed (${String(err)}); retrying without the reply reference`,
+          );
+        }
+      }
+
+      await sender.sendMessage(telegramChatId, event.content, buttons);
     } catch (err) {
       this.logger.error(`Outgoing forward failed: ${String(err)}`);
     }
@@ -186,7 +208,11 @@ export class TelegramBridgeService implements OnApplicationBootstrap {
 
     const sender = this.getOrCreateSender(botId, botToken);
     await this.chatService
-      .sendMessage(user, text, { channel: 'TELEGRAM', botName })
+      .sendMessage(user, text, {
+        channel: 'TELEGRAM',
+        botName,
+        telegramMessageId: message.message_id,
+      })
       .catch((err) =>
         this.logger.error(`Inbound text dispatch failed: ${String(err)}`),
       );
@@ -216,6 +242,9 @@ export class TelegramBridgeService implements OnApplicationBootstrap {
       .submitButtonCallback(user, { callbackData: data } as any, {
         channel: 'TELEGRAM',
         botName,
+        // Snapshot exists only when the original message is still available
+        // in the update (it may be an inaccessible message).
+        telegramMessageId: cq.message?.message_id ?? null,
       })
       .catch((err) =>
         this.logger.error(`Inbound callback dispatch failed: ${String(err)}`),
@@ -260,6 +289,7 @@ export class TelegramBridgeService implements OnApplicationBootstrap {
         chatId: string,
         text: string,
         buttons?: KeyboardButtonDto[],
+        replyToMessageId?: number,
       ): Promise<void> {
         let reply_markup: InlineKeyboard | undefined;
         if (buttons?.length) {
@@ -268,10 +298,20 @@ export class TelegramBridgeService implements OnApplicationBootstrap {
             reply_markup.text(btn.title, btn.callbackData).row();
           }
         }
+        const options: {
+          reply_markup?: InlineKeyboard;
+          reply_to_message_id?: number;
+        } = {};
+        if (reply_markup) {
+          options.reply_markup = reply_markup;
+        }
+        if (replyToMessageId !== undefined) {
+          options.reply_to_message_id = replyToMessageId;
+        }
         await bot.api.sendMessage(
           chatId,
           text,
-          reply_markup ? { reply_markup } : undefined,
+          Object.keys(options).length ? options : undefined,
         );
       },
       async answerCallbackQuery(callbackQueryId: string): Promise<void> {

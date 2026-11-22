@@ -105,20 +105,22 @@ export class MockBotController {
   @Post('conversations/:userId/messages')
   @ApiOperation({
     summary:
-      'Send a reply on behalf of the bot to a user (optional inline keyboard)',
+      'Send a reply on behalf of the bot to a user (optional inline keyboard, optional quoted reply)',
   })
   @ApiParam({ name: 'userId', description: 'User ID to reply to' })
   @ApiCreatedResponse({
     type: ChatMessageDto,
     description:
       'The persisted bot message with its server-generated fields, ' +
-      'including the buttons snapshot when the reply carries a keyboard',
+      'including the buttons snapshot when the reply carries a keyboard and ' +
+      'the replyTo snapshot when the reply quotes a user message',
   })
   @ApiBadRequestResponse({
     type: ApiErrorDto,
     description:
       'Reply is empty (no text and no buttons), text exceeds 4000 characters, ' +
-      'or the buttons array fails validation',
+      'the buttons array fails validation, or replyToMessageId does not point ' +
+      'to a USER message of this conversation',
   })
   async replyAsBot(
     @Req() req: AuthenticatedRequest,
@@ -131,6 +133,7 @@ export class MockBotController {
       dto.content,
       dto.buttons,
       operator.email,
+      dto.replyToMessageId,
     );
   }
 

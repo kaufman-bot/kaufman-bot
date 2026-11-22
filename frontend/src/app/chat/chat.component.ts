@@ -49,6 +49,14 @@ import {
             [class.bot]="msg.senderRole === 'BOT'"
           >
             <span class="sender">{{ senderLabel(msg) }}</span>
+            @if (msg.replyTo; as quote) {
+              <div class="quote">
+                <span class="quote-sender">{{
+                  quote.senderRole === 'USER' ? 'Пользователь' : 'Бот'
+                }}</span>
+                <span class="quote-content">{{ quote.content }}</span>
+              </div>
+            }
             <span class="content">{{ msg.content }}</span>
             @if (
               msg.senderRole === 'BOT' && msg.buttons && msg.buttons.length
@@ -154,6 +162,24 @@ import {
         opacity: 0.8;
       }
       .content {
+        word-break: break-word;
+      }
+      .quote {
+        border-left: 3px solid rgba(0, 0, 0, 0.25);
+        border-radius: 4px;
+        background: rgba(0, 0, 0, 0.06);
+        padding: 0.25rem 0.5rem;
+        font-size: 0.8rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.1rem;
+      }
+      .quote-sender {
+        font-size: 0.7rem;
+        font-weight: 600;
+        opacity: 0.85;
+      }
+      .quote-content {
         word-break: break-word;
       }
       .channel-badge {
@@ -302,8 +328,9 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
   }
 
   /**
-   * Channel badge under the message (own — sent from, replies — delivered
-   * to); null for messages recorded before the channel snapshot existed.
+   * Channel badge under the message (own — sent from; replies — shown only
+   * when the reply actually reached Telegram, none for web-only ones); null
+   * for messages recorded before the channel snapshot existed.
    */
   channelBadge(msg: ChatMessage): string | null {
     return channelBadgeOf(msg, 'chat');
@@ -335,6 +362,8 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
       channel: event.channel ?? null,
       botName: event.botName ?? null,
       operatorEmail: event.operatorEmail ?? null,
+      replyTo: event.replyTo ?? null,
+      deliveredTo: event.deliveredTo ?? [],
       readAt: null,
       createdAt: event.createdAt,
     };

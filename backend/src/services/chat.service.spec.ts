@@ -176,6 +176,58 @@ describe('ChatService', () => {
         data: { readAt: expect.any(Date) },
       });
     });
+
+    it('maps replyTo and deliveredTo from the joined rows and channel snapshot', async () => {
+      prismaMock.conversationFindUnique.mockResolvedValue({
+        id: 'conv-1',
+        userId: 'user-1',
+        messages: [
+          {
+            id: 'msg-1',
+            conversationId: 'conv-1',
+            senderRole: 'USER',
+            kind: 'TEXT',
+            content: 'question',
+            buttons: null,
+            channel: 'WEB',
+            botName: null,
+            operatorEmail: null,
+            readAt: null,
+            createdAt: new Date('2024-01-01'),
+          },
+          {
+            id: 'msg-2',
+            conversationId: 'conv-1',
+            senderRole: 'BOT',
+            kind: 'TEXT',
+            content: 'answer',
+            buttons: null,
+            channel: 'TELEGRAM',
+            botName: 'Kaufman Bot',
+            operatorEmail: null,
+            readAt: null,
+            createdAt: new Date('2024-01-02'),
+            replyTo: {
+              id: 'msg-1',
+              senderRole: 'USER',
+              content: 'question',
+            },
+          },
+        ],
+      });
+      prismaMock.messageUpdateMany.mockResolvedValue({ count: 0 });
+
+      const result = await service.getHistory(makeUser());
+
+      expect(result[0].deliveredTo).toEqual(['WEB']);
+      expect(result[0].replyTo).toBeNull();
+      expect(result[1].deliveredTo).toEqual(['WEB', 'TELEGRAM']);
+      expect(result[1].replyTo).toEqual({
+        id: 'msg-1',
+        senderRole: 'USER',
+        content: 'question',
+      });
+    });
   });
 
   describe('sendMessage', () => {
@@ -269,6 +321,7 @@ describe('ChatService', () => {
         'Hello',
         'msg-1',
         'TEXT',
+        'WEB',
       );
     });
 
@@ -283,6 +336,7 @@ describe('ChatService', () => {
         senderRole: 'USER',
         kind: 'TEXT',
         content: 'Hello',
+        channel: 'WEB',
         readAt: null,
         createdAt: new Date(),
       });
@@ -295,6 +349,7 @@ describe('ChatService', () => {
         'Hello',
         'msg-1',
         'TEXT',
+        'WEB',
       );
     });
 
@@ -343,6 +398,7 @@ describe('ChatService', () => {
       await service.sendMessage(makeUser(), 'Hello', {
         channel: 'TELEGRAM',
         botName: 'Second Bot',
+        telegramMessageId: 4242,
       });
 
       expect(prismaMock.messageCreate).toHaveBeenCalledWith({
@@ -353,12 +409,71 @@ describe('ChatService', () => {
           content: 'Hello',
           channel: 'TELEGRAM',
           botName: 'Second Bot',
+          telegramMessageId: 4242,
         },
       });
       expect(chatEventsMock.publish).toHaveBeenCalledWith(
         expect.objectContaining({
           channel: 'TELEGRAM',
           botName: 'Second Bot',
+        }),
+      );
+    });
+
+    it('passes the trigger channel snapshot to the plugin dispatcher', async () => {
+      prismaMock.conversationUpsert.mockResolvedValue({
+        id: 'conv-1',
+        userId: 'user-1',
+      });
+      prismaMock.messageCreate.mockResolvedValue({
+        id: 'msg-tg',
+        conversationId: 'conv-1',
+        senderRole: 'USER',
+        kind: 'TEXT',
+        content: 'Hello',
+        channel: 'TELEGRAM',
+        botName: 'Second Bot',
+        operatorEmail: null,
+        readAt: null,
+        createdAt: new Date('2024-01-01'),
+      });
+
+      await service.sendMessage(makeUser(), 'Hello', {
+        channel: 'TELEGRAM',
+        botName: 'Second Bot',
+        telegramMessageId: 4242,
+      });
+
+      expect(botPluginsMock.dispatchAndReply).toHaveBeenCalledWith(
+        'conv-1',
+        expect.anything(),
+        'Hello',
+        'msg-tg',
+        'TEXT',
+        'TELEGRAM',
+      );
+    });
+
+    it('should snapshot telegramMessageId as null for a WEB message', async () => {
+      prismaMock.conversationUpsert.mockResolvedValue({
+        id: 'conv-1',
+        userId: 'user-1',
+      });
+      prismaMock.messageCreate.mockResolvedValue({
+        id: 'msg-web',
+        conversationId: 'conv-1',
+        senderRole: 'USER',
+        kind: 'TEXT',
+        content: 'Hello',
+        readAt: null,
+        createdAt: new Date(),
+      });
+
+      await service.sendMessage(makeUser(), 'Hello');
+
+      expect(prismaMock.messageCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ telegramMessageId: null }),
         }),
       );
     });
@@ -389,6 +504,7 @@ describe('ChatService', () => {
           content: 'Hello',
           channel: 'WEB',
           botName: null,
+          telegramMessageId: null,
         },
       });
     });
@@ -483,6 +599,7 @@ describe('ChatService', () => {
           content: 'settings:language:ru',
           channel: 'WEB',
           botName: null,
+          telegramMessageId: null,
         },
       });
 
@@ -494,6 +611,7 @@ describe('ChatService', () => {
         'settings:language:ru',
         'msg-cb',
         'BUTTON',
+        'WEB',
       );
 
       // Event is published with kind=BUTTON so user-stream filters drop it.
@@ -533,7 +651,7 @@ describe('ChatService', () => {
       await service.submitButtonCallback(
         makeUser(),
         { callbackData: 'ping' },
-        { channel: 'TELEGRAM', botName: 'Second Bot' },
+        { channel: 'TELEGRAM', botName: 'Second Bot', telegramMessageId: 77 },
       );
 
       expect(prismaMock.messageCreate).toHaveBeenCalledWith({
@@ -544,6 +662,7 @@ describe('ChatService', () => {
           content: 'ping',
           channel: 'TELEGRAM',
           botName: 'Second Bot',
+          telegramMessageId: 77,
         },
       });
       expect(chatEventsMock.publish).toHaveBeenCalledWith(

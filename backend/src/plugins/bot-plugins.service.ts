@@ -122,6 +122,12 @@ export class BotPluginsService
    * a pressed inline button. Button messages are only offered to plugins that
    * opt in via `handlesCallbacks`, so a button payload colliding with a
    * text-only trigger stays silent.
+   *
+   * `contextChannel` is the trigger message's channel snapshot (design D3):
+   * the reply's delivery is resolved from the channel the trigger arrived
+   * from — a `WEB` trigger stays web-only even when the user is bound, a
+   * `TELEGRAM` trigger goes through the binding gate, `null` (legacy rows)
+   * falls back to the binding itself.
    */
   async dispatchAndReply(
     conversationId: string,
@@ -129,6 +135,7 @@ export class BotPluginsService
     content: string,
     messageId: string,
     kind: BotPluginSourceKind = 'TEXT',
+    contextChannel: 'WEB' | 'TELEGRAM' | null = null,
   ): Promise<void> {
     const claimed = await this.prisma.botPluginTask.updateMany({
       where: { messageId, status: BotPluginTaskStatus.PENDING },
@@ -181,9 +188,13 @@ export class BotPluginsService
     // Persist the reply and close the task atomically: a crash before the
     // commit leaves the task in PROCESSING for the recovery sweep, a commit
     // guarantees exactly one reply for this message. The delivery snapshot
-    // (design D2) uses the same gate as the Telegram bridge; plugin replies
+    // (design D3) is resolved from the trigger's channel context — the same
+    // gate the Telegram bridge honors via the event snapshot; plugin replies
     // have no operator behind them, so `operatorEmail` stays null.
-    const delivery = await this.messageChannel.resolveDelivery(user);
+    const delivery = await this.messageChannel.resolveDelivery(
+      contextChannel,
+      user,
+    );
     const message = await this.prisma.$transaction(async (tx) => {
       const created = await tx.message.create({
         data: {
@@ -327,6 +338,9 @@ export class BotPluginsService
       // the live dispatch path passes as source kind, so a sweep of a button
       // task reaches the same plugin the live path would have.
       message.kind === MessageKind.BUTTON ? 'BUTTON' : 'TEXT',
+      // The sweep replays the trigger's own channel snapshot so a reply
+      // recovered after a restart routes exactly like the live path (D3).
+      message.channel,
     );
   }
 

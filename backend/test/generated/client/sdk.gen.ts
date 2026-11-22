@@ -279,7 +279,7 @@ export class Sdk extends HeyApiClient {
     }
     
     /**
-     * Send a reply on behalf of the bot to a user (optional inline keyboard)
+     * Send a reply on behalf of the bot to a user (optional inline keyboard, optional quoted reply)
      */
     public mockBotControllerReplyAsBotV1<ThrowOnError extends boolean = false>(options: Options<MockBotControllerReplyAsBotV1Data, ThrowOnError>): RequestResult<MockBotControllerReplyAsBotV1Responses, MockBotControllerReplyAsBotV1Errors, ThrowOnError> {
         return (options.client ?? this.client).post<MockBotControllerReplyAsBotV1Responses, MockBotControllerReplyAsBotV1Errors, ThrowOnError>({

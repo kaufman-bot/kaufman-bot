@@ -35,6 +35,13 @@ export interface ConversationSummary {
   updatedAt: string;
 }
 
+/** Quoted-message snapshot carried by replies (matches MessageQuoteDto). */
+export interface MessageQuote {
+  id: string;
+  senderRole: 'USER' | 'BOT';
+  content: string;
+}
+
 export interface ConversationMessage {
   id: string;
   conversationId: string;
@@ -52,6 +59,16 @@ export interface ConversationMessage {
   botName: string | null;
   /** Email of the console operator who sent a BOT reply (else null). */
   operatorEmail: string | null;
+  /**
+   * Quote of the USER message this reply answers (joined server-side);
+   * null for replies without a reference and for USER messages.
+   */
+  replyTo: MessageQuote | null;
+  /**
+   * Channels the message was delivered to (derived server-side): BOT
+   * replies with a TELEGRAM snapshot are dual-delivered (web + Telegram).
+   */
+  deliveredTo: Array<'WEB' | 'TELEGRAM'>;
   readAt: string | null;
   createdAt: string;
 }
@@ -66,6 +83,10 @@ export interface MockBotStreamEvent {
   channel: 'WEB' | 'TELEGRAM' | null;
   botName: string | null;
   operatorEmail: string | null;
+  /** Quote snapshot of the reply target (absent for plain replies). */
+  replyTo?: MessageQuote | null;
+  /** Delivery channels (absent on payloads recorded before the field). */
+  deliveredTo?: Array<'WEB' | 'TELEGRAM'>;
   createdAt: string;
 }
 
@@ -126,17 +147,22 @@ export class MockBotService {
   /**
    * Sends a bot reply to a user's conversation. Both `content` and
    * `buttons` are optional here but the backend requires at least one
-   * non-empty; the console validates before calling.
+   * non-empty; the console validates before calling. `replyToMessageId`
+   * links the reply to a USER message of the same conversation (quote).
    * POST /api/v1/mock-bot/conversations/:userId/messages
    */
   sendReply(
     userId: string,
     content: string,
     buttons?: KeyboardButton[],
+    replyToMessageId?: string,
   ): Observable<ConversationMessage | null> {
     const body: Record<string, unknown> = { content: content.trim() };
     if (buttons && buttons.length > 0) {
       body['buttons'] = buttons;
+    }
+    if (replyToMessageId) {
+      body['replyToMessageId'] = replyToMessageId;
     }
     return this.http
       .post<ConversationMessage>(

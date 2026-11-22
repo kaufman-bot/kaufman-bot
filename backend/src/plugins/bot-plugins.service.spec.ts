@@ -82,6 +82,7 @@ const pendingTask = {
     conversationId: 'conv-1',
     senderRole: MessageSenderRole.USER,
     content: 'ping',
+    channel: 'WEB',
     readAt: null,
     createdAt: new Date('2024-01-01T00:00:00Z'),
   },
@@ -155,7 +156,7 @@ describe('BotPluginsService', () => {
       });
     });
 
-    it('snapshots the Telegram delivery channel for the plugin reply', async () => {
+    it('resolves the delivery from the trigger channel snapshot (telegram trigger)', async () => {
       messageChannelMock.resolveDelivery.mockResolvedValue({
         channel: 'TELEGRAM',
         botName: 'Kaufman Bot',
@@ -172,9 +173,19 @@ describe('BotPluginsService', () => {
       const service = createService(
         makePlugin('echo', true, 'pong') as BotPlugin,
       );
-      await service.dispatchAndReply('conv-1', user, 'ping', 'msg-in');
+      await service.dispatchAndReply(
+        'conv-1',
+        user,
+        'ping',
+        'msg-in',
+        'TEXT',
+        'TELEGRAM',
+      );
 
-      expect(messageChannelMock.resolveDelivery).toHaveBeenCalledWith(user);
+      expect(messageChannelMock.resolveDelivery).toHaveBeenCalledWith(
+        'TELEGRAM',
+        user,
+      );
       expect(prismaMock.messageCreate).toHaveBeenCalledWith({
         data: expect.objectContaining({
           channel: 'TELEGRAM',
@@ -188,6 +199,27 @@ describe('BotPluginsService', () => {
           botName: 'Kaufman Bot',
           operatorEmail: null,
         }),
+      );
+    });
+
+    it('passes a web trigger through even when the user is bound (context over binding)', async () => {
+      const service = createService(
+        makePlugin('echo', true, 'pong') as BotPlugin,
+      );
+      await service.dispatchAndReply(
+        'conv-1',
+        user,
+        'ping',
+        'msg-in',
+        'TEXT',
+        'WEB',
+      );
+
+      // The context channel wins over the binding — the gate itself (WEB
+      // context stays web-only) is covered by MessageChannelService specs.
+      expect(messageChannelMock.resolveDelivery).toHaveBeenCalledWith(
+        'WEB',
+        user,
       );
     });
 
@@ -484,6 +516,31 @@ describe('BotPluginsService', () => {
         },
       });
       expect(chatEventsMock.publish).toHaveBeenCalled();
+    });
+
+    it('routes the reply through the restored trigger channel snapshot', async () => {
+      prismaMock.taskUpdateMany.mockResolvedValueOnce({ count: 0 });
+      prismaMock.taskFindMany.mockResolvedValue([
+        {
+          ...pendingTask,
+          message: { ...pendingTask.message, channel: 'TELEGRAM' },
+        },
+      ]);
+      prismaMock.conversationFindUnique.mockResolvedValue({
+        id: 'conv-1',
+        userId: 'user-1',
+      });
+      prismaMock.userFindUnique.mockResolvedValue(user);
+
+      const service = createService(
+        makePlugin('echo', true, 'pong') as BotPlugin,
+      );
+      await service.runRecoverySweep();
+
+      expect(messageChannelMock.resolveDelivery).toHaveBeenCalledWith(
+        'TELEGRAM',
+        user,
+      );
     });
 
     it('reopens a stale PROCESSING task before dispatching pending ones', async () => {

@@ -29,6 +29,8 @@ describe('ChatComponent', () => {
       channel: 'WEB',
       botName: null,
       operatorEmail: null,
+      replyTo: null,
+      deliveredTo: ['WEB'],
       readAt: null,
       createdAt: '2026-01-01T00:00:00Z',
     },
@@ -41,6 +43,8 @@ describe('ChatComponent', () => {
       channel: 'WEB',
       botName: null,
       operatorEmail: null,
+      replyTo: null,
+      deliveredTo: ['WEB'],
       readAt: null,
       createdAt: '2026-01-01T00:01:00Z',
     },
@@ -145,6 +149,8 @@ describe('ChatComponent', () => {
       channel: 'WEB',
       botName: null,
       operatorEmail: null,
+      replyTo: null,
+      deliveredTo: ['WEB'],
       readAt: null,
       createdAt: '2026-01-01T00:02:00Z',
     };
@@ -253,6 +259,8 @@ describe('ChatComponent', () => {
       channel: 'WEB',
       botName: null,
       operatorEmail: null,
+      replyTo: null,
+      deliveredTo: ['WEB'],
       readAt: null,
       createdAt: '2026-01-01T00:05:00Z',
     };
@@ -296,6 +304,8 @@ describe('ChatComponent', () => {
       channel: 'WEB',
       botName: null,
       operatorEmail: null,
+      replyTo: null,
+      deliveredTo: ['WEB'],
       readAt: null,
       createdAt: '2026-01-01T00:10:00Z',
     };
@@ -361,6 +371,8 @@ describe('ChatComponent', () => {
           channel: 'WEB',
           botName: null,
           operatorEmail: null,
+          replyTo: null,
+          deliveredTo: ['WEB'],
           readAt: null,
           createdAt: '2026-01-01T00:11:00Z',
         } satisfies ChatMessage,
@@ -435,6 +447,8 @@ describe('ChatComponent', () => {
       channel: 'TELEGRAM',
       botName: 'Support Bot',
       operatorEmail: null,
+      replyTo: null,
+      deliveredTo: ['TELEGRAM'],
       readAt: null,
       createdAt: '2026-01-01T00:20:00Z',
     };
@@ -448,11 +462,13 @@ describe('ChatComponent', () => {
       channel: 'TELEGRAM',
       botName: 'Support Bot',
       operatorEmail: null,
+      replyTo: null,
+      deliveredTo: ['WEB', 'TELEGRAM'],
       readAt: null,
       createdAt: '2026-01-01T00:21:00Z',
     };
 
-    it('shows send and delivery badges with the bot name', fakeAsync(() => {
+    it('shows send and delivery badges for telegram traffic', fakeAsync(() => {
       const compiled = render([telegramUser, telegramReply]);
       const badges = compiled.querySelectorAll('.channel-badge');
 
@@ -460,17 +476,15 @@ describe('ChatComponent', () => {
       expect(badges[0].textContent?.trim()).toBe(
         'отправлено из Telegram · Support Bot',
       );
-      expect(badges[1].textContent?.trim()).toBe(
-        'доставлено в Telegram · Support Bot',
-      );
+      expect(badges[1].textContent?.trim()).toBe('доставлено в Telegram');
     }));
 
-    it('shows web-chat badges without a bot name', fakeAsync(() => {
+    it('shows the send badge for web messages and none for web-only replies', fakeAsync(() => {
       const compiled = render(mockMessages);
       const badges = compiled.querySelectorAll('.channel-badge');
 
+      expect(badges.length).toBe(1);
       expect(badges[0].textContent?.trim()).toBe('отправлено из веб-чата');
-      expect(badges[1].textContent?.trim()).toBe('доставлено в веб-чат');
     }));
 
     it('signs a console reply with the operator email', fakeAsync(() => {
@@ -480,15 +494,14 @@ describe('ChatComponent', () => {
         channel: 'WEB',
         botName: null,
         operatorEmail: 'admin@kaufman.bot',
+        deliveredTo: ['WEB'],
       };
       const compiled = render([operatorReply]);
 
       expect(
         compiled.querySelector('.message .sender')?.textContent?.trim(),
       ).toBe('admin@kaufman.bot');
-      expect(
-        compiled.querySelector('.channel-badge')?.textContent?.trim(),
-      ).toBe('доставлено в веб-чат');
+      expect(compiled.querySelector('.channel-badge')).toBeNull();
     }));
 
     it('colors replies delivered through different bots differently', fakeAsync(() => {
@@ -563,6 +576,125 @@ describe('ChatComponent', () => {
           .querySelector('.channel-badge')
           ?.textContent?.trim(),
       ).toBe('доставлено в Telegram · Support Bot');
+    }));
+  });
+
+  describe('quoted replies', () => {
+    /** Flushes history into a fresh fixture and returns the rendered root. */
+    const render = (messages: ChatMessage[]): HTMLElement => {
+      jest.spyOn(chatService, 'connectStream').mockReturnValue(of());
+      fixture.detectChanges();
+      httpMock.expectOne('/api/v1/chat/messages').flush(messages);
+      tick();
+      fixture.detectChanges();
+      return fixture.nativeElement as HTMLElement;
+    };
+
+    const userQuestion: ChatMessage = {
+      id: 'q-1',
+      conversationId: 'conv1',
+      senderRole: 'USER',
+      content: 'Question about the order',
+      buttons: null,
+      channel: 'WEB',
+      botName: null,
+      operatorEmail: null,
+      replyTo: null,
+      deliveredTo: ['WEB'],
+      readAt: null,
+      createdAt: '2026-01-01T00:30:00Z',
+    };
+
+    const quotedReply: ChatMessage = {
+      id: 'q-2',
+      conversationId: 'conv1',
+      senderRole: 'BOT',
+      content: 'The order is confirmed',
+      buttons: null,
+      channel: 'TELEGRAM',
+      botName: null,
+      operatorEmail: 'admin@kaufman.bot',
+      replyTo: {
+        id: 'q-1',
+        senderRole: 'USER',
+        content: 'Question about the order',
+      },
+      deliveredTo: ['WEB', 'TELEGRAM'],
+      readAt: null,
+      createdAt: '2026-01-01T00:31:00Z',
+    };
+
+    it('renders the quote block and the telegram badge for a dual-delivery reply', fakeAsync(() => {
+      const compiled = render([userQuestion, quotedReply]);
+
+      const quote = compiled.querySelector('.quote');
+      expect(quote).toBeTruthy();
+      expect(quote?.querySelector('.quote-sender')?.textContent?.trim()).toBe(
+        'Пользователь',
+      );
+      expect(quote?.querySelector('.quote-content')?.textContent?.trim()).toBe(
+        'Question about the order',
+      );
+
+      const messages = compiled.querySelectorAll('.message');
+      expect(
+        messages[1].querySelector('.channel-badge')?.textContent?.trim(),
+      ).toBe('доставлено в Telegram');
+    }));
+
+    it('renders no quote and no delivery badge for a plain web-only reply', fakeAsync(() => {
+      const plainReply: ChatMessage = {
+        ...quotedReply,
+        id: 'q-3',
+        content: 'Plain answer',
+        channel: 'WEB',
+        replyTo: null,
+        deliveredTo: ['WEB'],
+      };
+      const compiled = render([userQuestion, plainReply]);
+
+      expect(compiled.querySelector('.quote')).toBeNull();
+      const messages = compiled.querySelectorAll('.message');
+      expect(messages[1].querySelector('.channel-badge')).toBeNull();
+    }));
+
+    it('renders the quote and the badge for an SSE event carrying them', fakeAsync(() => {
+      const streamSubject = new Subject<ChatStreamEvent>();
+      jest
+        .spyOn(chatService, 'connectStream')
+        .mockReturnValue(streamSubject.asObservable());
+
+      fixture.detectChanges();
+      httpMock.expectOne('/api/v1/chat/messages').flush([]);
+      tick();
+      fixture.detectChanges();
+
+      streamSubject.next({
+        messageId: 'evt-quote',
+        conversationId: 'conv1',
+        senderRole: 'BOT',
+        content: 'Answer via SSE',
+        channel: 'TELEGRAM',
+        botName: null,
+        operatorEmail: 'admin@kaufman.bot',
+        replyTo: {
+          id: 'q-1',
+          senderRole: 'USER',
+          content: 'Question about the order',
+        },
+        deliveredTo: ['WEB', 'TELEGRAM'],
+        createdAt: '2026-01-01T00:32:00Z',
+      });
+      tick();
+      fixture.detectChanges();
+
+      const compiled = fixture.nativeElement as HTMLElement;
+      expect(compiled.querySelector('.quote')?.textContent).toContain(
+        'Question about the order',
+      );
+      expect(
+        compiled.querySelector('.channel-badge')?.textContent?.trim(),
+      ).toBe('доставлено в Telegram');
     }));
   });
 });

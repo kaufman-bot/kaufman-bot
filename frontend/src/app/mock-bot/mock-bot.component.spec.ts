@@ -61,6 +61,8 @@ describe('MockBotComponent', () => {
       channel: 'WEB',
       botName: null,
       operatorEmail: null,
+      replyTo: null,
+      deliveredTo: ['WEB'],
       readAt: null,
       createdAt: '2026-01-01T00:00:00Z',
     },
@@ -73,6 +75,8 @@ describe('MockBotComponent', () => {
       channel: 'WEB',
       botName: null,
       operatorEmail: null,
+      replyTo: null,
+      deliveredTo: ['WEB'],
       readAt: '2026-01-01T00:01:00Z',
       createdAt: '2026-01-01T00:01:00Z',
     },
@@ -244,6 +248,8 @@ describe('MockBotComponent', () => {
       channel: 'WEB',
       botName: null,
       operatorEmail: 'admin@kaufman.bot',
+      replyTo: null,
+      deliveredTo: ['WEB'],
       readAt: null,
       createdAt: '2026-01-01T00:05:00Z',
     };
@@ -400,6 +406,8 @@ describe('MockBotComponent', () => {
           channel: 'WEB',
           botName: null,
           operatorEmail: 'admin@kaufman.bot',
+          replyTo: null,
+          deliveredTo: ['WEB'],
           readAt: null,
           createdAt: '2026-01-01T00:05:00Z',
         } satisfies ConversationMessage,
@@ -674,6 +682,8 @@ describe('MockBotComponent', () => {
       channel: 'TELEGRAM',
       botName: 'Support Bot',
       operatorEmail: null,
+      replyTo: null,
+      deliveredTo: ['TELEGRAM'],
       readAt: null,
       createdAt: '2026-01-01T00:20:00Z',
     };
@@ -687,6 +697,8 @@ describe('MockBotComponent', () => {
       channel: 'WEB',
       botName: null,
       operatorEmail: 'admin@kaufman.bot',
+      replyTo: null,
+      deliveredTo: ['WEB'],
       readAt: null,
       createdAt: '2026-01-01T00:21:00Z',
     };
@@ -717,7 +729,7 @@ describe('MockBotComponent', () => {
       );
       expect(
         message?.querySelector('.channel-badge')?.textContent?.trim(),
-      ).toBe('доставлено в веб-чат');
+      ).toBe('доставлено в веб');
     }));
 
     it('colors messages passed through different bots differently', fakeAsync(() => {
@@ -773,6 +785,216 @@ describe('MockBotComponent', () => {
       expect(message?.querySelector('.sender')?.textContent?.trim()).toBe(
         'Пользователь',
       );
+    }));
+  });
+
+  describe('reply mode and quotes', () => {
+    const userText: ConversationMessage = {
+      id: 'u-1',
+      conversationId: 'conv1',
+      senderRole: 'USER',
+      content: 'Question about the order',
+      buttons: null,
+      channel: 'TELEGRAM',
+      botName: 'Support Bot',
+      operatorEmail: null,
+      replyTo: null,
+      deliveredTo: ['TELEGRAM'],
+      readAt: null,
+      createdAt: '2026-01-01T00:30:00Z',
+    };
+
+    const quotedReply: ConversationMessage = {
+      id: 'bot-2',
+      conversationId: 'conv1',
+      senderRole: 'BOT',
+      content: 'Here is the answer',
+      buttons: null,
+      channel: 'WEB',
+      botName: null,
+      operatorEmail: 'admin@kaufman.bot',
+      replyTo: {
+        id: 'u-1',
+        senderRole: 'USER',
+        content: 'Question about the order',
+      },
+      deliveredTo: ['WEB'],
+      readAt: null,
+      createdAt: '2026-01-01T00:31:00Z',
+    };
+
+    /** Boot, select `user1` with an empty history flush. */
+    function openConversation(): void {
+      jest
+        .spyOn(mockBotService, 'connectStream')
+        .mockReturnValue(new Subject<MockBotStreamEvent>().asObservable());
+      fixture.detectChanges();
+      httpMock
+        .expectOne('/api/v1/mock-bot/conversations')
+        .flush(mockConversations);
+      tick();
+      component.onSelectConversation('user1');
+      httpMock
+        .expectOne('/api/v1/mock-bot/conversations/user1/messages')
+        .flush([]);
+      httpMock
+        .expectOne('/api/v1/mock-bot/conversations')
+        .flush(mockConversations);
+      tick();
+      fixture.detectChanges();
+    }
+
+    it('«Ответить» puts the composer into reply mode showing the quote', fakeAsync(() => {
+      openConversation();
+      mockBotService.messages.set([userText]);
+      fixture.detectChanges();
+
+      const compiled = fixture.nativeElement as HTMLElement;
+      const trigger = compiled.querySelector<HTMLButtonElement>(
+        '.message .reply-trigger',
+      );
+      expect(trigger).toBeTruthy();
+      trigger!.click();
+      fixture.detectChanges();
+
+      expect(component.replyTarget()?.id).toBe('u-1');
+      const indicator = compiled.querySelector('.reply-target');
+      expect(indicator?.textContent).toContain('Question about the order');
+    }));
+
+    it('canceling reply mode clears the target', fakeAsync(() => {
+      openConversation();
+      component.onStartReply(userText);
+      expect(component.replyTarget()).not.toBeNull();
+
+      component.onCancelReply();
+
+      expect(component.replyTarget()).toBeNull();
+      fixture.detectChanges();
+      expect(
+        (fixture.nativeElement as HTMLElement).querySelector('.reply-target'),
+      ).toBeNull();
+    }));
+
+    it('a reply sent in reply mode carries replyToMessageId and resets the mode', fakeAsync(() => {
+      openConversation();
+      component.onStartReply(userText);
+      component.replyText = 'Answer';
+
+      component.onSendReply();
+
+      const req = httpMock.expectOne(
+        '/api/v1/mock-bot/conversations/user1/messages',
+      );
+      expect(req.request.body).toEqual({
+        content: 'Answer',
+        replyToMessageId: 'u-1',
+      });
+      req.flush(
+        {
+          ...quotedReply,
+          content: 'Answer',
+        },
+        { status: 201, statusText: 'Created' },
+      );
+      tick();
+      httpMock
+        .expectOne('/api/v1/mock-bot/conversations')
+        .flush(mockConversations);
+      tick();
+
+      // One-shot: the mode is consumed by the successful send.
+      expect(component.replyTarget()).toBeNull();
+      expect(component.replyText).toBe('');
+    }));
+
+    it('reply mode resets when the operator switches conversations', fakeAsync(() => {
+      openConversation();
+      component.onStartReply(userText);
+      expect(component.replyTarget()).not.toBeNull();
+
+      component.onSelectConversation('user2');
+      httpMock
+        .expectOne('/api/v1/mock-bot/conversations/user2/messages')
+        .flush([]);
+      httpMock
+        .expectOne('/api/v1/mock-bot/conversations')
+        .flush(mockConversations);
+      tick();
+
+      expect(component.replyTarget()).toBeNull();
+    }));
+
+    it('renders the quote block above a quoted reply, none on a plain one', fakeAsync(() => {
+      openConversation();
+      mockBotService.messages.set([quotedReply]);
+      fixture.detectChanges();
+
+      const compiled = fixture.nativeElement as HTMLElement;
+      const quote = compiled.querySelector('.quote');
+      expect(quote).toBeTruthy();
+      expect(quote?.textContent).toContain('Пользователь');
+      expect(quote?.textContent).toContain('Question about the order');
+
+      mockBotService.messages.set([
+        { ...quotedReply, id: 'bot-3', replyTo: null },
+      ]);
+      fixture.detectChanges();
+      expect(compiled.querySelector('.quote')).toBeNull();
+    }));
+
+    it('SSE reply renders the quote and the dual-delivery badge', fakeAsync(() => {
+      const stream = new Subject<MockBotStreamEvent>();
+      jest
+        .spyOn(mockBotService, 'connectStream')
+        .mockReturnValue(stream.asObservable());
+      fixture.detectChanges();
+      httpMock
+        .expectOne('/api/v1/mock-bot/conversations')
+        .flush(mockConversations);
+      tick();
+      component.onSelectConversation('user1');
+      httpMock
+        .expectOne('/api/v1/mock-bot/conversations/user1/messages')
+        .flush([]);
+      httpMock
+        .expectOne('/api/v1/mock-bot/conversations')
+        .flush(mockConversations);
+      tick();
+      fixture.detectChanges();
+
+      stream.next({
+        messageId: 'sse-1',
+        conversationId: 'conv1',
+        userId: 'user1',
+        senderRole: 'BOT',
+        content: 'Quoted answer',
+        buttons: null,
+        channel: 'TELEGRAM',
+        botName: 'Support Bot',
+        operatorEmail: 'admin@kaufman.bot',
+        replyTo: {
+          id: 'u-1',
+          senderRole: 'USER',
+          content: 'Question about the order',
+        },
+        deliveredTo: ['WEB', 'TELEGRAM'],
+        createdAt: '2026-01-01T00:40:00Z',
+      });
+      httpMock
+        .expectOne('/api/v1/mock-bot/conversations')
+        .flush(mockConversations);
+      tick();
+      fixture.detectChanges();
+
+      const compiled = fixture.nativeElement as HTMLElement;
+      const message = compiled.querySelector('.message');
+      expect(message?.querySelector('.quote')?.textContent).toContain(
+        'Question about the order',
+      );
+      expect(
+        message?.querySelector('.channel-badge')?.textContent?.trim(),
+      ).toBe('доставлено в веб + Telegram · Support Bot');
     }));
   });
 });

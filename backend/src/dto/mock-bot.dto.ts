@@ -1,4 +1,6 @@
 import { ApiExtraModels, ApiProperty } from '@nestjs/swagger';
+import type { DeliveredTo } from './chat.dto.js';
+import { MessageQuoteDto } from './chat.dto.js';
 import { KeyboardButtonDto } from './keyboard.dto.js';
 
 /**
@@ -96,6 +98,15 @@ export class MockBotReplyRequestDto {
     required: false,
   })
   buttons?: KeyboardButtonDto[];
+
+  @ApiProperty({
+    description:
+      'Optional identifier of a USER message of this conversation to reply ' +
+      'to (quote). The created reply is linked to that message; a missing, ' +
+      'foreign-conversation or non-USER target is rejected with 400.',
+    required: false,
+  })
+  replyToMessageId?: string;
 }
 
 /**
@@ -108,7 +119,7 @@ export class MockBotReplyRequestDto {
  * the pressed `callbackData`. The console renders them as ordinary USER
  * messages so the operator sees the click without a page reload.
  */
-@ApiExtraModels(KeyboardButtonDto)
+@ApiExtraModels(KeyboardButtonDto, MessageQuoteDto)
 export class MockBotStreamEventDto {
   @ApiProperty({ description: 'Unique message identifier' })
   messageId: string;
@@ -163,6 +174,23 @@ export class MockBotStreamEventDto {
   operatorEmail: string | null;
 
   @ApiProperty({
+    description:
+      'Snapshot of the message this reply quotes (null when the reply was ' +
+      'sent without quoting a message)',
+    type: MessageQuoteDto,
+    nullable: true,
+  })
+  replyTo: MessageQuoteDto | null;
+
+  @ApiProperty({
+    description:
+      'Channels the message was delivered to (see ChatMessageDto.deliveredTo)',
+    enum: ['WEB', 'TELEGRAM'],
+    isArray: true,
+  })
+  deliveredTo: DeliveredTo;
+
+  @ApiProperty({
     description: 'When the message was created',
     format: 'date-time',
   })
@@ -181,6 +209,12 @@ export class MockBotStreamEventDto {
     }
     if (this.operatorEmail === undefined) {
       this.operatorEmail = null;
+    }
+    if (this.replyTo === undefined) {
+      this.replyTo = null;
+    }
+    if (this.deliveredTo === undefined) {
+      this.deliveredTo = ['WEB'];
     }
   }
 }

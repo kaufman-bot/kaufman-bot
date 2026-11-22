@@ -168,6 +168,35 @@ describe('MockBotService', () => {
       });
     });
 
+    it('includes replyToMessageId in the body when the caller replies to a message', () => {
+      service.sendReply('user1', 'Answer', undefined, 'msg-u1').subscribe();
+
+      const req = httpMock.expectOne(
+        '/api/v1/mock-bot/conversations/user1/messages',
+      );
+      expect(req.request.body).toEqual({
+        content: 'Answer',
+        replyToMessageId: 'msg-u1',
+      });
+      req.flush({ id: 'x' } as unknown as never, {
+        status: 201,
+        statusText: 'Created',
+      });
+    });
+
+    it('omits replyToMessageId when no reply target is set', () => {
+      service.sendReply('user1', 'Answer').subscribe();
+
+      const req = httpMock.expectOne(
+        '/api/v1/mock-bot/conversations/user1/messages',
+      );
+      expect(req.request.body).toEqual({ content: 'Answer' });
+      req.flush({ id: 'x' } as unknown as never, {
+        status: 201,
+        statusText: 'Created',
+      });
+    });
+
     it('returns null on error', () => {
       service.sendReply('user1', 'test').subscribe((msg) => {
         expect(msg).toBeNull();

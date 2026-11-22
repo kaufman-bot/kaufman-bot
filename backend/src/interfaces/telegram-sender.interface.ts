@@ -8,14 +8,17 @@ import type { KeyboardButtonDto } from '../dto/keyboard.dto.js';
 export interface TelegramSender {
   /**
    * Sends a text message to the given chat, optionally with inline keyboard
-   * buttons. Buttons whose `callbackData` exceeds the Telegram 64-byte limit
-   * should be filtered out before calling this method (the caller is
-   * responsible for compliance).
+   * buttons and a reply reference. Buttons whose `callbackData` exceeds the
+   * Telegram 64-byte limit should be filtered out before calling this method
+   * (the caller is responsible for compliance). `replyToMessageId` maps to
+   * the Telegram `reply_to_message_id` option, so the client renders the
+   * message as a quote of the referenced one.
    */
   sendMessage(
     chatId: string,
     text: string,
     buttons?: KeyboardButtonDto[],
+    replyToMessageId?: number,
   ): Promise<void>;
 
   /**

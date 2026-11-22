@@ -1,7 +1,10 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type { TelegramBotDto } from './generated/client/types.gen.js';
+import type {
+  ChatMessageDto,
+  TelegramBotDto,
+} from './generated/client/types.gen.js';
 import { ActivityHelper } from './utils/activity-helper.js';
-import { messageOf } from './utils/api-result.js';
+import { messageOf, unwrap } from './utils/api-result.js';
 
 /**
  * E2E over target assignment, launch deep-link, and the 409 transport gate.
@@ -9,7 +12,12 @@ import { messageOf } from './utils/api-result.js';
  * Verifies:
  *   - PUT /admin/users/:id/telegram-target (200 own bot, 404 foreign/missing);
  *   - POST /telegram/launch (returns url+token for bot target, 400 for mock);
- *   - POST /chat/messages → 409 when bound bot is disabled, 201 when active.
+ *   - POST /chat/messages → 409 when bound bot is disabled, 201 when active;
+ *   - POST /telegram/webhook/:botId secret guard (403 without a secret, with
+ *     a wrong one and for unknown bots — real-Telegram round-trips are
+ *     verified manually);
+ *   - web-context replies (operator and plugin) never claim Telegram
+ *     delivery (`deliveredTo` stays ['WEB']).
  *
  * All mutating calls run behind test-spawned ADMIN keys (e2e-fixture-hygiene).
  */
@@ -240,6 +248,76 @@ describe('Telegram binding & transport gate (e2e, running backend)', () => {
       });
 
       expect(result.response?.status).toBe(201);
+    });
+  });
+
+  // ─── Webhook secret guard ──────────────────────────────────────────────
+
+  describe('POST /telegram/webhook/:botId — secret guard', () => {
+    const post = (botId: string, secret?: string): Promise<Response> =>
+      fetch(`${adminA.baseUrl}/api/telegram/webhook/${botId}`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          ...(secret ? { 'x-telegram-bot-api-secret-token': secret } : {}),
+        },
+        body: JSON.stringify({ update_id: 1 }),
+      });
+
+    it('rejects an update without the secret header with 403', async () => {
+      expect((await post(botAId)).status).toBe(403);
+    });
+
+    it('rejects an update with a wrong secret with 403', async () => {
+      expect((await post(botAId, 'not-the-secret')).status).toBe(403);
+    });
+
+    it('rejects an update for an unknown bot id with 403', async () => {
+      expect(
+        (await post(`missing-${adminA.randomSha7}`, 'whatever')).status,
+      ).toBe(403);
+    });
+  });
+
+  // ─── Web-context replies never claim Telegram delivery ─────────────
+
+  describe('web-context replies stay web-only (deliveredTo)', () => {
+    it('an operator reply to a bound-but-chatless user claims no Telegram delivery', async () => {
+      // The binding (telegramBotId) exists, but telegramChatId is only ever
+      // set by the webhook /start round-trip — absent in e2e — so even an
+      // active bot binding must not claim Telegram delivery.
+      await adminA.sdk.adminUsersControllerSetTelegramTargetV1({
+        path: { id: user1Id },
+        body: { telegramBotId: botAId },
+      });
+
+      const result = await adminA.sdk.mockBotControllerReplyAsBotV1({
+        path: { userId: user1Id },
+        body: { content: `web-only-${adminA.randomSha7}` },
+      });
+
+      expect(result.response?.status).toBe(201);
+      expect((result.data as ChatMessageDto).deliveredTo).toEqual(['WEB']);
+    });
+
+    it('a plugin reply on a web trigger claims no Telegram delivery', async () => {
+      await adminA.sdk.adminUsersControllerSetTelegramTargetV1({
+        path: { id: user1Id },
+        body: { telegramBotId: botAId },
+      });
+
+      user1.loginByApiKey(user1.currentApiKey!);
+      await user1.sdk.chatControllerSendMessageV1({
+        body: { content: 'time' },
+      });
+      const history = unwrap(
+        await user1.sdk.chatControllerGetMessagesV1({}),
+        'GET /chat/messages',
+      );
+
+      const pluginReply = history.filter((m) => m.senderRole === 'BOT').pop();
+      expect(pluginReply).toBeDefined();
+      expect(pluginReply!.deliveredTo).toEqual(['WEB']);
     });
   });
 });

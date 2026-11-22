@@ -15,6 +15,12 @@ export interface ChannelSnapshot {
   channel: 'WEB' | 'TELEGRAM' | null;
   botName: string | null;
   operatorEmail: string | null;
+  /**
+   * Channels a BOT reply was delivered to (design D3: snapshot TELEGRAM =
+   * dual delivery). Absent on payloads recorded before the field existed —
+   * those keep the legacy channel-snapshot wording.
+   */
+  deliveredTo?: Array<'WEB' | 'TELEGRAM'> | null;
 }
 
 /** Screen the badge is rendered on; only the wording differs. */
@@ -59,13 +65,42 @@ export function identityClassOf(message: ChannelSnapshot): string {
 
 /**
  * Badge under a message: where the user wrote from, or where the reply was
- * delivered. `null` means "recorded before the channel snapshot" — render
- * no badge at all.
+ * delivered. `null` means "recorded before the channel snapshot" or — for a
+ * BOT reply in the user chat — "web-only delivery, nothing extra to show":
+ * web delivery is unconditional, so the chat only marks the additional
+ * Telegram copy. The console instead always names the delivery channels
+ * from `deliveredTo` («веб» / «веб + Telegram», with the bot name when the
+ * snapshot knows it).
  */
 export function channelBadgeOf(
   message: ChannelSnapshot,
   perspective: ChannelPerspective,
 ): string | null {
+  if (message.senderRole === 'USER') {
+    if (message.channel === null) {
+      return null;
+    }
+    const telegram = message.botName?.trim()
+      ? `Telegram · ${message.botName.trim()}`
+      : 'Telegram';
+    const channel = message.channel === 'TELEGRAM' ? telegram : null;
+    const prefix = perspective === 'chat' ? 'отправлено из' : 'из';
+    return `${prefix} ${channel ?? 'веб-чата'}`;
+  }
+
+  const botName = message.botName?.trim();
+  const deliveredTo = message.deliveredTo?.length ? message.deliveredTo : null;
+  if (deliveredTo) {
+    if (perspective === 'chat') {
+      return deliveredTo.includes('TELEGRAM') ? 'доставлено в Telegram' : null;
+    }
+    const base = deliveredTo.includes('TELEGRAM')
+      ? 'доставлено в веб + Telegram'
+      : 'доставлено в веб';
+    return botName ? `${base} · ${botName}` : base;
+  }
+
+  // Legacy payload without deliveredTo: fall back to the channel snapshot.
   if (message.channel === null) {
     return null;
   }
@@ -73,11 +108,6 @@ export function channelBadgeOf(
     ? `Telegram · ${message.botName.trim()}`
     : 'Telegram';
   const channel = message.channel === 'TELEGRAM' ? telegram : null;
-
-  if (message.senderRole === 'USER') {
-    const prefix = perspective === 'chat' ? 'отправлено из' : 'из';
-    return `${prefix} ${channel ?? 'веб-чата'}`;
-  }
   return `доставлено в ${channel ?? 'веб-чат'}`;
 }
 

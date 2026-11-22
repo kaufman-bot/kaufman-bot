@@ -1,10 +1,21 @@
+import { lastValueFrom, take, toArray } from 'rxjs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type {
+  ChatControllerStreamEventsV1Data,
   ChatMessageDto,
+  ChatStreamEventDto,
   ConversationSummaryDto,
 } from './generated/client/types.gen.js';
 import { ActivityHelper } from './utils/activity-helper.js';
 import { messageOf, unwrap } from './utils/api-result.js';
+
+/** Chat SSE endpoint (authenticated with the presented key like REST). */
+const CHAT_STREAM_URL: ChatControllerStreamEventsV1Data['url'] =
+  '/api/v1/chat/stream';
+
+/** Lets an SSE subscription reach the server before events are triggered. */
+const sleep = (ms: number): Promise<void> =>
+  new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 describe('Mock Bot Console endpoints (e2e, running backend)', () => {
   const admin = new ActivityHelper();
@@ -322,6 +333,147 @@ describe('Mock Bot Console endpoints (e2e, running backend)', () => {
 
         expect(result.response?.status).toBe(400);
         expect(messageOf(result.error)).toMatch(/too many buttons/i);
+      });
+    });
+
+    describe('with a reply target (replyToMessageId)', () => {
+      let userQuestionId: string;
+      let botReplyId: string;
+
+      beforeAll(async () => {
+        // A fresh USER message from user 1 becomes the quote target; a plain
+        // bot reply doubles as the forbidden BOT target.
+        user1.loginByApiKey(user1.currentApiKey!);
+        userQuestionId = unwrap(
+          await user1.sdk.chatControllerSendMessageV1({
+            body: { content: 'Question about the order' },
+          }),
+          'POST /chat/messages (quote target)',
+        ).id;
+        admin.loginAsAdmin();
+        botReplyId = unwrap(
+          await admin.sdk.mockBotControllerReplyAsBotV1({
+            path: { userId: user1Id },
+            body: { content: 'Plain bot reply' },
+          }),
+          'POST /mock-bot/conversations/:userId/messages (plain)',
+        ).id;
+      });
+
+      it('creates a quoted reply (201) with the relation, snapshot and deliveredTo in history', async () => {
+        const result = await admin.sdk.mockBotControllerReplyAsBotV1({
+          path: { userId: user1Id },
+          body: {
+            content: 'The order is confirmed',
+            replyToMessageId: userQuestionId,
+          },
+        });
+
+        expect(result.response?.status).toBe(201);
+        const message = result.data as ChatMessageDto;
+        expect(message.replyTo).toEqual({
+          id: userQuestionId,
+          senderRole: 'USER',
+          content: 'Question about the order',
+        });
+        // Unbound test user writing from the web: the reply stays web-only.
+        expect(message.channel).toBe('WEB');
+        expect(message.deliveredTo).toEqual(['WEB']);
+
+        const history =
+          await admin.sdk.mockBotControllerGetConversationMessagesV1({
+            path: { userId: user1Id },
+          });
+        const inHistory = (history.data as ChatMessageDto[]).find(
+          (m) => m.id === message.id,
+        );
+        expect(inHistory).toBeDefined();
+        expect(inHistory!.replyTo).toEqual(message.replyTo);
+        expect(inHistory!.deliveredTo).toEqual(['WEB']);
+      });
+
+      it('delivers the quoted reply over the chat SSE stream with the quote', async () => {
+        user1.loginByApiKey(user1.currentApiKey!);
+        const eventsPromise = lastValueFrom(
+          user1
+            .sse<ChatStreamEventDto>({ url: CHAT_STREAM_URL })
+            .pipe(take(2), toArray()),
+        );
+        // The event bus is hot: let the subscription reach the server first.
+        await sleep(500);
+
+        const sent = unwrap(
+          await user1.sdk.chatControllerSendMessageV1({
+            body: { content: 'Second question via SSE' },
+          }),
+          'POST /chat/messages (sse quote)',
+        );
+        const reply = await admin.sdk.mockBotControllerReplyAsBotV1({
+          path: { userId: user1Id },
+          body: { content: 'Answer via SSE', replyToMessageId: sent.id },
+        });
+        expect(reply.response?.status).toBe(201);
+
+        const events = await eventsPromise;
+        expect(events.map((e) => `${e.senderRole}:${e.content}`)).toEqual([
+          'USER:Second question via SSE',
+          'BOT:Answer via SSE',
+        ]);
+        expect(events[1].replyTo).toEqual({
+          id: sent.id,
+          senderRole: 'USER',
+          content: 'Second question via SSE',
+        });
+        expect(events[1].deliveredTo).toEqual(['WEB']);
+        admin.loginAsAdmin();
+      });
+
+      it('rejects a nonexistent target with 400', async () => {
+        const result = await admin.sdk.mockBotControllerReplyAsBotV1({
+          path: { userId: user1Id },
+          body: {
+            content: 'nope',
+            replyToMessageId: `missing-${admin.randomSha7}`,
+          },
+        });
+
+        expect(result.response?.status).toBe(400);
+        expect(messageOf(result.error)).toMatch(
+          /must be an existing USER message of this conversation/i,
+        );
+      });
+
+      it('rejects a target from another conversation with 400', async () => {
+        user2.loginByApiKey(user2.currentApiKey!);
+        const foreign = unwrap(
+          await user2.sdk.chatControllerSendMessageV1({
+            body: { content: 'Foreign conversation message' },
+          }),
+          'POST /chat/messages (foreign target)',
+        );
+        admin.loginAsAdmin();
+
+        const result = await admin.sdk.mockBotControllerReplyAsBotV1({
+          path: { userId: user1Id },
+          body: { content: 'nope', replyToMessageId: foreign.id },
+        });
+
+        expect(result.response?.status).toBe(400);
+        expect(messageOf(result.error)).toMatch(
+          /must be an existing USER message of this conversation/i,
+        );
+      });
+
+      it('rejects a BOT message as the target with 400', async () => {
+        const result = await admin.sdk.mockBotControllerReplyAsBotV1({
+          path: { userId: user1Id },
+          body: { content: 'nope', replyToMessageId: botReplyId },
+        });
+
+        expect(result.response?.status).toBe(400);
+        expect(messageOf(result.error)).toMatch(
+          /must be an existing USER message of this conversation/i,
+        );
       });
     });
   });
