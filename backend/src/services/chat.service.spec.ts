@@ -236,6 +236,9 @@ describe('ChatService', () => {
         senderRole: 'USER',
         kind: 'TEXT',
         content: 'Hello',
+        channel: 'WEB',
+        botName: null,
+        operatorEmail: null,
         readAt: null,
         createdAt,
       });
@@ -255,6 +258,9 @@ describe('ChatService', () => {
         createdAt: createdAt.toISOString(),
         kind: 'TEXT',
         buttons: null,
+        channel: 'WEB',
+        botName: null,
+        operatorEmail: null,
       });
 
       expect(botPluginsMock.dispatchAndReply).toHaveBeenCalledWith(
@@ -316,6 +322,47 @@ describe('ChatService', () => {
       expect(result.content).toBe('Hello');
     });
 
+    it('should snapshot the Telegram bot name when the user writes from Telegram', async () => {
+      prismaMock.conversationUpsert.mockResolvedValue({
+        id: 'conv-1',
+        userId: 'user-1',
+      });
+      prismaMock.messageCreate.mockResolvedValue({
+        id: 'msg-tg',
+        conversationId: 'conv-1',
+        senderRole: 'USER',
+        kind: 'TEXT',
+        content: 'Hello',
+        channel: 'TELEGRAM',
+        botName: 'Second Bot',
+        operatorEmail: null,
+        readAt: null,
+        createdAt: new Date('2024-01-01'),
+      });
+
+      await service.sendMessage(makeUser(), 'Hello', {
+        channel: 'TELEGRAM',
+        botName: 'Second Bot',
+      });
+
+      expect(prismaMock.messageCreate).toHaveBeenCalledWith({
+        data: {
+          conversationId: 'conv-1',
+          senderRole: 'USER',
+          kind: 'TEXT',
+          content: 'Hello',
+          channel: 'TELEGRAM',
+          botName: 'Second Bot',
+        },
+      });
+      expect(chatEventsMock.publish).toHaveBeenCalledWith(
+        expect.objectContaining({
+          channel: 'TELEGRAM',
+          botName: 'Second Bot',
+        }),
+      );
+    });
+
     it('should trim whitespace from content', async () => {
       prismaMock.conversationUpsert.mockResolvedValue({
         id: 'conv-1',
@@ -340,6 +387,8 @@ describe('ChatService', () => {
           senderRole: 'USER',
           kind: 'TEXT',
           content: 'Hello',
+          channel: 'WEB',
+          botName: null,
         },
       });
     });
@@ -406,6 +455,9 @@ describe('ChatService', () => {
         senderRole: 'USER',
         kind: 'BUTTON',
         content: 'settings:language:ru',
+        channel: 'WEB',
+        botName: null,
+        operatorEmail: null,
         readAt: null,
         createdAt: new Date('2024-01-01'),
       });
@@ -429,6 +481,8 @@ describe('ChatService', () => {
           senderRole: 'USER',
           kind: 'BUTTON',
           content: 'settings:language:ru',
+          channel: 'WEB',
+          botName: null,
         },
       });
 
@@ -451,6 +505,51 @@ describe('ChatService', () => {
           content: 'settings:language:ru',
           kind: 'BUTTON',
           buttons: null,
+          channel: 'WEB',
+          botName: null,
+          operatorEmail: null,
+        }),
+      );
+    });
+
+    it('should snapshot the Telegram bot name for a callback pressed in Telegram', async () => {
+      prismaMock.conversationUpsert.mockResolvedValue({
+        id: 'conv-1',
+        userId: 'user-1',
+      });
+      prismaMock.messageCreate.mockResolvedValue({
+        id: 'msg-cb',
+        conversationId: 'conv-1',
+        senderRole: 'USER',
+        kind: 'BUTTON',
+        content: 'ping',
+        channel: 'TELEGRAM',
+        botName: 'Second Bot',
+        operatorEmail: null,
+        readAt: null,
+        createdAt: new Date('2024-01-01'),
+      });
+
+      await service.submitButtonCallback(
+        makeUser(),
+        { callbackData: 'ping' },
+        { channel: 'TELEGRAM', botName: 'Second Bot' },
+      );
+
+      expect(prismaMock.messageCreate).toHaveBeenCalledWith({
+        data: {
+          conversationId: 'conv-1',
+          senderRole: 'USER',
+          kind: 'BUTTON',
+          content: 'ping',
+          channel: 'TELEGRAM',
+          botName: 'Second Bot',
+        },
+      });
+      expect(chatEventsMock.publish).toHaveBeenCalledWith(
+        expect.objectContaining({
+          channel: 'TELEGRAM',
+          botName: 'Second Bot',
         }),
       );
     });

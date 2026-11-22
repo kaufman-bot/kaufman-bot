@@ -7,6 +7,7 @@ import {
 } from '../generated/prisma/enums.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { ChatEventsService } from '../services/chat-events.service.js';
+import type { MessageChannelService } from '../services/message-channel.service.js';
 import { BotPlugin, BotPluginReply } from './bot-plugin.interface.js';
 import { BotPluginsService } from './bot-plugins.service.js';
 
@@ -48,6 +49,16 @@ const makeChatEventsMock = () => {
   };
 };
 
+const makeMessageChannelMock = () => {
+  const resolveDelivery = vi
+    .fn()
+    .mockResolvedValue({ channel: 'WEB', botName: null });
+  return {
+    resolveDelivery,
+    instance: { resolveDelivery } as unknown as MessageChannelService,
+  };
+};
+
 const makePlugin = (
   name: string,
   canHandle: boolean,
@@ -79,17 +90,20 @@ const pendingTask = {
 describe('BotPluginsService', () => {
   let prismaMock: ReturnType<typeof makePrismaMock>;
   let chatEventsMock: ReturnType<typeof makeChatEventsMock>;
+  let messageChannelMock: ReturnType<typeof makeMessageChannelMock>;
 
   const createService = (...plugins: BotPlugin[]) =>
     new BotPluginsService(
       plugins,
       prismaMock.instance,
       chatEventsMock.instance,
+      messageChannelMock.instance,
     );
 
   beforeEach(() => {
     prismaMock = makePrismaMock();
     chatEventsMock = makeChatEventsMock();
+    messageChannelMock = makeMessageChannelMock();
     prismaMock.messageCreate.mockResolvedValue({
       id: 'msg-bot',
       content: 'reply',
@@ -127,6 +141,9 @@ describe('BotPluginsService', () => {
           conversationId: 'conv-1',
           senderRole: MessageSenderRole.BOT,
           content: 'first reply',
+          channel: 'WEB',
+          botName: null,
+          operatorEmail: null,
         },
       });
       expect(chatEventsMock.publish).toHaveBeenCalledWith({
@@ -136,6 +153,42 @@ describe('BotPluginsService', () => {
         content: 'first reply',
         createdAt: '2024-01-01T00:00:00.000Z',
       });
+    });
+
+    it('snapshots the Telegram delivery channel for the plugin reply', async () => {
+      messageChannelMock.resolveDelivery.mockResolvedValue({
+        channel: 'TELEGRAM',
+        botName: 'Kaufman Bot',
+      });
+      prismaMock.messageCreate.mockResolvedValue({
+        id: 'msg-bot',
+        content: 'pong',
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        channel: 'TELEGRAM',
+        botName: 'Kaufman Bot',
+        operatorEmail: null,
+      });
+
+      const service = createService(
+        makePlugin('echo', true, 'pong') as BotPlugin,
+      );
+      await service.dispatchAndReply('conv-1', user, 'ping', 'msg-in');
+
+      expect(messageChannelMock.resolveDelivery).toHaveBeenCalledWith(user);
+      expect(prismaMock.messageCreate).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          channel: 'TELEGRAM',
+          botName: 'Kaufman Bot',
+          operatorEmail: null,
+        }),
+      });
+      expect(chatEventsMock.publish).toHaveBeenCalledWith(
+        expect.objectContaining({
+          channel: 'TELEGRAM',
+          botName: 'Kaufman Bot',
+          operatorEmail: null,
+        }),
+      );
     });
 
     it('commits the reply and the DONE status in one transaction', async () => {
@@ -283,6 +336,9 @@ describe('BotPluginsService', () => {
           senderRole: MessageSenderRole.BOT,
           content: 'Settings',
           buttons: callbackButtons,
+          channel: 'WEB',
+          botName: null,
+          operatorEmail: null,
         },
       });
       expect(chatEventsMock.publish).toHaveBeenCalledWith(
@@ -310,6 +366,9 @@ describe('BotPluginsService', () => {
           senderRole: MessageSenderRole.BOT,
           content: 'Settings',
           buttons: [{ title: 'English', callbackData: 'settings:language:en' }],
+          channel: 'WEB',
+          botName: null,
+          operatorEmail: null,
         },
       });
     });
@@ -419,6 +478,9 @@ describe('BotPluginsService', () => {
           conversationId: 'conv-1',
           senderRole: MessageSenderRole.BOT,
           content: 'pong',
+          channel: 'WEB',
+          botName: null,
+          operatorEmail: null,
         },
       });
       expect(chatEventsMock.publish).toHaveBeenCalled();

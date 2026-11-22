@@ -38,6 +38,34 @@ export class ChatMessageDto {
   buttons: KeyboardButtonDto[] | null;
 
   @ApiProperty({
+    description:
+      'Transport channel snapshot: for USER messages — where the user wrote ' +
+      'from, for BOT messages — where the reply was delivered (null for ' +
+      'messages recorded before the snapshot existed)',
+    enum: ['WEB', 'TELEGRAM'],
+    nullable: true,
+  })
+  channel: 'WEB' | 'TELEGRAM' | null;
+
+  @ApiProperty({
+    description:
+      'Name of the Telegram bot in the channel snapshot: the bot that ' +
+      'received a USER message or delivered a BOT reply (null for WEB)',
+    type: String,
+    nullable: true,
+  })
+  botName: string | null;
+
+  @ApiProperty({
+    description:
+      'Email of the console operator who sent a BOT reply from the mock-bot ' +
+      'console (null for plugin auto-replies and USER messages)',
+    type: String,
+    nullable: true,
+  })
+  operatorEmail: string | null;
+
+  @ApiProperty({
     description: 'When the opposite side read the message (null if unread)',
     nullable: true,
     format: 'date-time',
@@ -54,6 +82,15 @@ export class ChatMessageDto {
     Object.assign(this, partial);
     if (this.buttons === undefined) {
       this.buttons = null;
+    }
+    if (this.channel === undefined) {
+      this.channel = null;
+    }
+    if (this.botName === undefined) {
+      this.botName = null;
+    }
+    if (this.operatorEmail === undefined) {
+      this.operatorEmail = null;
     }
   }
 }
@@ -121,6 +158,31 @@ export class ChatStreamEventDto {
   buttons: KeyboardButtonDto[] | null;
 
   @ApiProperty({
+    description:
+      'Transport channel snapshot: for USER events — where the user wrote ' +
+      'from, for BOT events — where the reply was delivered',
+    enum: ['WEB', 'TELEGRAM'],
+    nullable: true,
+  })
+  channel: 'WEB' | 'TELEGRAM' | null;
+
+  @ApiProperty({
+    description:
+      'Name of the Telegram bot in the channel snapshot (null for WEB)',
+    type: String,
+    nullable: true,
+  })
+  botName: string | null;
+
+  @ApiProperty({
+    description:
+      'Email of the console operator who sent a BOT reply (null when none)',
+    type: String,
+    nullable: true,
+  })
+  operatorEmail: string | null;
+
+  @ApiProperty({
     description: 'When the message was created',
     format: 'date-time',
   })
@@ -130,6 +192,15 @@ export class ChatStreamEventDto {
     Object.assign(this, partial);
     if (this.buttons === undefined) {
       this.buttons = null;
+    }
+    if (this.channel === undefined) {
+      this.channel = null;
+    }
+    if (this.botName === undefined) {
+      this.botName = null;
+    }
+    if (this.operatorEmail === undefined) {
+      this.operatorEmail = null;
     }
   }
 }

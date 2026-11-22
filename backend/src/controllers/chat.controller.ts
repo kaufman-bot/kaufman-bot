@@ -85,7 +85,7 @@ export class ChatController {
     @Body() dto: SendMessageRequestDto,
   ): Promise<ChatMessageDto> {
     const user = requireAuthUser(req);
-    return this.chatService.sendMessage(user, dto.content);
+    return this.chatService.sendMessage(user, dto.content, { channel: 'WEB' });
   }
 
   @Post('button-callbacks')
@@ -111,7 +111,9 @@ export class ChatController {
     @Body() dto: ButtonCallbackRequestDto,
   ): Promise<ChatMessageDto> {
     const user = requireAuthUser(req);
-    return this.chatService.submitButtonCallback(user, dto);
+    return this.chatService.submitButtonCallback(user, dto, {
+      channel: 'WEB',
+    });
   }
 
   @Sse('stream')

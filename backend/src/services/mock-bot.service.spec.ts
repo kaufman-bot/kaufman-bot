@@ -2,6 +2,7 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MessageKind, MessageSenderRole } from '../generated/prisma/enums.js';
 import { ChatEventsService } from './chat-events.service.js';
+import type { MessageChannelService } from './message-channel.service.js';
 import { MockBotService } from './mock-bot.service.js';
 
 const makePrismaMock = () => {
@@ -11,6 +12,7 @@ const makePrismaMock = () => {
   const messageCount = vi.fn();
   const messageCreate = vi.fn();
   const messageUpdateMany = vi.fn();
+  const userFindUnique = vi.fn();
 
   return {
     instance: {
@@ -24,6 +26,7 @@ const makePrismaMock = () => {
         create: messageCreate,
         updateMany: messageUpdateMany,
       },
+      user: { findUnique: userFindUnique },
     },
     conversationFindMany,
     conversationFindUnique,
@@ -31,6 +34,7 @@ const makePrismaMock = () => {
     messageCount,
     messageCreate,
     messageUpdateMany,
+    userFindUnique,
   };
 };
 
@@ -48,17 +52,34 @@ const makeChatEventsMock = () => {
   };
 };
 
+const makeMessageChannelMock = () => {
+  const resolveDelivery = vi
+    .fn()
+    .mockResolvedValue({ channel: 'WEB', botName: null });
+  return {
+    resolveDelivery,
+    instance: { resolveDelivery } as unknown as MessageChannelService,
+  };
+};
+
 describe('MockBotService', () => {
   let prismaMock: ReturnType<typeof makePrismaMock>;
   let chatEventsMock: ReturnType<typeof makeChatEventsMock>;
+  let messageChannelMock: ReturnType<typeof makeMessageChannelMock>;
   let service: MockBotService;
 
   beforeEach(() => {
     prismaMock = makePrismaMock();
     chatEventsMock = makeChatEventsMock();
+    messageChannelMock = makeMessageChannelMock();
+    prismaMock.userFindUnique.mockResolvedValue({
+      telegramBotId: null,
+      telegramChatId: null,
+    });
     service = new MockBotService(
       prismaMock.instance as any,
       chatEventsMock.instance,
+      messageChannelMock.instance,
     );
   });
 
@@ -82,6 +103,7 @@ describe('MockBotService', () => {
               id: 'msg-1',
               content: 'Hello',
               senderRole: MessageSenderRole.USER,
+              channel: 'TELEGRAM',
               createdAt: new Date('2024-01-02'),
             },
           ],
@@ -112,7 +134,9 @@ describe('MockBotService', () => {
 
       expect(result).toHaveLength(2);
       expect(result[0].id).toBe('conv-1');
+      expect(result[0].lastMessageChannel).toBe('TELEGRAM');
       expect(result[1].id).toBe('conv-2');
+      expect(result[1].lastMessageChannel).toBeNull();
     });
 
     it('should include unread count for each conversation', async () => {
@@ -152,6 +176,9 @@ describe('MockBotService', () => {
           kind: MessageKind.TEXT,
           content: 'First',
           buttons: null,
+          channel: 'TELEGRAM',
+          botName: 'Kaufman Bot',
+          operatorEmail: null,
           readAt: null,
           createdAt: new Date('2024-01-01'),
         },
@@ -179,8 +206,12 @@ describe('MockBotService', () => {
       expect(result).toHaveLength(2);
       expect(result[0].id).toBe('msg-1');
       expect(result[0].buttons).toBeNull();
+      expect(result[0].channel).toBe('TELEGRAM');
+      expect(result[0].botName).toBe('Kaufman Bot');
+      expect(result[0].operatorEmail).toBeNull();
       expect(result[1].id).toBe('msg-2');
       expect(result[1].buttons).toEqual([{ title: 'Да', callbackData: 'yes' }]);
+      expect(result[1].channel).toBeNull();
     });
 
     it('should mark user messages as read', async () => {
@@ -297,6 +328,9 @@ describe('MockBotService', () => {
         createdAt: createdAt.toISOString(),
         kind: 'TEXT',
         buttons: [{ title: 'Да', callbackData: 'yes' }],
+        channel: null,
+        botName: null,
+        operatorEmail: null,
       });
     });
 
@@ -381,6 +415,9 @@ describe('MockBotService', () => {
         createdAt: createdAt.toISOString(),
         kind: 'TEXT',
         buttons: null,
+        channel: null,
+        botName: null,
+        operatorEmail: null,
       });
     });
 
@@ -411,8 +448,61 @@ describe('MockBotService', () => {
           kind: MessageKind.TEXT,
           content: 'Hello',
           buttons: [{ title: 'Да', callbackData: 'yes' }],
+          channel: 'WEB',
+          botName: null,
+          operatorEmail: null,
         },
       });
+    });
+
+    it('should snapshot the operator email and the Telegram delivery channel', async () => {
+      prismaMock.conversationUpsert.mockResolvedValue({
+        id: 'conv-1',
+        userId: 'user-1',
+      });
+      prismaMock.userFindUnique.mockResolvedValue({
+        telegramBotId: 'bot-1',
+        telegramChatId: '999',
+      });
+      messageChannelMock.resolveDelivery.mockResolvedValue({
+        channel: 'TELEGRAM',
+        botName: 'Kaufman Bot',
+      });
+      prismaMock.messageCreate.mockResolvedValue({
+        id: 'msg-1',
+        conversationId: 'conv-1',
+        senderRole: MessageSenderRole.BOT,
+        kind: MessageKind.TEXT,
+        content: 'Hello',
+        buttons: null,
+        channel: 'TELEGRAM',
+        botName: 'Kaufman Bot',
+        operatorEmail: 'admin@kaufman.bot',
+        readAt: null,
+        createdAt: new Date('2024-01-01'),
+      });
+
+      const result = await service.replyAsBot(
+        'user-1',
+        'Hello',
+        undefined,
+        'admin@kaufman.bot',
+      );
+
+      expect(messageChannelMock.resolveDelivery).toHaveBeenCalledWith({
+        telegramBotId: 'bot-1',
+        telegramChatId: '999',
+      });
+      expect(prismaMock.messageCreate).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          channel: 'TELEGRAM',
+          botName: 'Kaufman Bot',
+          operatorEmail: 'admin@kaufman.bot',
+        }),
+      });
+      expect(result.channel).toBe('TELEGRAM');
+      expect(result.botName).toBe('Kaufman Bot');
+      expect(result.operatorEmail).toBe('admin@kaufman.bot');
     });
   });
 
@@ -430,6 +520,9 @@ describe('MockBotService', () => {
         senderRole: 'USER' as const,
         content: 'Hello',
         buttons: null,
+        channel: 'WEB' as const,
+        botName: null,
+        operatorEmail: null,
         createdAt: new Date().toISOString(),
       };
 
@@ -448,6 +541,9 @@ describe('MockBotService', () => {
         senderRole: 'USER' as const,
         content: 'Hello',
         buttons: null,
+        channel: 'WEB' as const,
+        botName: null,
+        operatorEmail: null,
         createdAt: new Date().toISOString(),
       };
 

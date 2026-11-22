@@ -13,7 +13,11 @@ import {
   ChatStreamEventDto,
 } from '../dto/chat.dto.js';
 import type { Message, User } from '../generated/prisma/client.js';
-import { MessageKind, MessageSenderRole } from '../generated/prisma/enums.js';
+import {
+  MessageChannel,
+  MessageKind,
+  MessageSenderRole,
+} from '../generated/prisma/enums.js';
 import type { BotPluginSourceKind } from '../plugins/bot-plugin.interface.js';
 import { BotPluginsService } from '../plugins/bot-plugins.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -22,6 +26,14 @@ import { ChatEvent, ChatEventsService } from './chat-events.service.js';
 
 /** Maximum length of a message content after trimming. */
 const MAX_CONTENT_LENGTH = 4000;
+
+/**
+ * Transport source of an inbound user message. The web chat is the default;
+ * the Telegram bridge passes the bot name so the snapshot records which bot
+ * received the message (design D2: USER = source channel).
+ */
+export type MessageSource =
+  { channel: 'WEB' } | { channel: 'TELEGRAM'; botName: string };
 
 /**
  * User-side chat use cases: retrieve conversation history, send messages,
@@ -82,8 +94,13 @@ export class ChatService {
    * conversation lazily if it does not exist yet. The message and its
    * plugin-dispatch task are persisted atomically (see BotPluginTask).
    * Returns the persisted message and publishes a real-time event.
+   * `source` records where the user wrote from; it defaults to the web chat.
    */
-  async sendMessage(user: User, content: string): Promise<ChatMessageDto> {
+  async sendMessage(
+    user: User,
+    content: string,
+    source: MessageSource = { channel: 'WEB' },
+  ): Promise<ChatMessageDto> {
     await this.assertTransportActive(user);
 
     const trimmed = typeof content === 'string' ? content.trim() : '';
@@ -113,6 +130,7 @@ export class ChatService {
       senderRole: MessageSenderRole.USER,
       kind: MessageKind.TEXT,
       content: trimmed,
+      ...this.snapshotSource(source),
     });
 
     const dto = this.toDto(message);
@@ -137,6 +155,7 @@ export class ChatService {
   async submitButtonCallback(
     user: User,
     dto: ButtonCallbackRequestDto,
+    source: MessageSource = { channel: 'WEB' },
   ): Promise<ChatMessageDto> {
     await this.assertTransportActive(user);
 
@@ -165,6 +184,7 @@ export class ChatService {
       senderRole: MessageSenderRole.USER,
       kind: MessageKind.BUTTON,
       content: callbackData,
+      ...this.snapshotSource(source),
     });
 
     const dtoResult = this.toDto(message);
@@ -180,6 +200,9 @@ export class ChatService {
       createdAt: dtoResult.createdAt,
       kind: 'BUTTON',
       buttons: null,
+      channel: message.channel,
+      botName: message.botName,
+      operatorEmail: message.operatorEmail,
     };
     this.chatEvents.publish(event);
 
@@ -205,12 +228,27 @@ export class ChatService {
     senderRole: MessageSenderRole;
     kind: MessageKind;
     content: string;
+    channel: MessageChannel;
+    botName: string | null;
   }): Promise<Message> {
     return this.prisma.$transaction(async (tx) => {
       const created = await tx.message.create({ data });
       await tx.botPluginTask.create({ data: { messageId: created.id } });
       return created;
     });
+  }
+
+  /**
+   * Maps the transport source onto the message snapshot columns: the web
+   * chat records `WEB` with no bot, Telegram records the receiving bot name.
+   */
+  private snapshotSource(source: MessageSource): {
+    channel: MessageChannel;
+    botName: string | null;
+  } {
+    return source.channel === 'TELEGRAM'
+      ? { channel: MessageChannel.TELEGRAM, botName: source.botName }
+      : { channel: MessageChannel.WEB, botName: null };
   }
 
   /**
@@ -323,6 +361,9 @@ export class ChatService {
     buttons?: unknown;
     readAt: Date | null;
     createdAt: Date;
+    channel?: MessageChannel | null;
+    botName?: string | null;
+    operatorEmail?: string | null;
   }): ChatMessageDto {
     return new ChatMessageDto({
       id: message.id,
@@ -330,6 +371,9 @@ export class ChatService {
       senderRole: message.senderRole,
       content: message.content,
       buttons: toButtons(message.buttons),
+      channel: message.channel ?? null,
+      botName: message.botName ?? null,
+      operatorEmail: message.operatorEmail ?? null,
       readAt: message.readAt?.toISOString() ?? null,
       createdAt: message.createdAt.toISOString(),
     });
@@ -342,6 +386,9 @@ export class ChatService {
       senderRole: event.senderRole,
       content: event.content,
       buttons: event.buttons ?? null,
+      channel: event.channel ?? null,
+      botName: event.botName ?? null,
+      operatorEmail: event.operatorEmail ?? null,
       createdAt: event.createdAt,
     });
   }
@@ -354,6 +401,9 @@ export class ChatService {
       content: string;
       buttons?: unknown;
       createdAt: Date;
+      channel?: MessageChannel | null;
+      botName?: string | null;
+      operatorEmail?: string | null;
     },
     createdAtIso: string,
     kind: 'TEXT' | 'BUTTON' = 'TEXT',
@@ -366,6 +416,9 @@ export class ChatService {
       createdAt: createdAtIso,
       kind,
       buttons: toButtons(message.buttons),
+      channel: message.channel ?? null,
+      botName: message.botName ?? null,
+      operatorEmail: message.operatorEmail ?? null,
     };
     this.chatEvents.publish(event);
   }

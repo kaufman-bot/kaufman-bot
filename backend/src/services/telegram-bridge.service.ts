@@ -124,7 +124,13 @@ export class TelegramBridgeService implements OnApplicationBootstrap {
   ): Promise<boolean> {
     const bot = await this.prisma.telegramBot.findUnique({
       where: { id: botId },
-      select: { id: true, webhookSecret: true, isActive: true, botToken: true },
+      select: {
+        id: true,
+        webhookSecret: true,
+        isActive: true,
+        botToken: true,
+        name: true,
+      },
     });
     if (!bot) return false;
 
@@ -138,9 +144,9 @@ export class TelegramBridgeService implements OnApplicationBootstrap {
     if (!bot.isActive) return true;
 
     if (update.message?.text) {
-      await this.handleMessage(botId, update, bot.botToken);
+      await this.handleMessage(botId, update, bot.botToken, bot.name);
     } else if (update.callback_query) {
-      await this.handleCallbackQuery(botId, update, bot.botToken);
+      await this.handleCallbackQuery(botId, update, bot.botToken, bot.name);
     }
 
     return true;
@@ -150,6 +156,7 @@ export class TelegramBridgeService implements OnApplicationBootstrap {
     botId: string,
     update: Update,
     botToken: string,
+    botName: string,
   ): Promise<void> {
     const message = update.message!;
     const text = message.text!;
@@ -179,7 +186,7 @@ export class TelegramBridgeService implements OnApplicationBootstrap {
 
     const sender = this.getOrCreateSender(botId, botToken);
     await this.chatService
-      .sendMessage(user, text)
+      .sendMessage(user, text, { channel: 'TELEGRAM', botName })
       .catch((err) =>
         this.logger.error(`Inbound text dispatch failed: ${String(err)}`),
       );
@@ -191,6 +198,7 @@ export class TelegramBridgeService implements OnApplicationBootstrap {
     botId: string,
     update: Update,
     botToken: string,
+    botName: string,
   ): Promise<void> {
     const cq = update.callback_query!;
     const chatId = String(cq.message?.chat?.id ?? cq.from?.id ?? '');
@@ -205,7 +213,10 @@ export class TelegramBridgeService implements OnApplicationBootstrap {
     await sender.answerCallbackQuery(cq.id).catch(() => {});
 
     await this.chatService
-      .submitButtonCallback(user, { callbackData: data } as any)
+      .submitButtonCallback(user, { callbackData: data } as any, {
+        channel: 'TELEGRAM',
+        botName,
+      })
       .catch((err) =>
         this.logger.error(`Inbound callback dispatch failed: ${String(err)}`),
       );

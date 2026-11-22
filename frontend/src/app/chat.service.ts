@@ -26,6 +26,16 @@ export interface ChatMessage {
    * BOT replies).
    */
   buttons: KeyboardButton[] | null;
+  /**
+   * Transport channel snapshot taken at write time: for USER messages —
+   * where the user wrote from, for BOT messages — where the reply was
+   * delivered. Null for messages recorded before the snapshot existed.
+   */
+  channel: 'WEB' | 'TELEGRAM' | null;
+  /** Name of the Telegram bot in the channel snapshot (else null). */
+  botName: string | null;
+  /** Email of the console operator who sent a BOT reply (else null). */
+  operatorEmail: string | null;
   readAt: string | null;
   createdAt: string;
 }
@@ -36,6 +46,9 @@ export interface ChatStreamEvent {
   senderRole: 'USER' | 'BOT';
   content: string;
   buttons?: KeyboardButton[] | null;
+  channel: 'WEB' | 'TELEGRAM' | null;
+  botName: string | null;
+  operatorEmail: string | null;
   createdAt: string;
 }
 

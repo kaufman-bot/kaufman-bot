@@ -79,11 +79,11 @@ export class AppModule {}
 Два вида сервисов, не смешиваются (полное правило —
 [`service-layer-split`](../.agents/skills/service-layer-split/SKILL.md)):
 
-| Вид                  | Примеры                                                                                                | Ответственность                                             |
-| -------------------- | ------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------- |
-| **Entity-CRUD**      | `UsersService`, `ApiKeysService`, `ButtonPresetsService`, `TelegramBotsService`                        | list/get/update/remove одного Prisma-без фоновой композиции |
-| **Use-case**         | `AuthService`, `ChatService`, `MockBotService`, `BotPluginsService`, `TelegramBindingService`          | Мультисетевой сценарий: compose + side effects + валидация  |
-| **Инфраструктурный** | `ChatEventsService`, `PrismaService`, `SeedService`, `TelegramWebhookService`, `TelegramBridgeService` | Шины, драйверы, bootstrap                                   |
+| Вид                  | Примеры                                                                                                                         | Ответственность                                             |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| **Entity-CRUD**      | `UsersService`, `ApiKeysService`, `ButtonPresetsService`, `TelegramBotsService`                                                 | list/get/update/remove одного Prisma-без фоновой композиции |
+| **Use-case**         | `AuthService`, `ChatService`, `MockBotService`, `BotPluginsService`, `TelegramBindingService`                                   | Мультисетевой сценарий: compose + side effects + валидация  |
+| **Инфраструктурный** | `ChatEventsService`, `PrismaService`, `SeedService`, `TelegramWebhookService`, `TelegramBridgeService`, `MessageChannelService` | Шины, драйверы, bootstrap                                   |
 
 Конкретные примеры:
 
@@ -93,14 +93,20 @@ export class AppModule {}
 - `AuthService.updateProfile` + `normalizeTimezone` — IANA-валидация через
   `Intl.DateTimeFormat`; `normalizeLanguage` (`utils/language.ts`) — проверка
   `language` против поддерживаемого набора, `BadRequestException` иначе.
-- `MockBotService.replyAsBot(userId, content?, buttons?)` — use-case: находит
-  диалог, пишет `Message(BOT)`, публикует событие.
+- `MockBotService.replyAsBot(userId, content?, buttons?, operatorEmail)` —
+  use-case: находит диалог, резолвит доставку через `MessageChannelService`,
+  пишет `Message(BOT)` со снимком `channel`/`botName`/`operatorEmail` и
+  публикует событие.
 - `ChatService.sendMessage` — use-case с транзакцией (message + outbox).
 - `ChatService.submitButtonCallback` — use-case: пишет `Message(BUTTON)` и
   `BotPluginTask` одной транзакцией (общий хелпер `createMessageWithTask`),
   затем синхронно диспатчит нажатие плагинам с `kind=BUTTON`. Эхо нажатия по
   прежнему скрыто из user-history и SSE пользователя.
 - `ButtonPresetsService` — owner-scope CRUD с проверкой `ownerId`.
+- `MessageChannelService.resolveDelivery(owner)` — read-only резолвер доставки:
+  повторяет гейт исходящего моста (`telegramBotId` + `telegramChatId` +
+  `bot.isActive`) и возвращает снимок `{ channel, botName }`; единая точка
+  решения для `MockBotService.replyAsBot` и `BotPluginsService.dispatchAndReply`.
 
 ## 3. URL-контракт и версионирование
 
@@ -228,16 +234,16 @@ e2e-тесты (ActivityHelper поверх SDK)
 Только через `prisma migrate` (см.
 [`prisma-migrations-only`](../.agents/skills/prisma-migrations-only/SKILL.md)).
 
-| Модель                 | Назначение                                                                                                                                                    |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `User`                 | `email` unique, `password` (scrypt-hex), `role` enum, `isActive`, **`timezone`** (IANA или null → UTC), **`language`** (enum `en`/`ru`, default `en`)         |
-| `ApiKey`               | `key` unique, `name`, `isActive`, `expiresAt?`, FK → `User` (`onDelete: Cascade`)                                                                             |
-| `Conversation`         | `userId` unique — один диалог на пользователя, FK → `User` (`onDelete: Cascade`)                                                                              |
-| `Message`              | `conversationId`, `senderRole` (`USER`/`BOT`), `kind` (`TEXT`/`BUTTON`), `content`, **`buttons: Json?`**, `readAt?`                                           |
-| `BotPluginTask`        | Outbox-строка: `messageId` unique, `status` enum `PENDING`/`PROCESSING`/`DONE`, индекс `[status, updatedAt]`                                                  |
-| `ButtonPreset`         | `ownerId` FK, `name`, `buttons: Json` — набор inline-кнопок, принадлежащий ADMIN-пользователю                                                                 |
-| `TelegramBot`          | `ownerId` FK → User (`onDelete: Cascade`), `name`, `botToken`, `botUsername?`, `isActive`, `webhookSecret` (cuid), `settings: Json?` — Telegram-бот оператора |
-| `TelegramBindingToken` | `token` unique (крипто-случайный), `userId`, `telegramBotId`, `expiresAt`, `usedAt?` — одноразовый токен привязки chat                                        |
+| Модель                 | Назначение                                                                                                                                                                 |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `User`                 | `email` unique, `password` (scrypt-hex), `role` enum, `isActive`, **`timezone`** (IANA или null → UTC), **`language`** (enum `en`/`ru`, default `en`)                      |
+| `ApiKey`               | `key` unique, `name`, `isActive`, `expiresAt?`, FK → `User` (`onDelete: Cascade`)                                                                                          |
+| `Conversation`         | `userId` unique — один диалог на пользователя, FK → `User` (`onDelete: Cascade`)                                                                                           |
+| `Message`              | `conversationId`, `senderRole` (`USER`/`BOT`), `kind` (`TEXT`/`BUTTON`), `content`, **`buttons: Json?`**, **снимок канала `channel`/`botName`/`operatorEmail`**, `readAt?` |
+| `BotPluginTask`        | Outbox-строка: `messageId` unique, `status` enum `PENDING`/`PROCESSING`/`DONE`, индекс `[status, updatedAt]`                                                               |
+| `ButtonPreset`         | `ownerId` FK, `name`, `buttons: Json` — набор inline-кнопок, принадлежащий ADMIN-пользователю                                                                              |
+| `TelegramBot`          | `ownerId` FK → User (`onDelete: Cascade`), `name`, `botToken`, `botUsername?`, `isActive`, `webhookSecret` (cuid), `settings: Json?` — Telegram-бот оператора              |
+| `TelegramBindingToken` | `token` unique (крипто-случайный), `userId`, `telegramBotId`, `expiresAt`, `usedAt?` — одноразовый токен привязки chat                                                     |
 
 Ключевые semantics:
 
@@ -245,6 +251,15 @@ e2e-тесты (ActivityHelper поверх SDK)
   reply, сервер копирует `buttons` из пресета в `Message`. Изменение или
   удаление пресета **не переписывает** уже отправленные сообщения
   (Telegram-like).
+- **`Message.channel` — канальный снимок**. У `USER`-сообщения `channel` —
+  это **источник** (`WEB` — веб-чат, `TELEGRAM` — привязанный Telegram-чат), у
+  `BOT`-сообщения — **доставка** (куда ответ реально ушёл на момент записи).
+  `botName` фиксирует имя Telegram-бота, `operatorEmail` — админа, ответившего
+  из консоли (`null` у ответов плагинов и у сообщений пользователя).
+  `channel = null` — legacy-строка, клиенты рендерят её без бейджа. Для
+  `BOT`-ответов решение принимает `MessageChannelService.resolveDelivery` по
+  тому же гейту, что и мост, поэтому снимок и фактическая доставка не
+  расходятся.
 - **`MessageKind.BUTTON`** означает «пользователь нажал кнопку». Такой
   `Message` виден в консоли оператора, но **скрыт** из user-history и
   SSE-потока пользователя. Нажатие проходит тот же outbox-путь, что и текст:
@@ -368,6 +383,9 @@ recovery-sweep), поэтому HTTP-отклик нажатия остаётс�
   подписывается через `asObservable()`+`filter`.
 - `ChatController.@Sse('stream')` маппит события в `MessageEvent` и
   фильтрует по `conversationId`.
+- `ChatEvent` несёт канальный снимок (`channel`/`botName`/`operatorEmail`),
+  поэтому оба SSE-потока (`/chat` и `/mock-bot`) рендерят бейджи без
+  дополнительного запроса.
 - Клиент фронта — `EventSource` с `?apiKey=` (query-параметр разрешён
   `ApiKeyGuard`-ом; сам заголовок EventSource выставить не может).
 - При `es.onopen` выставляется флаг `reconnected` и фронт **перезагружает
@@ -394,7 +412,10 @@ recovery-sweep), поэтому HTTP-отклик нажатия остаётс�
 - `onApplicationBootstrap` подписывается на `chatEvents.streamAll()`;
   фильтр `senderRole === 'BOT'`.
 - Резолвит `conversationId → user`; пропускает только при
-  `telegramBotId != null` **и** `telegramChatId` непуст **и** `bot.isActive`.
+  `telegramBotId != null` **и** `telegramChatId` непуст **и** `bot.isActive`
+  — тот же гейт вынесен в `MessageChannelService.resolveDelivery`, которым
+  пользуются `MockBotService.replyAsBot` и `BotPluginsService.dispatchAndReply`
+  для снимка `BOT`-ответов, поэтому снимок не может разойтись с доставкой.
 - Текст + `buttons` (из `ChatEvent`) → `TelegramSender.sendMessage`; кнопки с
   `callbackData` > 64 **байт** в разметку не кладутся (лимит Telegram), чтобы
   `sendMessage` не получил `400`.
@@ -406,9 +427,11 @@ recovery-sweep), поэтому HTTP-отклик нажатия остаётс�
 - `/start <token>` → `TelegramBindingService.consumeToken(token, chatId)` →
   `user.telegramChatId = chatId` + подтверждение в чат.
 - Текст от привязанного `chatId` → тот же outbox-путь, что
-  `ChatService.sendMessage(user, text)`; ответ бота уходит по исходящей подписке.
+  `ChatService.sendMessage(user, text, { channel: 'TELEGRAM', botName })`
+  (без `source` — `WEB`); ответ бота уходит по исходящей подписке.
 - `callback_query` от привязанного `chatId` → `answerCallbackQuery` (снять
-  спиннер) + `ChatService.submitButtonCallback(user, { callbackData })`.
+  спиннер) + `ChatService.submitButtonCallback(user, { callbackData }, source)`
+  с тем же `TELEGRAM`-снимком источника.
 - От непривязанного `chatId` / выключенного бота — тихий игнор.
 
 **Почему `instances: 1` в `ecosystem-prod.config.cjs`:**
@@ -446,16 +469,21 @@ Standalone-компоненты + `signal()` + `@if/@for`-контроль. Кл
   `reconnected` и refetch истории.
 - `MockBotService`, `ButtonPresetsService` — консоль оператора: переключение
   между пользователями, reply с кнопками, CRUD пресетов.
+- `utils/message-identity.ts` — общий для `/chat` и `/mock-bot` helper
+  бейджей и цветов идентичности: ключ `bot:<name>` / `operator:<email>`,
+  хэш → класс `msg-identity-0…7`; палитра — глобальные CSS-переменные в
+  `styles.css` (в `styles` компонента импортируемые константы AOT не
+  разрешает).
 
 Jest-тесты компонентов, Playwright-e2e — см. [`testing.md`](testing.md).
 
 ## 11. Тестовый контур (краткий обзор)
 
-- **Backend unit** (`vitest`) — `backend/src/**/*.spec.ts`; 126 тестов на
+- **Backend unit** (`vitest`) — `backend/src/**/*.spec.ts`; 221 тест на
   момент написания документа.
 - **Backend e2e** — `backend/test/*.e2e-spec.ts` против **живого** бэкенда
-  через сгенерированный OpenAPI SDK. 104 теста, без `Test.createTestingModule`.
-- **Frontend unit** — Jest + `jest-preset-angular`; 90 тестов.
+  через сгенерированный OpenAPI SDK. 136 тестов, без `Test.createTestingModule`.
+- **Frontend unit** — Jest + `jest-preset-angular`; 149 тестов.
 - **Frontend e2e** — Playwright против прод-стека (`start:prod`) или dev
   (`:4200`);详见 [`testing.md`](testing.md).
 

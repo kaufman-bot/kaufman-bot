@@ -14,10 +14,16 @@ import { Subscription } from 'rxjs';
 import {
   ButtonPreset,
   ConversationMessage,
+  ConversationSummary,
   KeyboardButton,
   MockBotService,
   MockBotStreamEvent,
 } from '../mock-bot.service';
+import {
+  channelBadgeOf,
+  identityClassOf,
+  senderLabelOf,
+} from '../utils/message-identity';
 
 /**
  * Operator console for the mock bot. Beyond the plain conversation list
@@ -70,6 +76,13 @@ import {
               </div>
               @if (conv.lastMessage) {
                 <div class="conv-preview">
+                  @if (convChannelMark(conv); as mark) {
+                    <span
+                      class="conv-channel"
+                      [class.telegram]="conv.lastMessageChannel === 'TELEGRAM'"
+                      >{{ mark }}</span
+                    >
+                  }
                   <span class="conv-sender">
                     {{
                       conv.lastMessageSenderRole === 'USER'
@@ -151,12 +164,11 @@ import {
               @for (msg of mockBotService.messages(); track msg.id) {
                 <div
                   class="message"
+                  [ngClass]="identityClass(msg)"
                   [class.user]="msg.senderRole === 'USER'"
                   [class.bot]="msg.senderRole === 'BOT'"
                 >
-                  <span class="sender">
-                    {{ msg.senderRole === 'USER' ? 'Пользователь' : 'Бот' }}
-                  </span>
+                  <span class="sender">{{ senderLabel(msg) }}</span>
                   <span class="content">{{ msg.content }}</span>
                   @if (
                     msg.senderRole === 'BOT' &&
@@ -168,6 +180,9 @@ import {
                         <span class="keyboard-chip">{{ btn.title }}</span>
                       }
                     </div>
+                  }
+                  @if (channelBadge(msg); as badge) {
+                    <span class="channel-badge">{{ badge }}</span>
                   }
                   <span class="time">{{ formatTime(msg.createdAt) }}</span>
                 </div>
@@ -366,6 +381,19 @@ import {
       .conv-sender {
         font-weight: 500;
       }
+      .conv-channel {
+        display: inline-block;
+        margin-right: 0.35rem;
+        padding: 0 0.35rem;
+        border-radius: 4px;
+        background: #e3f2fd;
+        color: #1565c0;
+        font-size: 0.7rem;
+      }
+      .conv-channel.telegram {
+        background: #e8f5e9;
+        color: #2e7d32;
+      }
       .conv-time {
         font-size: 0.75rem;
         color: #999;
@@ -406,12 +434,13 @@ import {
       }
       .message.user {
         align-self: flex-start;
-        background: #f0f0f0;
+        background: var(--msg-tint, #f0f0f0);
         color: #333;
+        border-left: 4px solid var(--msg-accent, transparent);
       }
       .message.bot {
         align-self: flex-end;
-        background: #1976d2;
+        background: var(--msg-deep, #1976d2);
         color: white;
       }
       .sender {
@@ -420,6 +449,10 @@ import {
       }
       .content {
         word-break: break-word;
+      }
+      .channel-badge {
+        font-size: 0.7rem;
+        opacity: 0.75;
       }
       .keyboard {
         display: flex;
@@ -708,6 +741,34 @@ export class MockBotComponent implements OnInit, OnDestroy, AfterViewChecked {
     }
   }
 
+  /** Shared bubble color: stable per bot / operator identity. */
+  identityClass(msg: ConversationMessage): string {
+    return identityClassOf(msg);
+  }
+
+  /**
+   * Channel badge under the message (incoming — from, replies — delivered
+   * to); null for messages recorded before the channel snapshot existed.
+   */
+  channelBadge(msg: ConversationMessage): string | null {
+    return channelBadgeOf(msg, 'console');
+  }
+
+  /** Sender caption: “Пользователь” for the client, operator email or “Бот”. */
+  senderLabel(msg: ConversationMessage): string {
+    return senderLabelOf(msg, 'console');
+  }
+
+  /**
+   * Channel marker next to the last-message preview in the list; the
+   * summary carries only the channel, not the bot name. Null → no marker.
+   */
+  convChannelMark(conv: ConversationSummary): string | null {
+    if (conv.lastMessageChannel === 'TELEGRAM') return 'Telegram';
+    if (conv.lastMessageChannel === 'WEB') return 'веб-чат';
+    return null;
+  }
+
   /** Composer: adds an empty slot to the working area. */
   onAddButton(): void {
     if (this.draftButtons().length >= 12) return;
@@ -847,6 +908,9 @@ export class MockBotComponent implements OnInit, OnDestroy, AfterViewChecked {
         senderRole: event.senderRole,
         content: event.content,
         buttons: event.buttons ?? null,
+        channel: event.channel ?? null,
+        botName: event.botName ?? null,
+        operatorEmail: event.operatorEmail ?? null,
         readAt: null,
         createdAt: event.createdAt,
       };

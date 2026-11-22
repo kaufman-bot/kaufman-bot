@@ -62,6 +62,10 @@ describe('Chat endpoints (e2e, running backend)', () => {
       expect(message.content).toBe('Hello, bot!');
       expect(message.senderRole).toBe('USER');
       expect(message.conversationId).toBeDefined();
+      // Web chat is the source channel; no Telegram bot, no operator.
+      expect(message.channel).toBe('WEB');
+      expect(message.botName).toBeNull();
+      expect(message.operatorEmail).toBeNull();
     });
 
     it('adds the message to the conversation history', async () => {

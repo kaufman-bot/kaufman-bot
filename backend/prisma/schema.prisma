@@ -33,6 +33,17 @@ enum MessageKind {
   BUTTON
 }
 
+/**
+ * Transport channel snapshot of a message, taken at write time. For USER
+ * messages it is where the user wrote from; for BOT messages it is where
+ * the reply was delivered (web-only/mock target vs a real Telegram bot).
+ * Null marks messages recorded before this snapshot existed.
+ */
+enum MessageChannel {
+  WEB
+  TELEGRAM
+}
+
 enum BotPluginTaskStatus {
   PENDING
   PROCESSING
@@ -121,6 +132,23 @@ model Message {
    * (Telegram-like semantics). Read-only through `toButtons()`.
    */
   buttons        Json?
+  /**
+   * Channel snapshot at write time: for USER messages — where the user wrote
+   * from; for BOT messages — where the reply was delivered (see
+   * MessageChannelService, which mirrors the Telegram bridge gate).
+   * Null for messages recorded before this snapshot existed.
+   */
+  channel        MessageChannel?
+  /**
+   * Snapshot of the Telegram bot name for the channel event: the bot that
+   * received a USER message or delivered a BOT reply. Null for WEB.
+   */
+  botName        String?
+  /**
+   * Snapshot of the console operator's email for BOT replies sent from the
+   * mock-bot console; null for plugin auto-replies and all USER messages.
+   */
+  operatorEmail  String?
   readAt         DateTime?
   createdAt      DateTime          @default(now())
 

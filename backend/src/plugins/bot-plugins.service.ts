@@ -21,6 +21,7 @@ import {
   ChatEvent,
   ChatEventsService,
 } from '../services/chat-events.service.js';
+import { MessageChannelService } from '../services/message-channel.service.js';
 import {
   normalizeButtons,
   validateButtons,
@@ -83,6 +84,7 @@ export class BotPluginsService
     @Inject(BOT_PLUGINS) private readonly plugins: BotPlugin[],
     private readonly prisma: PrismaService,
     private readonly chatEvents: ChatEventsService,
+    private readonly messageChannel: MessageChannelService,
   ) {}
 
   // --- lifecycle ---------------------------------------------------------
@@ -178,7 +180,10 @@ export class BotPluginsService
 
     // Persist the reply and close the task atomically: a crash before the
     // commit leaves the task in PROCESSING for the recovery sweep, a commit
-    // guarantees exactly one reply for this message.
+    // guarantees exactly one reply for this message. The delivery snapshot
+    // (design D2) uses the same gate as the Telegram bridge; plugin replies
+    // have no operator behind them, so `operatorEmail` stays null.
+    const delivery = await this.messageChannel.resolveDelivery(user);
     const message = await this.prisma.$transaction(async (tx) => {
       const created = await tx.message.create({
         data: {
@@ -188,6 +193,9 @@ export class BotPluginsService
           buttons: prepared.buttons
             ? (prepared.buttons as unknown as object)
             : undefined,
+          channel: delivery.channel,
+          botName: delivery.botName,
+          operatorEmail: null,
         },
       });
       await tx.botPluginTask.updateMany({
@@ -204,6 +212,9 @@ export class BotPluginsService
       content: message.content,
       createdAt: message.createdAt.toISOString(),
       buttons: prepared.buttons,
+      channel: message.channel,
+      botName: message.botName,
+      operatorEmail: message.operatorEmail,
     };
     this.chatEvents.publish(event);
   }

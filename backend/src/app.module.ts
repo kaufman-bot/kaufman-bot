@@ -25,6 +25,7 @@ import { AuthService } from './services/auth.service.js';
 import { ButtonPresetsService } from './services/button-presets.service.js';
 import { ChatEventsService } from './services/chat-events.service.js';
 import { ChatService } from './services/chat.service.js';
+import { MessageChannelService } from './services/message-channel.service.js';
 import { MockBotService } from './services/mock-bot.service.js';
 import { TelegramBindingService } from './services/telegram-binding.service.js';
 import { TelegramBotsService } from './services/telegram-bots.service.js';
@@ -83,6 +84,7 @@ const isProd = process.env.NODE_ENV === 'production';
     ButtonPresetsService,
     ChatEventsService,
     ChatService,
+    MessageChannelService,
     MockBotService,
     UsersService,
     TelegramBotsService,

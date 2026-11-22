@@ -380,6 +380,18 @@ export type ChatMessageDto = {
      */
     buttons: Array<KeyboardButtonDto> | null;
     /**
+     * Transport channel snapshot: for USER messages — where the user wrote from, for BOT messages — where the reply was delivered (null for messages recorded before the snapshot existed)
+     */
+    channel: 'WEB' | 'TELEGRAM';
+    /**
+     * Name of the Telegram bot in the channel snapshot: the bot that received a USER message or delivered a BOT reply (null for WEB)
+     */
+    botName: string | null;
+    /**
+     * Email of the console operator who sent a BOT reply from the mock-bot console (null for plugin auto-replies and USER messages)
+     */
+    operatorEmail: string | null;
+    /**
      * When the opposite side read the message (null if unread)
      */
     readAt: {
@@ -427,6 +439,18 @@ export type ChatStreamEventDto = {
      */
     buttons: Array<KeyboardButtonDto> | null;
     /**
+     * Transport channel snapshot: for USER events — where the user wrote from, for BOT events — where the reply was delivered
+     */
+    channel: 'WEB' | 'TELEGRAM';
+    /**
+     * Name of the Telegram bot in the channel snapshot (null for WEB)
+     */
+    botName: string | null;
+    /**
+     * Email of the console operator who sent a BOT reply (null when none)
+     */
+    operatorEmail: string | null;
+    /**
      * When the message was created
      */
     createdAt: string;
@@ -455,6 +479,10 @@ export type ConversationSummaryDto = {
      * Who sent the last message
      */
     lastMessageSenderRole: 'USER' | 'BOT';
+    /**
+     * Channel snapshot of the last message (null when there is no message or it was recorded before the snapshot existed)
+     */
+    lastMessageChannel: 'WEB' | 'TELEGRAM';
     /**
      * When the last message was sent
      */
@@ -511,6 +539,18 @@ export type MockBotStreamEventDto = {
      * Inline keyboard buttons attached to a bot message (null when none)
      */
     buttons: Array<KeyboardButtonDto> | null;
+    /**
+     * Transport channel snapshot: for USER events — where the user wrote from, for BOT events — where the reply was delivered
+     */
+    channel: 'WEB' | 'TELEGRAM';
+    /**
+     * Name of the Telegram bot in the channel snapshot (null for WEB)
+     */
+    botName: string | null;
+    /**
+     * Email of the console operator who sent a BOT reply (null when none)
+     */
+    operatorEmail: string | null;
     /**
      * When the message was created
      */
@@ -647,7 +687,7 @@ export type UpdateTelegramBotRequestDto = {
 
 export type TelegramLaunchDto = {
     /**
-     * t.me deep-link URL with the start-token
+     * Absolute t.me deep-link URL with the start-token (scheme included so window.open resolves it as an external link, not a relative path)
      */
     url: string;
     /**

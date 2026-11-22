@@ -26,6 +26,9 @@ describe('ChatComponent', () => {
       senderRole: 'USER',
       content: 'Hello',
       buttons: null,
+      channel: 'WEB',
+      botName: null,
+      operatorEmail: null,
       readAt: null,
       createdAt: '2026-01-01T00:00:00Z',
     },
@@ -35,6 +38,9 @@ describe('ChatComponent', () => {
       senderRole: 'BOT',
       content: 'Hi there!',
       buttons: null,
+      channel: 'WEB',
+      botName: null,
+      operatorEmail: null,
       readAt: null,
       createdAt: '2026-01-01T00:01:00Z',
     },
@@ -136,6 +142,9 @@ describe('ChatComponent', () => {
       senderRole: 'USER',
       content: 'New message',
       buttons: null,
+      channel: 'WEB',
+      botName: null,
+      operatorEmail: null,
       readAt: null,
       createdAt: '2026-01-01T00:02:00Z',
     };
@@ -180,6 +189,9 @@ describe('ChatComponent', () => {
       conversationId: 'conv1',
       senderRole: 'BOT',
       content: 'Bot reply via SSE',
+      channel: 'WEB',
+      botName: null,
+      operatorEmail: null,
       createdAt: '2026-01-01T00:03:00Z',
     };
     streamSubject.next(streamEvent);
@@ -201,6 +213,9 @@ describe('ChatComponent', () => {
         conversationId: 'conv1',
         senderRole: 'USER',
         content: existingMsg.content,
+        channel: 'WEB',
+        botName: null,
+        operatorEmail: null,
         createdAt: existingMsg.createdAt,
       }),
     );
@@ -235,6 +250,9 @@ describe('ChatComponent', () => {
       senderRole: 'BOT',
       content: 'Recovered reply',
       buttons: null,
+      channel: 'WEB',
+      botName: null,
+      operatorEmail: null,
       readAt: null,
       createdAt: '2026-01-01T00:05:00Z',
     };
@@ -275,6 +293,9 @@ describe('ChatComponent', () => {
         { title: 'Yes', callbackData: 'yes' },
         { title: 'No', callbackData: 'no' },
       ],
+      channel: 'WEB',
+      botName: null,
+      operatorEmail: null,
       readAt: null,
       createdAt: '2026-01-01T00:10:00Z',
     };
@@ -337,6 +358,9 @@ describe('ChatComponent', () => {
           senderRole: 'USER',
           content: 'yes',
           buttons: null,
+          channel: 'WEB',
+          botName: null,
+          operatorEmail: null,
           readAt: null,
           createdAt: '2026-01-01T00:11:00Z',
         } satisfies ChatMessage,
@@ -366,6 +390,9 @@ describe('ChatComponent', () => {
         senderRole: 'BOT',
         content: 'Pick one',
         buttons: [{ title: 'Ping', callbackData: 'ping' }],
+        channel: 'WEB',
+        botName: null,
+        operatorEmail: null,
         createdAt: '2026-01-01T00:12:00Z',
       });
       tick();
@@ -380,6 +407,162 @@ describe('ChatComponent', () => {
       const compiled = fixture.nativeElement as HTMLElement;
       const btn = compiled.querySelector<HTMLButtonElement>('.keyboard-button');
       expect(btn?.textContent?.trim()).toBe('Ping');
+    }));
+  });
+
+  describe('channel badges and identity coloring', () => {
+    /** Flushes history into a fresh fixture and returns the rendered root. */
+    const render = (messages: ChatMessage[]): HTMLElement => {
+      jest.spyOn(chatService, 'connectStream').mockReturnValue(of());
+      fixture.detectChanges();
+      httpMock.expectOne('/api/v1/chat/messages').flush(messages);
+      tick();
+      fixture.detectChanges();
+      return fixture.nativeElement as HTMLElement;
+    };
+
+    const identityClasses = (element: Element): string[] =>
+      Array.from(element.classList).filter((name) =>
+        name.startsWith('msg-identity-'),
+      );
+
+    const telegramUser: ChatMessage = {
+      id: 'tg-user',
+      conversationId: 'conv1',
+      senderRole: 'USER',
+      content: 'From Telegram',
+      buttons: null,
+      channel: 'TELEGRAM',
+      botName: 'Support Bot',
+      operatorEmail: null,
+      readAt: null,
+      createdAt: '2026-01-01T00:20:00Z',
+    };
+
+    const telegramReply: ChatMessage = {
+      id: 'tg-reply',
+      conversationId: 'conv1',
+      senderRole: 'BOT',
+      content: 'Delivered reply',
+      buttons: null,
+      channel: 'TELEGRAM',
+      botName: 'Support Bot',
+      operatorEmail: null,
+      readAt: null,
+      createdAt: '2026-01-01T00:21:00Z',
+    };
+
+    it('shows send and delivery badges with the bot name', fakeAsync(() => {
+      const compiled = render([telegramUser, telegramReply]);
+      const badges = compiled.querySelectorAll('.channel-badge');
+
+      expect(badges.length).toBe(2);
+      expect(badges[0].textContent?.trim()).toBe(
+        'отправлено из Telegram · Support Bot',
+      );
+      expect(badges[1].textContent?.trim()).toBe(
+        'доставлено в Telegram · Support Bot',
+      );
+    }));
+
+    it('shows web-chat badges without a bot name', fakeAsync(() => {
+      const compiled = render(mockMessages);
+      const badges = compiled.querySelectorAll('.channel-badge');
+
+      expect(badges[0].textContent?.trim()).toBe('отправлено из веб-чата');
+      expect(badges[1].textContent?.trim()).toBe('доставлено в веб-чат');
+    }));
+
+    it('signs a console reply with the operator email', fakeAsync(() => {
+      const operatorReply: ChatMessage = {
+        ...telegramReply,
+        id: 'op-reply',
+        channel: 'WEB',
+        botName: null,
+        operatorEmail: 'admin@kaufman.bot',
+      };
+      const compiled = render([operatorReply]);
+
+      expect(
+        compiled.querySelector('.message .sender')?.textContent?.trim(),
+      ).toBe('admin@kaufman.bot');
+      expect(
+        compiled.querySelector('.channel-badge')?.textContent?.trim(),
+      ).toBe('доставлено в веб-чат');
+    }));
+
+    it('colors replies delivered through different bots differently', fakeAsync(() => {
+      const otherBotReply: ChatMessage = {
+        ...telegramReply,
+        id: 'tg-reply-2',
+        botName: 'Sales Bot',
+      };
+      const compiled = render([telegramReply, otherBotReply]);
+      const [first, second] = Array.from(compiled.querySelectorAll('.message'));
+
+      const firstClass = identityClasses(first);
+      const secondClass = identityClasses(second);
+      expect(firstClass.length).toBe(1);
+      expect(secondClass.length).toBe(1);
+      // A different bot always gets a different palette slot, so the two
+      // replies stay distinguishable by background, not only by badge text.
+      expect(firstClass[0]).not.toBe(secondClass[0]);
+    }));
+
+    it('keeps the same color for the same bot across messages', fakeAsync(() => {
+      const compiled = render([telegramUser, telegramReply]);
+      const [first, second] = Array.from(compiled.querySelectorAll('.message'));
+
+      expect(identityClasses(first)).toEqual(identityClasses(second));
+    }));
+
+    it('renders a legacy message without a badge', fakeAsync(() => {
+      const legacy: ChatMessage = {
+        ...mockMessages[0],
+        id: 'legacy-1',
+        content: 'Old message',
+        channel: null,
+        botName: null,
+        operatorEmail: null,
+      };
+      const compiled = render([legacy]);
+
+      expect(compiled.querySelector('.channel-badge')).toBeNull();
+      expect(
+        compiled.querySelector('.message')?.classList.contains('user'),
+      ).toBe(true);
+      expect(compiled.querySelector('.sender')?.textContent?.trim()).toBe('Вы');
+    }));
+
+    it('renders the badge for an SSE event carrying the channel snapshot', fakeAsync(() => {
+      const streamSubject = new Subject<ChatStreamEvent>();
+      jest
+        .spyOn(chatService, 'connectStream')
+        .mockReturnValue(streamSubject.asObservable());
+
+      fixture.detectChanges();
+      httpMock.expectOne('/api/v1/chat/messages').flush([]);
+      tick();
+      fixture.detectChanges();
+
+      streamSubject.next({
+        messageId: 'evt-tg',
+        conversationId: 'conv1',
+        senderRole: 'BOT',
+        content: 'Via SSE',
+        channel: 'TELEGRAM',
+        botName: 'Support Bot',
+        operatorEmail: null,
+        createdAt: '2026-01-01T00:22:00Z',
+      });
+      tick();
+      fixture.detectChanges();
+
+      expect(
+        fixture.nativeElement
+          .querySelector('.channel-badge')
+          ?.textContent?.trim(),
+      ).toBe('доставлено в Telegram · Support Bot');
     }));
   });
 });

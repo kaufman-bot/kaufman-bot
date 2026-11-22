@@ -135,6 +135,11 @@ describe('Bot plugins (e2e, running backend)', () => {
     expect(botReply).toBeDefined();
     expect(botReply!.content).toMatch(TIME_REPLY('Europe/Moscow'));
     expectCloseToNow(botReply!.content, '+03:00');
+    // Plugin auto-reply: no operator signed it; the test user is a mock
+    // target, so the reply was delivered to the web chat only.
+    expect(botReply!.operatorEmail).toBeNull();
+    expect(botReply!.channel).toBe('WEB');
+    expect(botReply!.botName).toBeNull();
   });
 
   it('replies with UTC time when the user has no stored time zone', async () => {

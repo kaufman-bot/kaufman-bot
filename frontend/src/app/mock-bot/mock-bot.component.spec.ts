@@ -31,6 +31,7 @@ describe('MockBotComponent', () => {
       userEmail: 'user1@test.com',
       lastMessage: 'Hello bot',
       lastMessageSenderRole: 'USER',
+      lastMessageChannel: 'WEB',
       lastMessageAt: '2026-01-01T00:00:00Z',
       unreadCount: 2,
       createdAt: '2026-01-01T00:00:00Z',
@@ -42,6 +43,7 @@ describe('MockBotComponent', () => {
       userEmail: 'user2@test.com',
       lastMessage: 'Bot reply',
       lastMessageSenderRole: 'BOT',
+      lastMessageChannel: 'TELEGRAM',
       lastMessageAt: '2026-01-01T00:10:00Z',
       unreadCount: 0,
       createdAt: '2026-01-01T00:08:00Z',
@@ -56,6 +58,9 @@ describe('MockBotComponent', () => {
       senderRole: 'USER',
       content: 'Hello',
       buttons: null,
+      channel: 'WEB',
+      botName: null,
+      operatorEmail: null,
       readAt: null,
       createdAt: '2026-01-01T00:00:00Z',
     },
@@ -65,6 +70,9 @@ describe('MockBotComponent', () => {
       senderRole: 'BOT',
       content: 'Hi there!',
       buttons: null,
+      channel: 'WEB',
+      botName: null,
+      operatorEmail: null,
       readAt: '2026-01-01T00:01:00Z',
       createdAt: '2026-01-01T00:01:00Z',
     },
@@ -233,6 +241,9 @@ describe('MockBotComponent', () => {
       senderRole: 'BOT',
       content: 'Bot response',
       buttons: null,
+      channel: 'WEB',
+      botName: null,
+      operatorEmail: 'admin@kaufman.bot',
       readAt: null,
       createdAt: '2026-01-01T00:05:00Z',
     };
@@ -386,6 +397,9 @@ describe('MockBotComponent', () => {
           senderRole: 'BOT',
           content: 'Choose',
           buttons: [{ title: 'Yes', callbackData: 'yes' }],
+          channel: 'WEB',
+          botName: null,
+          operatorEmail: 'admin@kaufman.bot',
           readAt: null,
           createdAt: '2026-01-01T00:05:00Z',
         } satisfies ConversationMessage,
@@ -622,6 +636,143 @@ describe('MockBotComponent', () => {
         (b) => b.textContent?.trim() === 'Сохранить изменения',
       );
       expect(saveBtn).toBeDefined();
+    }));
+  });
+
+  describe('channel badges, sender labels and identity coloring', () => {
+    /** Boot, flush the conversations list, open `user1`, flush its history. */
+    function openWith(messages: ConversationMessage[]): HTMLElement {
+      jest
+        .spyOn(mockBotService, 'connectStream')
+        .mockReturnValue(new Subject<MockBotStreamEvent>().asObservable());
+      fixture.detectChanges();
+      httpMock
+        .expectOne('/api/v1/mock-bot/conversations')
+        .flush(mockConversations);
+      tick();
+
+      component.onSelectConversation('user1');
+      httpMock
+        .expectOne('/api/v1/mock-bot/conversations/user1/messages')
+        .flush(messages);
+      tick();
+      httpMock
+        .expectOne('/api/v1/mock-bot/conversations')
+        .flush(mockConversations);
+      tick();
+      fixture.detectChanges();
+
+      return fixture.nativeElement as HTMLElement;
+    }
+
+    const telegramIncoming: ConversationMessage = {
+      id: 'tg-in',
+      conversationId: 'conv1',
+      senderRole: 'USER',
+      content: 'Hi from Telegram',
+      buttons: null,
+      channel: 'TELEGRAM',
+      botName: 'Support Bot',
+      operatorEmail: null,
+      readAt: null,
+      createdAt: '2026-01-01T00:20:00Z',
+    };
+
+    const operatorReply: ConversationMessage = {
+      id: 'op-out',
+      conversationId: 'conv1',
+      senderRole: 'BOT',
+      content: 'Operator reply',
+      buttons: null,
+      channel: 'WEB',
+      botName: null,
+      operatorEmail: 'admin@kaufman.bot',
+      readAt: null,
+      createdAt: '2026-01-01T00:21:00Z',
+    };
+
+    const identityClasses = (element: Element): string[] =>
+      Array.from(element.classList).filter((name) =>
+        name.startsWith('msg-identity-'),
+      );
+
+    it('shows the source badge on an incoming Telegram message', fakeAsync(() => {
+      const compiled = openWith([telegramIncoming]);
+      const message = compiled.querySelector('.message');
+
+      expect(
+        message?.querySelector('.channel-badge')?.textContent?.trim(),
+      ).toBe('из Telegram · Support Bot');
+      expect(message?.querySelector('.sender')?.textContent?.trim()).toBe(
+        'Пользователь',
+      );
+    }));
+
+    it('signs a console reply with the operator and shows its delivery badge', fakeAsync(() => {
+      const compiled = openWith([operatorReply]);
+      const message = compiled.querySelector('.message');
+
+      expect(message?.querySelector('.sender')?.textContent?.trim()).toBe(
+        'admin@kaufman.bot',
+      );
+      expect(
+        message?.querySelector('.channel-badge')?.textContent?.trim(),
+      ).toBe('доставлено в веб-чат');
+    }));
+
+    it('colors messages passed through different bots differently', fakeAsync(() => {
+      const otherBot: ConversationMessage = {
+        ...telegramIncoming,
+        id: 'tg-in-2',
+        botName: 'Sales Bot',
+      };
+      const compiled = openWith([telegramIncoming, otherBot]);
+      const [first, second] = Array.from(compiled.querySelectorAll('.message'));
+
+      const firstClass = identityClasses(first);
+      const secondClass = identityClasses(second);
+      expect(firstClass.length).toBe(1);
+      expect(secondClass.length).toBe(1);
+      // Two bots → two palette slots: visually distinct, not only by badge text.
+      expect(firstClass[0]).not.toBe(secondClass[0]);
+    }));
+
+    it('marks the last-message channel in the conversation list', fakeAsync(() => {
+      jest
+        .spyOn(mockBotService, 'connectStream')
+        .mockReturnValue(new Subject<MockBotStreamEvent>().asObservable());
+      fixture.detectChanges();
+      httpMock
+        .expectOne('/api/v1/mock-bot/conversations')
+        .flush(mockConversations);
+      tick();
+      fixture.detectChanges();
+
+      const items =
+        fixture.nativeElement.querySelectorAll('.conversation-item');
+      expect(items[0].querySelector('.conv-channel')?.textContent?.trim()).toBe(
+        'веб-чат',
+      );
+      const telegramMark = items[1].querySelector('.conv-channel');
+      expect(telegramMark?.textContent?.trim()).toBe('Telegram');
+      expect(telegramMark?.classList.contains('telegram')).toBe(true);
+    }));
+
+    it('renders a legacy message without a badge', fakeAsync(() => {
+      const legacy: ConversationMessage = {
+        ...mockMessages[0],
+        id: 'legacy-1',
+        channel: null,
+        botName: null,
+        operatorEmail: null,
+      };
+      const compiled = openWith([legacy]);
+      const message = compiled.querySelector('.message');
+
+      expect(message?.querySelector('.channel-badge')).toBeNull();
+      expect(message?.querySelector('.sender')?.textContent?.trim()).toBe(
+        'Пользователь',
+      );
     }));
   });
 });

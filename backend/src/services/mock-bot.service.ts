@@ -19,6 +19,7 @@ import {
   validateButtons,
 } from '../utils/keyboard-buttons.js';
 import { ChatEvent, ChatEventsService } from './chat-events.service.js';
+import { MessageChannelService } from './message-channel.service.js';
 
 /** Maximum length of a reply content after trimming. */
 const MAX_CONTENT_LENGTH = 4000;
@@ -37,6 +38,7 @@ export class MockBotService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly chatEvents: ChatEventsService,
+    private readonly messageChannel: MessageChannelService,
   ) {}
 
   /**
@@ -82,6 +84,7 @@ export class MockBotService {
           lastMessageSenderRole: lastMessage
             ? (lastMessage.senderRole as 'USER' | 'BOT')
             : null,
+          lastMessageChannel: lastMessage?.channel ?? null,
           lastMessageAt: lastMessage?.createdAt.toISOString() ?? null,
           unreadCount,
           createdAt: conv.createdAt.toISOString(),
@@ -136,6 +139,9 @@ export class MockBotService {
           senderRole: msg.senderRole as 'USER' | 'BOT',
           content: msg.content,
           buttons: toButtons(msg.buttons),
+          channel: msg.channel ?? null,
+          botName: msg.botName ?? null,
+          operatorEmail: msg.operatorEmail ?? null,
           readAt: msg.readAt?.toISOString() ?? null,
           createdAt: msg.createdAt.toISOString(),
         }),
@@ -152,11 +158,17 @@ export class MockBotService {
    * through `validateButtons` (1..12 items, per-field length limits) and
    * are stored on the message row as an immutable `Json` snapshot so later
    * edits or deletion of the source preset never rewrite this row.
+   *
+   * `operatorEmail` is the admin who sent the reply from the console; it is
+   * persisted as the reply's identity snapshot (design D2). The delivery
+   * channel is resolved through `MessageChannelService`, the same gate the
+   * Telegram bridge uses, so the snapshot matches the actual delivery.
    */
   async replyAsBot(
     userId: string,
     content: string | undefined,
     buttons?: KeyboardButtonDto[],
+    operatorEmail?: string | null,
   ): Promise<ChatMessageDto> {
     const trimmed = typeof content === 'string' ? content.trim() : '';
     validateButtons(buttons);
@@ -180,6 +192,14 @@ export class MockBotService {
       create: { userId },
     });
 
+    // Where this reply actually lands at write time (same gate as the
+    // Telegram bridge), plus who sent it — design D2 snapshots.
+    const owner = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { telegramBotId: true, telegramChatId: true },
+    });
+    const delivery = await this.messageChannel.resolveDelivery(owner);
+
     const message = await this.prisma.message.create({
       data: {
         conversationId: conversation.id,
@@ -189,6 +209,9 @@ export class MockBotService {
         buttons: normalizedButtons
           ? (normalizedButtons as unknown as object)
           : undefined,
+        channel: delivery.channel,
+        botName: delivery.botName,
+        operatorEmail: operatorEmail ?? null,
       },
     });
 
@@ -199,6 +222,9 @@ export class MockBotService {
       senderRole: message.senderRole as 'USER' | 'BOT',
       content: message.content,
       buttons: dtoButtons,
+      channel: message.channel ?? null,
+      botName: message.botName ?? null,
+      operatorEmail: message.operatorEmail ?? null,
       readAt: message.readAt?.toISOString() ?? null,
       createdAt: message.createdAt.toISOString(),
     });
@@ -213,6 +239,9 @@ export class MockBotService {
       createdAt: dto.createdAt,
       kind: 'TEXT',
       buttons: dtoButtons,
+      channel: message.channel ?? null,
+      botName: message.botName ?? null,
+      operatorEmail: message.operatorEmail ?? null,
     };
     this.chatEvents.publish(event);
 
@@ -238,6 +267,9 @@ export class MockBotService {
       senderRole: event.senderRole,
       content: event.content,
       buttons: event.buttons ?? null,
+      channel: event.channel ?? null,
+      botName: event.botName ?? null,
+      operatorEmail: event.operatorEmail ?? null,
       createdAt: event.createdAt,
     });
   }

@@ -189,6 +189,7 @@ describe('TelegramBridgeService', () => {
     beforeEach(() => {
       prismaMock.telegramBot.findUnique.mockResolvedValue({
         id: 'bot-1',
+        name: 'Kaufman Bot',
         webhookSecret: validSecret,
         isActive: true,
         botToken: 'fake-token',
@@ -217,6 +218,7 @@ describe('TelegramBridgeService', () => {
     it('ignores update when bot is inactive', async () => {
       prismaMock.telegramBot.findUnique.mockResolvedValue({
         id: 'bot-1',
+        name: 'Kaufman Bot',
         webhookSecret: validSecret,
         isActive: false,
         botToken: 'fake-token',
@@ -282,6 +284,7 @@ describe('TelegramBridgeService', () => {
         expect(chatServiceMock.sendMessage).toHaveBeenCalledWith(
           mockUser,
           'hello world',
+          { channel: 'TELEGRAM', botName: 'Kaufman Bot' },
         );
       });
 
@@ -326,6 +329,7 @@ describe('TelegramBridgeService', () => {
           {
             callbackData: 'settings:language:ru',
           },
+          { channel: 'TELEGRAM', botName: 'Kaufman Bot' },
         );
       });
 

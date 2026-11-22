@@ -159,6 +159,46 @@ The response is the persisted callback message DTO; the frontend chat calls `sen
 
 To exercise owner isolation in tests, register a second account via `POST /api/v1/auth/register` (the response carries both `user` and its `apiKey`), then promote it with `PATCH /api/v1/admin/users/:id { "role": "ADMIN" }` — do not mint an additional key through `ApiKeyService.createForUser` for the mock caller, otherwise both "admins" resolve to the same owner row.
 
+## Message Channel Snapshot
+
+Every persisted message carries a **channel snapshot** describing where it actually travelled at write time. The meaning depends on `senderRole`:
+
+- `USER` message → `channel` is the **source**: `WEB` for the web chat, `TELEGRAM` for a bound Telegram chat.
+- `BOT` message → `channel` is the **delivery**: `WEB` when the reply only landed in the web chat (mock target), `TELEGRAM` when the bridge forwarded it to the user's Telegram chat.
+
+```prisma
+enum MessageChannel { WEB  TELEGRAM }
+
+model Message {
+  kind          MessageKind     @default(TEXT)
+  content       String
+  buttons       Json?
+  channel       MessageChannel? // USER = source, BOT = delivery; null = legacy
+  botName       String?         // Telegram bot that carried the message
+  operatorEmail String?         // admin who replied from the console
+}
+```
+
+Semantics:
+
+- **`channel = null`** — the row predates the snapshot (legacy message); clients render it without a channel badge.
+- **`botName`** — name of the Telegram bot that carried the message, captured at write time; `null` for web-chat-only paths.
+- **`operatorEmail`** — set only on console replies (`POST /api/v1/mock-bot/conversations/:userId/messages`) from the authenticated admin; user messages and plugin replies keep it `null`.
+- **Single delivery resolver** — `MessageChannelService.resolveDelivery(owner)`
+  ([`src/services/message-channel.service.ts`](src/services/message-channel.service.ts))
+  applies the same gate as the outgoing Telegram bridge (`telegramBotId` set,
+  `telegramChatId` non-empty, `bot.isActive`), so a persisted snapshot and an
+  actual bridge delivery cannot drift apart. `MockBotService.replyAsBot` and
+  `BotPluginsService.dispatchAndReply` persist the returned snapshot in the same
+  row as the reply.
+- **API contract** — `ChatMessageDto`, `ChatStreamEventDto` and
+  `MockBotStreamEventDto` expose `channel`, `botName` and `operatorEmail`;
+  `ConversationSummaryDto` exposes `lastMessageChannel` for the conversation
+  list preview. All four fields are nullable.
+
+How the console and the user chat render this snapshot (badges, sender labels,
+identity colors) is described in [`../frontend/README.md`](../frontend/README.md).
+
 ## Telegram Bots
 
 Real Telegram Bot API integration via [grammY](https://grammy.dev). Each bot is owned by an ADMIN, stores its token (masked in responses), and optionally registers a webhook for receiving updates.

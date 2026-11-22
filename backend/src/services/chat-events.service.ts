@@ -15,6 +15,11 @@ import { KeyboardButtonDto } from '../dto/keyboard.dto.js';
  *
  * `buttons` is the inline keyboard attached to a BOT message. Null/omitted
  * for text-only replies and for USER messages.
+ *
+ * `channel`/`botName`/`operatorEmail` mirror the persisted snapshot on the
+ * message: for USER events they describe where the user wrote from, for BOT
+ * events where the reply was delivered (and which operator replied), see
+ * design D2. Null when unknown (e.g. legacy messages).
  */
 export interface ChatEvent {
   conversationId: string;
@@ -24,6 +29,9 @@ export interface ChatEvent {
   createdAt: string;
   kind?: 'TEXT' | 'BUTTON';
   buttons?: KeyboardButtonDto[] | null;
+  channel?: 'WEB' | 'TELEGRAM' | null;
+  botName?: string | null;
+  operatorEmail?: string | null;
 }
 
 /**

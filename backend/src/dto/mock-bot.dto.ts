@@ -29,6 +29,15 @@ export class ConversationSummaryDto {
   lastMessageSenderRole: 'USER' | 'BOT' | null;
 
   @ApiProperty({
+    description:
+      'Channel snapshot of the last message (null when there is no message ' +
+      'or it was recorded before the snapshot existed)',
+    enum: ['WEB', 'TELEGRAM'],
+    nullable: true,
+  })
+  lastMessageChannel: 'WEB' | 'TELEGRAM' | null;
+
+  @ApiProperty({
     description: 'When the last message was sent',
     format: 'date-time',
     nullable: true,
@@ -129,6 +138,31 @@ export class MockBotStreamEventDto {
   buttons: KeyboardButtonDto[] | null;
 
   @ApiProperty({
+    description:
+      'Transport channel snapshot: for USER events — where the user wrote ' +
+      'from, for BOT events — where the reply was delivered',
+    enum: ['WEB', 'TELEGRAM'],
+    nullable: true,
+  })
+  channel: 'WEB' | 'TELEGRAM' | null;
+
+  @ApiProperty({
+    description:
+      'Name of the Telegram bot in the channel snapshot (null for WEB)',
+    type: String,
+    nullable: true,
+  })
+  botName: string | null;
+
+  @ApiProperty({
+    description:
+      'Email of the console operator who sent a BOT reply (null when none)',
+    type: String,
+    nullable: true,
+  })
+  operatorEmail: string | null;
+
+  @ApiProperty({
     description: 'When the message was created',
     format: 'date-time',
   })
@@ -138,6 +172,15 @@ export class MockBotStreamEventDto {
     Object.assign(this, partial);
     if (this.buttons === undefined) {
       this.buttons = null;
+    }
+    if (this.channel === undefined) {
+      this.channel = null;
+    }
+    if (this.botName === undefined) {
+      this.botName = null;
+    }
+    if (this.operatorEmail === undefined) {
+      this.operatorEmail = null;
     }
   }
 }

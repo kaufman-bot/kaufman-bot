@@ -4,7 +4,7 @@ import type {
   ConversationSummaryDto,
 } from './generated/client/types.gen.js';
 import { ActivityHelper } from './utils/activity-helper.js';
-import { messageOf } from './utils/api-result.js';
+import { messageOf, unwrap } from './utils/api-result.js';
 
 describe('Mock Bot Console endpoints (e2e, running backend)', () => {
   const admin = new ActivityHelper();
@@ -14,10 +14,15 @@ describe('Mock Bot Console endpoints (e2e, running backend)', () => {
   const createdUsers: string[] = [];
   let user1Id: string;
   let user2Id: string;
+  let adminEmail: string;
 
   beforeAll(async () => {
     await admin.ensureBackendRunning();
     admin.loginAsAdmin();
+    adminEmail = unwrap(
+      await admin.sdk.authControllerMeV1(),
+      'GET /auth/me (admin)',
+    ).user.email;
 
     // Register two users and create conversations
     const reg1 = await user1.registerAccount(
@@ -97,6 +102,9 @@ describe('Mock Bot Console endpoints (e2e, running backend)', () => {
       // Both should have last message preview
       expect(conv1!.lastMessage).toBeDefined();
       expect(conv2!.lastMessage).toBeDefined();
+      // Both test users write from the web chat.
+      expect(conv1!.lastMessageChannel).toBe('WEB');
+      expect(conv2!.lastMessageChannel).toBe('WEB');
     });
 
     it('includes unread count for each conversation', async () => {
@@ -175,6 +183,11 @@ describe('Mock Bot Console endpoints (e2e, running backend)', () => {
       expect(message.id).toBeDefined();
       expect(message.content).toBe('Hello from bot!');
       expect(message.senderRole).toBe('BOT');
+      // Console reply: signed by the admin who sent it, delivered to the
+      // mock (web-only) target of an unbound test user.
+      expect(message.channel).toBe('WEB');
+      expect(message.botName).toBeNull();
+      expect(message.operatorEmail).toBe(adminEmail);
     });
 
     it('rejects empty content with 400', async () => {
@@ -217,6 +230,8 @@ describe('Mock Bot Console endpoints (e2e, running backend)', () => {
       const botMessage = messages.find((m) => m.senderRole === 'BOT');
       expect(botMessage).toBeDefined();
       expect(botMessage!.content).toBe('Bot reply for user 2');
+      expect(botMessage!.channel).toBe('WEB');
+      expect(botMessage!.operatorEmail).toBe(adminEmail);
     });
 
     describe('with inline keyboard buttons', () => {

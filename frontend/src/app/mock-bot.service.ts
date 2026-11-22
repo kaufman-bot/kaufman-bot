@@ -27,6 +27,8 @@ export interface ConversationSummary {
   userEmail: string;
   lastMessage: string | null;
   lastMessageSenderRole: 'USER' | 'BOT' | null;
+  /** Channel snapshot of the last message (null when empty or legacy). */
+  lastMessageChannel: 'WEB' | 'TELEGRAM' | null;
   lastMessageAt: string | null;
   unreadCount: number;
   createdAt: string;
@@ -40,6 +42,16 @@ export interface ConversationMessage {
   content: string;
   /** Inline keyboard snapshot (null when the reply was text-only). */
   buttons: KeyboardButton[] | null;
+  /**
+   * Transport channel snapshot taken at write time: for USER messages —
+   * where the user wrote from, for BOT messages — where the reply was
+   * delivered. Null for messages recorded before the snapshot existed.
+   */
+  channel: 'WEB' | 'TELEGRAM' | null;
+  /** Name of the Telegram bot in the channel snapshot (else null). */
+  botName: string | null;
+  /** Email of the console operator who sent a BOT reply (else null). */
+  operatorEmail: string | null;
   readAt: string | null;
   createdAt: string;
 }
@@ -51,6 +63,9 @@ export interface MockBotStreamEvent {
   senderRole: 'USER' | 'BOT';
   content: string;
   buttons?: KeyboardButton[] | null;
+  channel: 'WEB' | 'TELEGRAM' | null;
+  botName: string | null;
+  operatorEmail: string | null;
   createdAt: string;
 }
 

@@ -33,6 +33,9 @@ coverage/
 # Playwright e2e-отчёты (junit/xml, html-репорт, трейсы)
 playwright-report/
 
+# Артефакты браузера Playwright MCP (снимки страниц, консольные логи)
+.playwright-mcp/
+
 # Test results
 test-results/
 

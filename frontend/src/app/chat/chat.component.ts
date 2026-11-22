@@ -18,6 +18,11 @@ import {
   ChatStreamEvent,
   KeyboardButton,
 } from '../chat.service';
+import {
+  channelBadgeOf,
+  identityClassOf,
+  senderLabelOf,
+} from '../utils/message-identity';
 
 @Component({
   selector: 'app-chat',
@@ -39,12 +44,11 @@ import {
         @for (msg of chatService.messages(); track msg.id) {
           <div
             class="message"
+            [ngClass]="identityClass(msg)"
             [class.user]="msg.senderRole === 'USER'"
             [class.bot]="msg.senderRole === 'BOT'"
           >
-            <span class="sender">{{
-              msg.senderRole === 'USER' ? 'Вы' : 'Бот'
-            }}</span>
+            <span class="sender">{{ senderLabel(msg) }}</span>
             <span class="content">{{ msg.content }}</span>
             @if (
               msg.senderRole === 'BOT' && msg.buttons && msg.buttons.length
@@ -60,6 +64,9 @@ import {
                   </button>
                 }
               </div>
+            }
+            @if (channelBadge(msg); as badge) {
+              <span class="channel-badge">{{ badge }}</span>
             }
             <span class="time">{{ formatTime(msg.createdAt) }}</span>
           </div>
@@ -133,13 +140,14 @@ import {
       }
       .message.user {
         align-self: flex-end;
-        background: #1976d2;
+        background: var(--msg-deep, #1976d2);
         color: white;
       }
       .message.bot {
         align-self: flex-start;
-        background: #f0f0f0;
+        background: var(--msg-tint, #f0f0f0);
         color: #333;
+        border-left: 4px solid var(--msg-accent, transparent);
       }
       .sender {
         font-size: 0.75rem;
@@ -147,6 +155,10 @@ import {
       }
       .content {
         word-break: break-word;
+      }
+      .channel-badge {
+        font-size: 0.7rem;
+        opacity: 0.75;
       }
       .time {
         font-size: 0.7rem;
@@ -284,6 +296,24 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
     }
   }
 
+  /** Shared bubble color: stable per bot / operator identity. */
+  identityClass(msg: ChatMessage): string {
+    return identityClassOf(msg);
+  }
+
+  /**
+   * Channel badge under the message (own — sent from, replies — delivered
+   * to); null for messages recorded before the channel snapshot existed.
+   */
+  channelBadge(msg: ChatMessage): string | null {
+    return channelBadgeOf(msg, 'chat');
+  }
+
+  /** Sender caption: “Вы” for the user, operator email (else “Бот”). */
+  senderLabel(msg: ChatMessage): string {
+    return senderLabelOf(msg, 'chat');
+  }
+
   /**
    * Reports a button press to the backend. Deliberately does NOT append
    * anything to `chatService.messages()` — the backend filters `kind=BUTTON`
@@ -302,6 +332,9 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
       senderRole: event.senderRole,
       content: event.content,
       buttons: event.buttons ?? null,
+      channel: event.channel ?? null,
+      botName: event.botName ?? null,
+      operatorEmail: event.operatorEmail ?? null,
       readAt: null,
       createdAt: event.createdAt,
     };

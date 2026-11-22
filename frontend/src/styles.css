@@ -25,3 +25,56 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+
+/*
+ * Identity palette for chat bubbles, shared by /chat and /mock-bot.
+ * `identityClassOf` (src/app/utils/message-identity.ts) hashes a bot name or
+ * an operator email into one of these eight slots, so the same identity gets
+ * the same color on both screens. Hues stay clear of the #1976d2 (~217)
+ * neutral blue used when a message carries no identity.
+ *
+ * Bubbles consume the custom properties:
+ *   --msg-deep   saturated bubble (white text);
+ *   --msg-tint   pale bubble (dark text);
+ *   --msg-accent accent stripe on the pale bubble.
+ */
+.msg-identity-0 {
+  --msg-deep: hsl(350, 62%, 38%);
+  --msg-tint: hsl(350, 82%, 94%);
+  --msg-accent: hsl(350, 62%, 45%);
+}
+.msg-identity-1 {
+  --msg-deep: hsl(25, 62%, 38%);
+  --msg-tint: hsl(25, 82%, 94%);
+  --msg-accent: hsl(25, 62%, 45%);
+}
+.msg-identity-2 {
+  --msg-deep: hsl(60, 58%, 30%);
+  --msg-tint: hsl(60, 82%, 92%);
+  --msg-accent: hsl(60, 58%, 38%);
+}
+.msg-identity-3 {
+  --msg-deep: hsl(100, 52%, 30%);
+  --msg-tint: hsl(100, 72%, 93%);
+  --msg-accent: hsl(100, 52%, 38%);
+}
+.msg-identity-4 {
+  --msg-deep: hsl(150, 55%, 30%);
+  --msg-tint: hsl(150, 75%, 93%);
+  --msg-accent: hsl(150, 55%, 38%);
+}
+.msg-identity-5 {
+  --msg-deep: hsl(180, 55%, 30%);
+  --msg-tint: hsl(180, 75%, 93%);
+  --msg-accent: hsl(180, 55%, 38%);
+}
+.msg-identity-6 {
+  --msg-deep: hsl(270, 52%, 40%);
+  --msg-tint: hsl(270, 82%, 95%);
+  --msg-accent: hsl(270, 52%, 47%);
+}
+.msg-identity-7 {
+  --msg-deep: hsl(310, 52%, 38%);
+  --msg-tint: hsl(310, 82%, 94%);
+  --msg-accent: hsl(310, 52%, 45%);
+}

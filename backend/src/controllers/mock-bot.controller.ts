@@ -4,6 +4,7 @@ import {
   Get,
   Param,
   Post,
+  Req,
   Sse,
   UseGuards,
 } from '@nestjs/common';
@@ -30,7 +31,8 @@ import {
   MockBotStreamEventDto,
 } from '../dto/mock-bot.dto.js';
 import { AdminGuard } from '../guards/admin.guard.js';
-import { ApiKeyGuard } from '../guards/api-key.guard.js';
+import type { AuthenticatedRequest } from '../guards/api-key.guard.js';
+import { ApiKeyGuard, requireAuthUser } from '../guards/api-key.guard.js';
 import { SseMessageEvent } from '../interfaces/sse-message-event.js';
 import { MockBotService } from '../services/mock-bot.service.js';
 
@@ -119,10 +121,17 @@ export class MockBotController {
       'or the buttons array fails validation',
   })
   async replyAsBot(
+    @Req() req: AuthenticatedRequest,
     @Param('userId') userId: string,
     @Body() dto: MockBotReplyRequestDto,
   ): Promise<ChatMessageDto> {
-    return this.mockBotService.replyAsBot(userId, dto.content, dto.buttons);
+    const operator = requireAuthUser(req);
+    return this.mockBotService.replyAsBot(
+      userId,
+      dto.content,
+      dto.buttons,
+      operator.email,
+    );
   }
 
   @Sse('stream')
