@@ -41,6 +41,14 @@ import { SessionService } from '../session.service';
           Телеграм-боты
         </a>
 
+        <a
+          *ngIf="session.isAdmin()"
+          routerLink="/taxi"
+          routerLinkActive="active"
+        >
+          Такси
+        </a>
+
         <button
           *ngIf="session.isTelegramTarget()"
           class="btn-launch-tg"

@@ -2,7 +2,7 @@
 
 import { client } from './client.gen.js';
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client/index.js';
-import type { AdminUsersControllerGetV1Data, AdminUsersControllerGetV1Errors, AdminUsersControllerGetV1Responses, AdminUsersControllerListV1Data, AdminUsersControllerListV1Errors, AdminUsersControllerListV1Responses, AdminUsersControllerRemoveV1Data, AdminUsersControllerRemoveV1Errors, AdminUsersControllerRemoveV1Responses, AdminUsersControllerSetTelegramTargetV1Data, AdminUsersControllerSetTelegramTargetV1Errors, AdminUsersControllerSetTelegramTargetV1Responses, AdminUsersControllerUpdateV1Data, AdminUsersControllerUpdateV1Errors, AdminUsersControllerUpdateV1Responses, ApiKeysControllerCreateV1Data, ApiKeysControllerCreateV1Errors, ApiKeysControllerCreateV1Responses, ApiKeysControllerListV1Data, ApiKeysControllerListV1Errors, ApiKeysControllerListV1Responses, ApiKeysControllerRemoveV1Data, ApiKeysControllerRemoveV1Errors, ApiKeysControllerRemoveV1Responses, ApiKeysControllerUpdateV1Data, ApiKeysControllerUpdateV1Errors, ApiKeysControllerUpdateV1Responses, AuthControllerLoginV1Data, AuthControllerLoginV1Errors, AuthControllerLoginV1Responses, AuthControllerMeV1Data, AuthControllerMeV1Errors, AuthControllerMeV1Responses, AuthControllerRegisterV1Data, AuthControllerRegisterV1Errors, AuthControllerRegisterV1Responses, AuthControllerUpdateMeV1Data, AuthControllerUpdateMeV1Errors, AuthControllerUpdateMeV1Responses, ButtonPresetsControllerCreateV1Data, ButtonPresetsControllerCreateV1Errors, ButtonPresetsControllerCreateV1Responses, ButtonPresetsControllerListV1Data, ButtonPresetsControllerListV1Errors, ButtonPresetsControllerListV1Responses, ButtonPresetsControllerRemoveV1Data, ButtonPresetsControllerRemoveV1Errors, ButtonPresetsControllerRemoveV1Responses, ButtonPresetsControllerUpdateV1Data, ButtonPresetsControllerUpdateV1Errors, ButtonPresetsControllerUpdateV1Responses, ChatControllerGetMessagesV1Data, ChatControllerGetMessagesV1Errors, ChatControllerGetMessagesV1Responses, ChatControllerSendMessageV1Data, ChatControllerSendMessageV1Errors, ChatControllerSendMessageV1Responses, ChatControllerStreamEventsV1Data, ChatControllerStreamEventsV1Errors, ChatControllerStreamEventsV1Responses, ChatControllerSubmitButtonCallbackV1Data, ChatControllerSubmitButtonCallbackV1Errors, ChatControllerSubmitButtonCallbackV1Responses, HealthControllerCheckV1Data, HealthControllerCheckV1Errors, HealthControllerCheckV1Responses, MockBotControllerGetConversationMessagesV1Data, MockBotControllerGetConversationMessagesV1Errors, MockBotControllerGetConversationMessagesV1Responses, MockBotControllerListConversationsV1Data, MockBotControllerListConversationsV1Errors, MockBotControllerListConversationsV1Responses, MockBotControllerReplyAsBotV1Data, MockBotControllerReplyAsBotV1Errors, MockBotControllerReplyAsBotV1Responses, MockBotControllerStreamEventsV1Data, MockBotControllerStreamEventsV1Errors, MockBotControllerStreamEventsV1Responses, TelegramBotsControllerCreateV1Data, TelegramBotsControllerCreateV1Errors, TelegramBotsControllerCreateV1Responses, TelegramBotsControllerGetV1Data, TelegramBotsControllerGetV1Errors, TelegramBotsControllerGetV1Responses, TelegramBotsControllerListV1Data, TelegramBotsControllerListV1Errors, TelegramBotsControllerListV1Responses, TelegramBotsControllerRemoveV1Data, TelegramBotsControllerRemoveV1Errors, TelegramBotsControllerRemoveV1Responses, TelegramBotsControllerUpdateV1Data, TelegramBotsControllerUpdateV1Errors, TelegramBotsControllerUpdateV1Responses, TelegramLaunchControllerLaunchV1Data, TelegramLaunchControllerLaunchV1Errors, TelegramLaunchControllerLaunchV1Responses, TelegramWebhookControllerReceiveData, TelegramWebhookControllerReceiveResponses, TimeControllerStreamV1Data, TimeControllerStreamV1Responses, TimeControllerTimeV1Data, TimeControllerTimeV1Responses } from './types.gen.js';
+import type { AdminUsersControllerGetV1Data, AdminUsersControllerGetV1Errors, AdminUsersControllerGetV1Responses, AdminUsersControllerListV1Data, AdminUsersControllerListV1Errors, AdminUsersControllerListV1Responses, AdminUsersControllerRemoveV1Data, AdminUsersControllerRemoveV1Errors, AdminUsersControllerRemoveV1Responses, AdminUsersControllerSetTelegramTargetV1Data, AdminUsersControllerSetTelegramTargetV1Errors, AdminUsersControllerSetTelegramTargetV1Responses, AdminUsersControllerUpdateV1Data, AdminUsersControllerUpdateV1Errors, AdminUsersControllerUpdateV1Responses, ApiKeysControllerCreateV1Data, ApiKeysControllerCreateV1Errors, ApiKeysControllerCreateV1Responses, ApiKeysControllerListV1Data, ApiKeysControllerListV1Errors, ApiKeysControllerListV1Responses, ApiKeysControllerRemoveV1Data, ApiKeysControllerRemoveV1Errors, ApiKeysControllerRemoveV1Responses, ApiKeysControllerUpdateV1Data, ApiKeysControllerUpdateV1Errors, ApiKeysControllerUpdateV1Responses, AuthControllerLoginV1Data, AuthControllerLoginV1Errors, AuthControllerLoginV1Responses, AuthControllerMeV1Data, AuthControllerMeV1Errors, AuthControllerMeV1Responses, AuthControllerRegisterV1Data, AuthControllerRegisterV1Errors, AuthControllerRegisterV1Responses, AuthControllerUpdateMeV1Data, AuthControllerUpdateMeV1Errors, AuthControllerUpdateMeV1Responses, ButtonPresetsControllerCreateV1Data, ButtonPresetsControllerCreateV1Errors, ButtonPresetsControllerCreateV1Responses, ButtonPresetsControllerListV1Data, ButtonPresetsControllerListV1Errors, ButtonPresetsControllerListV1Responses, ButtonPresetsControllerRemoveV1Data, ButtonPresetsControllerRemoveV1Errors, ButtonPresetsControllerRemoveV1Responses, ButtonPresetsControllerUpdateV1Data, ButtonPresetsControllerUpdateV1Errors, ButtonPresetsControllerUpdateV1Responses, ChatControllerGetMessagesV1Data, ChatControllerGetMessagesV1Errors, ChatControllerGetMessagesV1Responses, ChatControllerSendMessageV1Data, ChatControllerSendMessageV1Errors, ChatControllerSendMessageV1Responses, ChatControllerStreamEventsV1Data, ChatControllerStreamEventsV1Errors, ChatControllerStreamEventsV1Responses, ChatControllerSubmitButtonCallbackV1Data, ChatControllerSubmitButtonCallbackV1Errors, ChatControllerSubmitButtonCallbackV1Responses, HealthControllerCheckV1Data, HealthControllerCheckV1Errors, HealthControllerCheckV1Responses, MockBotControllerGetConversationMessagesV1Data, MockBotControllerGetConversationMessagesV1Errors, MockBotControllerGetConversationMessagesV1Responses, MockBotControllerListConversationsV1Data, MockBotControllerListConversationsV1Errors, MockBotControllerListConversationsV1Responses, MockBotControllerReplyAsBotV1Data, MockBotControllerReplyAsBotV1Errors, MockBotControllerReplyAsBotV1Responses, MockBotControllerStreamEventsV1Data, MockBotControllerStreamEventsV1Errors, MockBotControllerStreamEventsV1Responses, TaxiCatalogControllerCreateCarV1Data, TaxiCatalogControllerCreateCarV1Errors, TaxiCatalogControllerCreateCarV1Responses, TaxiCatalogControllerCreateCityV1Data, TaxiCatalogControllerCreateCityV1Errors, TaxiCatalogControllerCreateCityV1Responses, TaxiCatalogControllerCreateDepartureSlotV1Data, TaxiCatalogControllerCreateDepartureSlotV1Errors, TaxiCatalogControllerCreateDepartureSlotV1Responses, TaxiCatalogControllerCreateDriverV1Data, TaxiCatalogControllerCreateDriverV1Errors, TaxiCatalogControllerCreateDriverV1Responses, TaxiCatalogControllerCreatePassengerOptionV1Data, TaxiCatalogControllerCreatePassengerOptionV1Errors, TaxiCatalogControllerCreatePassengerOptionV1Responses, TaxiCatalogControllerCreateServiceV1Data, TaxiCatalogControllerCreateServiceV1Errors, TaxiCatalogControllerCreateServiceV1Responses, TaxiCatalogControllerListCarsV1Data, TaxiCatalogControllerListCarsV1Errors, TaxiCatalogControllerListCarsV1Responses, TaxiCatalogControllerListCitiesV1Data, TaxiCatalogControllerListCitiesV1Errors, TaxiCatalogControllerListCitiesV1Responses, TaxiCatalogControllerListDepartureSlotsV1Data, TaxiCatalogControllerListDepartureSlotsV1Errors, TaxiCatalogControllerListDepartureSlotsV1Responses, TaxiCatalogControllerListDriversV1Data, TaxiCatalogControllerListDriversV1Errors, TaxiCatalogControllerListDriversV1Responses, TaxiCatalogControllerListPassengerOptionsV1Data, TaxiCatalogControllerListPassengerOptionsV1Errors, TaxiCatalogControllerListPassengerOptionsV1Responses, TaxiCatalogControllerListServicesV1Data, TaxiCatalogControllerListServicesV1Errors, TaxiCatalogControllerListServicesV1Responses, TaxiCatalogControllerRemoveCarV1Data, TaxiCatalogControllerRemoveCarV1Errors, TaxiCatalogControllerRemoveCarV1Responses, TaxiCatalogControllerRemoveCityV1Data, TaxiCatalogControllerRemoveCityV1Errors, TaxiCatalogControllerRemoveCityV1Responses, TaxiCatalogControllerRemoveDepartureSlotV1Data, TaxiCatalogControllerRemoveDepartureSlotV1Errors, TaxiCatalogControllerRemoveDepartureSlotV1Responses, TaxiCatalogControllerRemoveDriverV1Data, TaxiCatalogControllerRemoveDriverV1Errors, TaxiCatalogControllerRemoveDriverV1Responses, TaxiCatalogControllerRemovePassengerOptionV1Data, TaxiCatalogControllerRemovePassengerOptionV1Errors, TaxiCatalogControllerRemovePassengerOptionV1Responses, TaxiCatalogControllerRemoveServiceV1Data, TaxiCatalogControllerRemoveServiceV1Errors, TaxiCatalogControllerRemoveServiceV1Responses, TaxiCatalogControllerUpdateCarV1Data, TaxiCatalogControllerUpdateCarV1Errors, TaxiCatalogControllerUpdateCarV1Responses, TaxiCatalogControllerUpdateCityV1Data, TaxiCatalogControllerUpdateCityV1Errors, TaxiCatalogControllerUpdateCityV1Responses, TaxiCatalogControllerUpdateDepartureSlotV1Data, TaxiCatalogControllerUpdateDepartureSlotV1Errors, TaxiCatalogControllerUpdateDepartureSlotV1Responses, TaxiCatalogControllerUpdateDriverV1Data, TaxiCatalogControllerUpdateDriverV1Errors, TaxiCatalogControllerUpdateDriverV1Responses, TaxiCatalogControllerUpdatePassengerOptionV1Data, TaxiCatalogControllerUpdatePassengerOptionV1Errors, TaxiCatalogControllerUpdatePassengerOptionV1Responses, TaxiCatalogControllerUpdateServiceV1Data, TaxiCatalogControllerUpdateServiceV1Errors, TaxiCatalogControllerUpdateServiceV1Responses, TaxiOrdersControllerListV1Data, TaxiOrdersControllerListV1Errors, TaxiOrdersControllerListV1Responses, TaxiOrdersControllerUpdateStatusV1Data, TaxiOrdersControllerUpdateStatusV1Errors, TaxiOrdersControllerUpdateStatusV1Responses, TaxiPriceMatrixControllerAutoCalcV1Data, TaxiPriceMatrixControllerAutoCalcV1Errors, TaxiPriceMatrixControllerAutoCalcV1Responses, TaxiPriceMatrixControllerGetMatrixV1Data, TaxiPriceMatrixControllerGetMatrixV1Errors, TaxiPriceMatrixControllerGetMatrixV1Responses, TaxiPriceMatrixControllerSetPairPriceV1Data, TaxiPriceMatrixControllerSetPairPriceV1Errors, TaxiPriceMatrixControllerSetPairPriceV1Responses, TelegramBotsControllerCreateV1Data, TelegramBotsControllerCreateV1Errors, TelegramBotsControllerCreateV1Responses, TelegramBotsControllerGetV1Data, TelegramBotsControllerGetV1Errors, TelegramBotsControllerGetV1Responses, TelegramBotsControllerListV1Data, TelegramBotsControllerListV1Errors, TelegramBotsControllerListV1Responses, TelegramBotsControllerRemoveV1Data, TelegramBotsControllerRemoveV1Errors, TelegramBotsControllerRemoveV1Responses, TelegramBotsControllerUpdateV1Data, TelegramBotsControllerUpdateV1Errors, TelegramBotsControllerUpdateV1Responses, TelegramLaunchControllerLaunchV1Data, TelegramLaunchControllerLaunchV1Errors, TelegramLaunchControllerLaunchV1Responses, TelegramWebhookControllerReceiveData, TelegramWebhookControllerReceiveResponses, TimeControllerStreamV1Data, TimeControllerStreamV1Responses, TimeControllerTimeV1Data, TimeControllerTimeV1Responses } from './types.gen.js';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -402,5 +402,313 @@ export class Sdk extends HeyApiClient {
      */
     public telegramWebhookControllerReceive<ThrowOnError extends boolean = false>(options: Options<TelegramWebhookControllerReceiveData, ThrowOnError>): RequestResult<TelegramWebhookControllerReceiveResponses, unknown, ThrowOnError> {
         return (options.client ?? this.client).post<TelegramWebhookControllerReceiveResponses, unknown, ThrowOnError>({ url: '/api/telegram/webhook/{botId}', ...options });
+    }
+    
+    /**
+     * List cities ordered by km marker
+     */
+    public taxiCatalogControllerListCitiesV1<ThrowOnError extends boolean = false>(options?: Options<TaxiCatalogControllerListCitiesV1Data, ThrowOnError>): RequestResult<TaxiCatalogControllerListCitiesV1Responses, TaxiCatalogControllerListCitiesV1Errors, ThrowOnError> {
+        return (options?.client ?? this.client).get<TaxiCatalogControllerListCitiesV1Responses, TaxiCatalogControllerListCitiesV1Errors, ThrowOnError>({ url: '/api/v1/taxi/cities', ...options });
+    }
+    
+    /**
+     * Create a city
+     */
+    public taxiCatalogControllerCreateCityV1<ThrowOnError extends boolean = false>(options: Options<TaxiCatalogControllerCreateCityV1Data, ThrowOnError>): RequestResult<TaxiCatalogControllerCreateCityV1Responses, TaxiCatalogControllerCreateCityV1Errors, ThrowOnError> {
+        return (options.client ?? this.client).post<TaxiCatalogControllerCreateCityV1Responses, TaxiCatalogControllerCreateCityV1Errors, ThrowOnError>({
+            url: '/api/v1/taxi/cities',
+            ...options,
+            headers: {
+                'Content-Type': 'application/json',
+                ...options.headers
+            }
+        });
+    }
+    
+    /**
+     * Delete a city (price pairs cascade; wizard drafts referencing it reset)
+     */
+    public taxiCatalogControllerRemoveCityV1<ThrowOnError extends boolean = false>(options: Options<TaxiCatalogControllerRemoveCityV1Data, ThrowOnError>): RequestResult<TaxiCatalogControllerRemoveCityV1Responses, TaxiCatalogControllerRemoveCityV1Errors, ThrowOnError> {
+        return (options.client ?? this.client).delete<TaxiCatalogControllerRemoveCityV1Responses, TaxiCatalogControllerRemoveCityV1Errors, ThrowOnError>({ url: '/api/v1/taxi/cities/{id}', ...options });
+    }
+    
+    /**
+     * Update a city
+     */
+    public taxiCatalogControllerUpdateCityV1<ThrowOnError extends boolean = false>(options: Options<TaxiCatalogControllerUpdateCityV1Data, ThrowOnError>): RequestResult<TaxiCatalogControllerUpdateCityV1Responses, TaxiCatalogControllerUpdateCityV1Errors, ThrowOnError> {
+        return (options.client ?? this.client).patch<TaxiCatalogControllerUpdateCityV1Responses, TaxiCatalogControllerUpdateCityV1Errors, ThrowOnError>({
+            url: '/api/v1/taxi/cities/{id}',
+            ...options,
+            headers: {
+                'Content-Type': 'application/json',
+                ...options.headers
+            }
+        });
+    }
+    
+    /**
+     * List extra services ordered for the wizard step
+     */
+    public taxiCatalogControllerListServicesV1<ThrowOnError extends boolean = false>(options?: Options<TaxiCatalogControllerListServicesV1Data, ThrowOnError>): RequestResult<TaxiCatalogControllerListServicesV1Responses, TaxiCatalogControllerListServicesV1Errors, ThrowOnError> {
+        return (options?.client ?? this.client).get<TaxiCatalogControllerListServicesV1Responses, TaxiCatalogControllerListServicesV1Errors, ThrowOnError>({ url: '/api/v1/taxi/services', ...options });
+    }
+    
+    /**
+     * Create an extra service
+     */
+    public taxiCatalogControllerCreateServiceV1<ThrowOnError extends boolean = false>(options: Options<TaxiCatalogControllerCreateServiceV1Data, ThrowOnError>): RequestResult<TaxiCatalogControllerCreateServiceV1Responses, TaxiCatalogControllerCreateServiceV1Errors, ThrowOnError> {
+        return (options.client ?? this.client).post<TaxiCatalogControllerCreateServiceV1Responses, TaxiCatalogControllerCreateServiceV1Errors, ThrowOnError>({
+            url: '/api/v1/taxi/services',
+            ...options,
+            headers: {
+                'Content-Type': 'application/json',
+                ...options.headers
+            }
+        });
+    }
+    
+    /**
+     * Delete an extra service
+     */
+    public taxiCatalogControllerRemoveServiceV1<ThrowOnError extends boolean = false>(options: Options<TaxiCatalogControllerRemoveServiceV1Data, ThrowOnError>): RequestResult<TaxiCatalogControllerRemoveServiceV1Responses, TaxiCatalogControllerRemoveServiceV1Errors, ThrowOnError> {
+        return (options.client ?? this.client).delete<TaxiCatalogControllerRemoveServiceV1Responses, TaxiCatalogControllerRemoveServiceV1Errors, ThrowOnError>({ url: '/api/v1/taxi/services/{id}', ...options });
+    }
+    
+    /**
+     * Update an extra service
+     */
+    public taxiCatalogControllerUpdateServiceV1<ThrowOnError extends boolean = false>(options: Options<TaxiCatalogControllerUpdateServiceV1Data, ThrowOnError>): RequestResult<TaxiCatalogControllerUpdateServiceV1Responses, TaxiCatalogControllerUpdateServiceV1Errors, ThrowOnError> {
+        return (options.client ?? this.client).patch<TaxiCatalogControllerUpdateServiceV1Responses, TaxiCatalogControllerUpdateServiceV1Errors, ThrowOnError>({
+            url: '/api/v1/taxi/services/{id}',
+            ...options,
+            headers: {
+                'Content-Type': 'application/json',
+                ...options.headers
+            }
+        });
+    }
+    
+    /**
+     * List departure slots ordered for the wizard step
+     */
+    public taxiCatalogControllerListDepartureSlotsV1<ThrowOnError extends boolean = false>(options?: Options<TaxiCatalogControllerListDepartureSlotsV1Data, ThrowOnError>): RequestResult<TaxiCatalogControllerListDepartureSlotsV1Responses, TaxiCatalogControllerListDepartureSlotsV1Errors, ThrowOnError> {
+        return (options?.client ?? this.client).get<TaxiCatalogControllerListDepartureSlotsV1Responses, TaxiCatalogControllerListDepartureSlotsV1Errors, ThrowOnError>({ url: '/api/v1/taxi/departure-slots', ...options });
+    }
+    
+    /**
+     * Create a departure slot
+     */
+    public taxiCatalogControllerCreateDepartureSlotV1<ThrowOnError extends boolean = false>(options: Options<TaxiCatalogControllerCreateDepartureSlotV1Data, ThrowOnError>): RequestResult<TaxiCatalogControllerCreateDepartureSlotV1Responses, TaxiCatalogControllerCreateDepartureSlotV1Errors, ThrowOnError> {
+        return (options.client ?? this.client).post<TaxiCatalogControllerCreateDepartureSlotV1Responses, TaxiCatalogControllerCreateDepartureSlotV1Errors, ThrowOnError>({
+            url: '/api/v1/taxi/departure-slots',
+            ...options,
+            headers: {
+                'Content-Type': 'application/json',
+                ...options.headers
+            }
+        });
+    }
+    
+    /**
+     * Delete a departure slot
+     */
+    public taxiCatalogControllerRemoveDepartureSlotV1<ThrowOnError extends boolean = false>(options: Options<TaxiCatalogControllerRemoveDepartureSlotV1Data, ThrowOnError>): RequestResult<TaxiCatalogControllerRemoveDepartureSlotV1Responses, TaxiCatalogControllerRemoveDepartureSlotV1Errors, ThrowOnError> {
+        return (options.client ?? this.client).delete<TaxiCatalogControllerRemoveDepartureSlotV1Responses, TaxiCatalogControllerRemoveDepartureSlotV1Errors, ThrowOnError>({ url: '/api/v1/taxi/departure-slots/{id}', ...options });
+    }
+    
+    /**
+     * Update a departure slot
+     */
+    public taxiCatalogControllerUpdateDepartureSlotV1<ThrowOnError extends boolean = false>(options: Options<TaxiCatalogControllerUpdateDepartureSlotV1Data, ThrowOnError>): RequestResult<TaxiCatalogControllerUpdateDepartureSlotV1Responses, TaxiCatalogControllerUpdateDepartureSlotV1Errors, ThrowOnError> {
+        return (options.client ?? this.client).patch<TaxiCatalogControllerUpdateDepartureSlotV1Responses, TaxiCatalogControllerUpdateDepartureSlotV1Errors, ThrowOnError>({
+            url: '/api/v1/taxi/departure-slots/{id}',
+            ...options,
+            headers: {
+                'Content-Type': 'application/json',
+                ...options.headers
+            }
+        });
+    }
+    
+    /**
+     * List passenger-count options
+     */
+    public taxiCatalogControllerListPassengerOptionsV1<ThrowOnError extends boolean = false>(options?: Options<TaxiCatalogControllerListPassengerOptionsV1Data, ThrowOnError>): RequestResult<TaxiCatalogControllerListPassengerOptionsV1Responses, TaxiCatalogControllerListPassengerOptionsV1Errors, ThrowOnError> {
+        return (options?.client ?? this.client).get<TaxiCatalogControllerListPassengerOptionsV1Responses, TaxiCatalogControllerListPassengerOptionsV1Errors, ThrowOnError>({ url: '/api/v1/taxi/passenger-options', ...options });
+    }
+    
+    /**
+     * Create a passenger-count option
+     */
+    public taxiCatalogControllerCreatePassengerOptionV1<ThrowOnError extends boolean = false>(options: Options<TaxiCatalogControllerCreatePassengerOptionV1Data, ThrowOnError>): RequestResult<TaxiCatalogControllerCreatePassengerOptionV1Responses, TaxiCatalogControllerCreatePassengerOptionV1Errors, ThrowOnError> {
+        return (options.client ?? this.client).post<TaxiCatalogControllerCreatePassengerOptionV1Responses, TaxiCatalogControllerCreatePassengerOptionV1Errors, ThrowOnError>({
+            url: '/api/v1/taxi/passenger-options',
+            ...options,
+            headers: {
+                'Content-Type': 'application/json',
+                ...options.headers
+            }
+        });
+    }
+    
+    /**
+     * Delete a passenger-count option
+     */
+    public taxiCatalogControllerRemovePassengerOptionV1<ThrowOnError extends boolean = false>(options: Options<TaxiCatalogControllerRemovePassengerOptionV1Data, ThrowOnError>): RequestResult<TaxiCatalogControllerRemovePassengerOptionV1Responses, TaxiCatalogControllerRemovePassengerOptionV1Errors, ThrowOnError> {
+        return (options.client ?? this.client).delete<TaxiCatalogControllerRemovePassengerOptionV1Responses, TaxiCatalogControllerRemovePassengerOptionV1Errors, ThrowOnError>({ url: '/api/v1/taxi/passenger-options/{id}', ...options });
+    }
+    
+    /**
+     * Update a passenger-count option
+     */
+    public taxiCatalogControllerUpdatePassengerOptionV1<ThrowOnError extends boolean = false>(options: Options<TaxiCatalogControllerUpdatePassengerOptionV1Data, ThrowOnError>): RequestResult<TaxiCatalogControllerUpdatePassengerOptionV1Responses, TaxiCatalogControllerUpdatePassengerOptionV1Errors, ThrowOnError> {
+        return (options.client ?? this.client).patch<TaxiCatalogControllerUpdatePassengerOptionV1Responses, TaxiCatalogControllerUpdatePassengerOptionV1Errors, ThrowOnError>({
+            url: '/api/v1/taxi/passenger-options/{id}',
+            ...options,
+            headers: {
+                'Content-Type': 'application/json',
+                ...options.headers
+            }
+        });
+    }
+    
+    /**
+     * List drivers with their nested cars
+     */
+    public taxiCatalogControllerListDriversV1<ThrowOnError extends boolean = false>(options?: Options<TaxiCatalogControllerListDriversV1Data, ThrowOnError>): RequestResult<TaxiCatalogControllerListDriversV1Responses, TaxiCatalogControllerListDriversV1Errors, ThrowOnError> {
+        return (options?.client ?? this.client).get<TaxiCatalogControllerListDriversV1Responses, TaxiCatalogControllerListDriversV1Errors, ThrowOnError>({ url: '/api/v1/taxi/drivers', ...options });
+    }
+    
+    /**
+     * Create a driver
+     */
+    public taxiCatalogControllerCreateDriverV1<ThrowOnError extends boolean = false>(options: Options<TaxiCatalogControllerCreateDriverV1Data, ThrowOnError>): RequestResult<TaxiCatalogControllerCreateDriverV1Responses, TaxiCatalogControllerCreateDriverV1Errors, ThrowOnError> {
+        return (options.client ?? this.client).post<TaxiCatalogControllerCreateDriverV1Responses, TaxiCatalogControllerCreateDriverV1Errors, ThrowOnError>({
+            url: '/api/v1/taxi/drivers',
+            ...options,
+            headers: {
+                'Content-Type': 'application/json',
+                ...options.headers
+            }
+        });
+    }
+    
+    /**
+     * Delete a driver together with his cars; blocked while any car is busy
+     */
+    public taxiCatalogControllerRemoveDriverV1<ThrowOnError extends boolean = false>(options: Options<TaxiCatalogControllerRemoveDriverV1Data, ThrowOnError>): RequestResult<TaxiCatalogControllerRemoveDriverV1Responses, TaxiCatalogControllerRemoveDriverV1Errors, ThrowOnError> {
+        return (options.client ?? this.client).delete<TaxiCatalogControllerRemoveDriverV1Responses, TaxiCatalogControllerRemoveDriverV1Errors, ThrowOnError>({ url: '/api/v1/taxi/drivers/{id}', ...options });
+    }
+    
+    /**
+     * Update a driver
+     */
+    public taxiCatalogControllerUpdateDriverV1<ThrowOnError extends boolean = false>(options: Options<TaxiCatalogControllerUpdateDriverV1Data, ThrowOnError>): RequestResult<TaxiCatalogControllerUpdateDriverV1Responses, TaxiCatalogControllerUpdateDriverV1Errors, ThrowOnError> {
+        return (options.client ?? this.client).patch<TaxiCatalogControllerUpdateDriverV1Responses, TaxiCatalogControllerUpdateDriverV1Errors, ThrowOnError>({
+            url: '/api/v1/taxi/drivers/{id}',
+            ...options,
+            headers: {
+                'Content-Type': 'application/json',
+                ...options.headers
+            }
+        });
+    }
+    
+    /**
+     * List cars of one driver
+     */
+    public taxiCatalogControllerListCarsV1<ThrowOnError extends boolean = false>(options: Options<TaxiCatalogControllerListCarsV1Data, ThrowOnError>): RequestResult<TaxiCatalogControllerListCarsV1Responses, TaxiCatalogControllerListCarsV1Errors, ThrowOnError> {
+        return (options.client ?? this.client).get<TaxiCatalogControllerListCarsV1Responses, TaxiCatalogControllerListCarsV1Errors, ThrowOnError>({ url: '/api/v1/taxi/drivers/{driverId}/cars', ...options });
+    }
+    
+    /**
+     * Add a car to a driver
+     */
+    public taxiCatalogControllerCreateCarV1<ThrowOnError extends boolean = false>(options: Options<TaxiCatalogControllerCreateCarV1Data, ThrowOnError>): RequestResult<TaxiCatalogControllerCreateCarV1Responses, TaxiCatalogControllerCreateCarV1Errors, ThrowOnError> {
+        return (options.client ?? this.client).post<TaxiCatalogControllerCreateCarV1Responses, TaxiCatalogControllerCreateCarV1Errors, ThrowOnError>({
+            url: '/api/v1/taxi/drivers/{driverId}/cars',
+            ...options,
+            headers: {
+                'Content-Type': 'application/json',
+                ...options.headers
+            }
+        });
+    }
+    
+    /**
+     * Delete a car; blocked while it is busy
+     */
+    public taxiCatalogControllerRemoveCarV1<ThrowOnError extends boolean = false>(options: Options<TaxiCatalogControllerRemoveCarV1Data, ThrowOnError>): RequestResult<TaxiCatalogControllerRemoveCarV1Responses, TaxiCatalogControllerRemoveCarV1Errors, ThrowOnError> {
+        return (options.client ?? this.client).delete<TaxiCatalogControllerRemoveCarV1Responses, TaxiCatalogControllerRemoveCarV1Errors, ThrowOnError>({ url: '/api/v1/taxi/drivers/{driverId}/cars/{carId}', ...options });
+    }
+    
+    /**
+     * Update a car (featureServiceIds replaces the whole feature list)
+     */
+    public taxiCatalogControllerUpdateCarV1<ThrowOnError extends boolean = false>(options: Options<TaxiCatalogControllerUpdateCarV1Data, ThrowOnError>): RequestResult<TaxiCatalogControllerUpdateCarV1Responses, TaxiCatalogControllerUpdateCarV1Errors, ThrowOnError> {
+        return (options.client ?? this.client).patch<TaxiCatalogControllerUpdateCarV1Responses, TaxiCatalogControllerUpdateCarV1Errors, ThrowOnError>({
+            url: '/api/v1/taxi/drivers/{driverId}/cars/{carId}',
+            ...options,
+            headers: {
+                'Content-Type': 'application/json',
+                ...options.headers
+            }
+        });
+    }
+    
+    /**
+     * Submitted orders (newest first); drafts are never listed
+     */
+    public taxiOrdersControllerListV1<ThrowOnError extends boolean = false>(options?: Options<TaxiOrdersControllerListV1Data, ThrowOnError>): RequestResult<TaxiOrdersControllerListV1Responses, TaxiOrdersControllerListV1Errors, ThrowOnError> {
+        return (options?.client ?? this.client).get<TaxiOrdersControllerListV1Responses, TaxiOrdersControllerListV1Errors, ThrowOnError>({ url: '/api/v1/taxi/orders', ...options });
+    }
+    
+    /**
+     * Change order status; COMPLETED/CANCELLED release the assigned car
+     */
+    public taxiOrdersControllerUpdateStatusV1<ThrowOnError extends boolean = false>(options: Options<TaxiOrdersControllerUpdateStatusV1Data, ThrowOnError>): RequestResult<TaxiOrdersControllerUpdateStatusV1Responses, TaxiOrdersControllerUpdateStatusV1Errors, ThrowOnError> {
+        return (options.client ?? this.client).patch<TaxiOrdersControllerUpdateStatusV1Responses, TaxiOrdersControllerUpdateStatusV1Errors, ThrowOnError>({
+            url: '/api/v1/taxi/orders/{id}',
+            ...options,
+            headers: {
+                'Content-Type': 'application/json',
+                ...options.headers
+            }
+        });
+    }
+    
+    /**
+     * Cities (by km marker) plus all pair prices
+     */
+    public taxiPriceMatrixControllerGetMatrixV1<ThrowOnError extends boolean = false>(options?: Options<TaxiPriceMatrixControllerGetMatrixV1Data, ThrowOnError>): RequestResult<TaxiPriceMatrixControllerGetMatrixV1Responses, TaxiPriceMatrixControllerGetMatrixV1Errors, ThrowOnError> {
+        return (options?.client ?? this.client).get<TaxiPriceMatrixControllerGetMatrixV1Responses, TaxiPriceMatrixControllerGetMatrixV1Errors, ThrowOnError>({ url: '/api/v1/taxi/price-matrix', ...options });
+    }
+    
+    /**
+     * Create or overwrite the price of one unordered pair
+     */
+    public taxiPriceMatrixControllerSetPairPriceV1<ThrowOnError extends boolean = false>(options: Options<TaxiPriceMatrixControllerSetPairPriceV1Data, ThrowOnError>): RequestResult<TaxiPriceMatrixControllerSetPairPriceV1Responses, TaxiPriceMatrixControllerSetPairPriceV1Errors, ThrowOnError> {
+        return (options.client ?? this.client).put<TaxiPriceMatrixControllerSetPairPriceV1Responses, TaxiPriceMatrixControllerSetPairPriceV1Errors, ThrowOnError>({
+            url: '/api/v1/taxi/price-matrix/{fromCityId}/{toCityId}',
+            ...options,
+            headers: {
+                'Content-Type': 'application/json',
+                ...options.headers
+            }
+        });
+    }
+    
+    /**
+     * Recalculate every pair from the extreme-cities price
+     */
+    public taxiPriceMatrixControllerAutoCalcV1<ThrowOnError extends boolean = false>(options: Options<TaxiPriceMatrixControllerAutoCalcV1Data, ThrowOnError>): RequestResult<TaxiPriceMatrixControllerAutoCalcV1Responses, TaxiPriceMatrixControllerAutoCalcV1Errors, ThrowOnError> {
+        return (options.client ?? this.client).post<TaxiPriceMatrixControllerAutoCalcV1Responses, TaxiPriceMatrixControllerAutoCalcV1Errors, ThrowOnError>({
+            url: '/api/v1/taxi/price-matrix/auto-calc',
+            ...options,
+            headers: {
+                'Content-Type': 'application/json',
+                ...options.headers
+            }
+        });
     }
 }

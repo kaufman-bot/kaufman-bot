@@ -8,13 +8,36 @@ const makePrismaMock = () => {
     .fn()
     .mockResolvedValue({ id: 'key-id', name: '', key: '' });
 
+  // Taxi dictionary delegates: every table starts empty so the taxi seed
+  // runs createMany on each; individual tests override count() per table.
+  const taxiTables = [
+    'taxiCity',
+    'taxiExtraService',
+    'taxiDepartureSlot',
+    'taxiPassengerOption',
+  ] as const;
+  const taxiCounts = Object.fromEntries(
+    taxiTables.map((t) => [t, vi.fn().mockResolvedValue(0)]),
+  );
+  const taxiCreateMany = Object.fromEntries(
+    taxiTables.map((t) => [t, vi.fn().mockResolvedValue({ count: 1 })]),
+  );
+
   return {
     instance: {
       user: { upsert: userUpsert },
       apiKey: { upsert: apiKeyUpsert },
+      ...Object.fromEntries(
+        taxiTables.map((t) => [
+          t,
+          { count: taxiCounts[t], createMany: taxiCreateMany[t] },
+        ]),
+      ),
     },
     userUpsert,
     apiKeyUpsert,
+    taxiCounts,
+    taxiCreateMany,
   };
 };
 
@@ -169,5 +192,103 @@ describe('SeedService.seedDefaultUser (via onApplicationBootstrap)', () => {
         }),
       }),
     );
+  });
+});
+
+describe('SeedService.seedTaxiDictionaries (via onApplicationBootstrap)', () => {
+  beforeEach(() => {
+    vi.unstubAllEnvs?.();
+    clearEnv('USER1');
+    clearEnv('USER2');
+    delete process.env['ADMIN_EMAIL'];
+    delete process.env['ADMIN_PASSWORD'];
+    delete process.env['ADMIN_API_KEY'];
+  });
+
+  it('should seed all four taxi dictionaries when every table is empty', async () => {
+    const prisma = makePrismaMock();
+    const service = new SeedService(prisma.instance as never);
+
+    await service.onApplicationBootstrap();
+
+    const cities = prisma.taxiCreateMany.taxiCity.mock.calls[0][0]
+      .data as Array<{ name: string; distanceKm: number }>;
+    expect(cities).toHaveLength(7);
+    expect(cities.map((c) => c.name)).toEqual([
+      'Москва',
+      'Тверь',
+      'Вышний Волочёк',
+      'Бологое',
+      'Великий Новгород',
+      'Чудово',
+      'Санкт-Петербург',
+    ]);
+    expect(cities[0].distanceKm).toBe(0);
+    expect(cities[6].distanceKm).toBe(700);
+
+    const services = prisma.taxiCreateMany.taxiExtraService.mock.calls[0][0]
+      .data as Array<{ name: string; isCarFeature: boolean }>;
+    expect(services).toHaveLength(9);
+    // Car-feature services (child seat etc.) are required by the wizard
+    // matching (design D11) and must be flagged at seed time.
+    expect(services.filter((s) => s.isCarFeature).map((s) => s.name)).toEqual([
+      'Детское кресло',
+      'Перевозка животных',
+      'Курение в салоне',
+      'Кондиционер',
+      'Музыка в салоне',
+    ]);
+
+    const slots = prisma.taxiCreateMany.taxiDepartureSlot.mock.calls[0][0]
+      .data as Array<{ time: string }>;
+    expect(slots.map((s) => s.time)).toEqual([
+      '08:00',
+      '12:00',
+      '16:00',
+      '20:00',
+    ]);
+
+    const passengers = prisma.taxiCreateMany.taxiPassengerOption.mock
+      .calls[0][0].data as Array<{ count: number }>;
+    expect(passengers.map((p) => p.count)).toEqual([1, 2, 3, 4]);
+  });
+
+  it('should not overwrite non-empty dictionaries on repeated runs', async () => {
+    const prisma = makePrismaMock();
+    // Admin already has data in every dictionary.
+    prisma.taxiCounts.taxiCity.mockResolvedValue(7);
+    prisma.taxiCounts.taxiExtraService.mockResolvedValue(9);
+    prisma.taxiCounts.taxiDepartureSlot.mockResolvedValue(4);
+    prisma.taxiCounts.taxiPassengerOption.mockResolvedValue(4);
+    const service = new SeedService(prisma.instance as never);
+
+    await service.onApplicationBootstrap();
+    await service.onApplicationBootstrap();
+
+    for (const table of [
+      'taxiCity',
+      'taxiExtraService',
+      'taxiDepartureSlot',
+      'taxiPassengerOption',
+    ] as const) {
+      expect(prisma.taxiCreateMany[table]).not.toHaveBeenCalled();
+    }
+  });
+
+  it('should seed only the empty dictionary and keep modified ones', async () => {
+    const prisma = makePrismaMock();
+    // Partially modified: only the services table is still empty.
+    prisma.taxiCounts.taxiCity.mockResolvedValue(5);
+    prisma.taxiCounts.taxiExtraService.mockResolvedValue(0);
+    prisma.taxiCounts.taxiDepartureSlot.mockResolvedValue(4);
+    prisma.taxiCounts.taxiPassengerOption.mockResolvedValue(2);
+    const service = new SeedService(prisma.instance as never);
+
+    await service.onApplicationBootstrap();
+
+    expect(prisma.taxiCreateMany.taxiExtraService).toHaveBeenCalledTimes(1);
+    expect(prisma.taxiCreateMany.taxiCity).not.toHaveBeenCalled();
+    expect(prisma.taxiCreateMany.taxiDepartureSlot).not.toHaveBeenCalled();
+    expect(prisma.taxiCreateMany.taxiPassengerOption).not.toHaveBeenCalled();
   });
 });

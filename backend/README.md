@@ -264,6 +264,47 @@ Once a user's target is a bot, the user obtains a one-time **deep-link** to star
 
 The **transport gate** (`ChatService.assertTransportActive`): when the user's target bot exists and `isActive === false`, `POST /api/v1/chat/messages` and `POST /api/v1/chat/button-callbacks` return `409 Conflict` before persisting anything. Active bots and mock-server targets pass through normally (201).
 
+## Taxi Ordering
+
+The taxi domain has two halves: an **admin REST API** for dictionaries, the price matrix and orders (all behind `ApiKeyGuard` + `AdminGuard`), and the **chat wizard plugin** (`TaxiPlugin`) that walks a user through ordering over the regular chat pipeline. The operator UI for all of it is the `/taxi` section of the frontend (see [`../frontend/README.md`](../frontend/README.md)).
+
+### Admin endpoints (requires ADMIN role)
+
+- `GET|POST|PATCH|DELETE /api/v1/taxi/cities` — route cities with `distanceKm` (kilometrage that drives the price auto-calc), `isActive` and `sortOrder`; names are unique (409 on duplicates). A city referenced by submitted orders cannot be deleted (400); wizard drafts referencing it are deleted instead.
+- `GET|POST|PATCH|DELETE /api/v1/taxi/services` — extra services with `surcharge` and the `isCarFeature` flag (feature services demand car equipment, see auto-assignment below).
+- `GET|POST|PATCH|DELETE /api/v1/taxi/departure-slots` — recurring daily departure times (`HH:MM`, unique).
+- `GET|POST|PATCH|DELETE /api/v1/taxi/passenger-options` — selectable passenger counts (unique).
+- `GET|POST|PATCH|DELETE /api/v1/taxi/drivers` and `GET|POST|PATCH|DELETE /api/v1/taxi/drivers/:driverId/cars` — drivers with nested cars; a car has a unique `plate`, a required `seats` capacity and `features` (m-n to `isCarFeature` services). Deleting a driver cascades to his cars; a car or driver holding a NEW/CONFIRMED order cannot be deleted.
+- `GET /api/v1/taxi/price-matrix` — the full matrix with city names; `PUT /api/v1/taxi/price-matrix/:fromCityId/:toCityId` — upsert one pair (rows are stored normalized `fromCityId < toCityId`, so prices are symmetric by construction); `POST /api/v1/taxi/price-matrix/auto-calc` — derive prices from the cities' `distanceKm` (400 while fewer than two cities exist).
+- `GET /api/v1/taxi/orders?status=…` — order list with the passenger, route, prices and the service/car snapshots; the default filter is `NEW`+`CONFIRMED` (`DRAFT` wizard rows never leak), a single explicit status can be requested instead. `PATCH /api/v1/taxi/orders/:id` — status change (enum-validated); `COMPLETED`/`CANCELLED` release the assigned car.
+
+### Chat wizard (`TaxiPlugin`)
+
+`/taxi` starts — or resumes — a 6-step wizard stored as a `DRAFT` `TaxiOrder` row (`draftStep` is the cursor), so a half-finished order survives restarts and a repeated `/taxi` continues from the saved step. The plugin claims `/taxi` and the whole `taxi:` callback namespace (`handlesCallbacks = true`); the steps are departure city → destination → departure slot → passengers → extra services (optional) → confirmation. List steps are **paginated** at 8 items per page with «Back»/«Next» navigation (`taxi:page:<n>`, out-of-range pages are clamped), so a dictionary of any size stays within the 12-button cap of the inline keyboard.
+
+On **Confirm** the plugin computes the route price from the price matrix, adds service surcharges and assigns a car in one transaction; the row flips to `NEW` and stores an immutable snapshot (city names, slot label, services with surcharges, car, prices) that later dictionary edits never rewrite. Two refusals are replies that keep the draft for a retry:
+
+- **No price** for the route pair — returned when the confirmation screen is rendered (so an unpriced route never even shows the confirm button), and again on every `/taxi` resume and «Confirm» press;
+- **No free car** matching the request (seats or equipment) — the draft stays at the confirmation step; pressing «Confirm» again after the busy car is freed completes the order.
+
+`taxi:cancel` deletes the draft; stale payloads (draft gone or already submitted) answer with the "wizard is not active" reply instead of throwing.
+
+### Car auto-assignment
+
+`TaxiCarAssignmentService.findFreeCar` picks the car for a confirmed order:
+
+- both the car and its driver are active;
+- `seats >= passengerCount`;
+- the car must provide **every** requested `isCarFeature` service;
+- "free" means no `NEW`/`CONFIRMED` order holds the car (`TAXI_CAR_BUSY_STATUSES`) — `COMPLETED`/`CANCELLED` orders release it automatically, no extra bookkeeping;
+- best-fit: the smallest sufficient `seats` wins, ties broken by earlier creation.
+
+### Seeding
+
+`SeedService` seeds the default taxi dictionaries on startup **only when the table is empty** (7 cities with kilometrage, 9 extra services, 4 departure slots, passenger options 1–4): a restart never duplicates or rewrites rows, and admin edits survive. E2E specs use the seeds read-only.
+
+Unit tests live next to the services and the plugin; e2e coverage is split into `backend/test/taxi-admin.e2e-spec.ts` (admin CRUD, matrix auto-calc, orders) and `backend/test/taxi-wizard.e2e-spec.ts` (SSE/history delivery, draft resume, both refusals, the busy/free assignment cycle).
+
 ## Project setup
 
 ```bash

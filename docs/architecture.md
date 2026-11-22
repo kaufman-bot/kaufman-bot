@@ -37,26 +37,33 @@
         ]
       : []),
   ],
-  controllers: [TimeController, HealthController, AuthController, ApiKeysController, AdminUsersController, ChatController, MockBotController, ButtonPresetsController, TelegramBotsController, TelegramLaunchController],
+  controllers: [TimeController, HealthController, AuthController, ApiKeysController, AdminUsersController, ChatController, MockBotController, ButtonPresetsController, TelegramBotsController, TelegramLaunchController, TelegramWebhookController, TaxiCatalogController, TaxiOrdersController, TaxiPriceMatrixController],
   providers: [
     ApiKeysService,
     AuthService,
     ButtonPresetsService,
     ChatEventsService,
     ChatService,
+    MessageChannelService,
     MockBotService,
     UsersService,
     TelegramBotsService,
     TelegramBindingService,
+    TelegramBridgeService,
     TelegramWebhookService,
+    TaxiCarAssignmentService,
+    TaxiCatalogService,
+    TaxiOrdersService,
+    TaxiPriceMatrixService,
     BotPluginsService,
     PingPongPlugin,
     TimePlugin,
     SettingsPlugin,
+    TaxiPlugin,
     {
       provide: BOT_PLUGINS,
-      useFactory: (pingPong, time, settings) => [pingPong, time, settings],
-      inject: [PingPongPlugin, TimePlugin, SettingsPlugin], // order == dispatch priority
+      useFactory: (pingPong, time, settings, taxi) => [pingPong, time, settings, taxi],
+      inject: [PingPongPlugin, TimePlugin, SettingsPlugin, TaxiPlugin], // order == dispatch priority
     },
   ],
 })
@@ -79,11 +86,11 @@ export class AppModule {}
 Два вида сервисов, не смешиваются (полное правило —
 [`service-layer-split`](../.agents/skills/service-layer-split/SKILL.md)):
 
-| Вид                  | Примеры                                                                                                                         | Ответственность                                             |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| **Entity-CRUD**      | `UsersService`, `ApiKeysService`, `ButtonPresetsService`, `TelegramBotsService`                                                 | list/get/update/remove одного Prisma-без фоновой композиции |
-| **Use-case**         | `AuthService`, `ChatService`, `MockBotService`, `BotPluginsService`, `TelegramBindingService`                                   | Мультисетевой сценарий: compose + side effects + валидация  |
-| **Инфраструктурный** | `ChatEventsService`, `PrismaService`, `SeedService`, `TelegramWebhookService`, `TelegramBridgeService`, `MessageChannelService` | Шины, драйверы, bootstrap                                   |
+| Вид                  | Примеры                                                                                                                                                                  | Ответственность                                             |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------- |
+| **Entity-CRUD**      | `UsersService`, `ApiKeysService`, `ButtonPresetsService`, `TelegramBotsService`, `TaxiCatalogService`                                                                    | list/get/update/remove одного Prisma-без фоновой композиции |
+| **Use-case**         | `AuthService`, `ChatService`, `MockBotService`, `BotPluginsService`, `TelegramBindingService`, `TaxiPriceMatrixService`, `TaxiOrdersService`, `TaxiCarAssignmentService` | Мультисетевой сценарий: compose + side effects + валидация  |
+| **Инфраструктурный** | `ChatEventsService`, `PrismaService`, `SeedService`, `TelegramWebhookService`, `TelegramBridgeService`, `MessageChannelService`                                          | Шины, драйверы, bootstrap                                   |
 
 Конкретные примеры:
 
@@ -107,6 +114,24 @@ export class AppModule {}
   повторяет гейт исходящего моста (`telegramBotId` + `telegramChatId` +
   `bot.isActive`) и возвращает снимок `{ channel, botName }`; единая точка
   решения для `MockBotService.replyAsBot` и `BotPluginsService.dispatchAndReply`.
+- `TaxiCatalogService` — entity-CRUD справочников такси (города, услуги,
+  слоты, пассажиры, водители + машины) с валидацией в сервисе: уникальность
+  имени/`HH:MM`/`count` → 409; город с подтверждёнными заказами не удаляется
+  (400), черновики сбрасываются транзакционно; машина или водитель с заказом
+  в `NEW`/`CONFIRMED` удалению не подлежат.
+- `TaxiPriceMatrixService` — use-case матрицы цен: `setPairPrice` upsert с
+  нормализацией пары (`fromCityId < toCityId`, симметрия по построению —
+  design D6), `autoCalc(price)` по километражу городов (design D5),
+  `pairPrice` — чтение цены для визарда.
+- `TaxiCarAssignmentService.findFreeCar` — use-case подбора машины (design
+  D11): активность машины и водителя, `seats >= passengerCount`, покрытие
+  всех запрошенных `isCarFeature`-услуг, «свободна» = нет заказа в
+  `NEW`/`CONFIRMED`, best-fit (минимум достаточных мест, ничья — по времени
+  создания); работает и внутри транзакции вызывающего (подтверждение
+  визарда).
+- `TaxiOrdersService` — список заказов для админки (дефолтный фильтр
+  `NEW`+`CONFIRMED`, `DRAFT`-черновики визарда не отдаются, опциональный
+  `?status=`) и смена статуса `PATCH`-ом с валидацией enum.
 
 ## 3. URL-контракт и версионирование
 
@@ -134,23 +159,26 @@ await app.listen(process.env.PORT ?? 3000);
 
 Итоговые маршруты:
 
-| Префикс                                   | Что                                                   |
-| ----------------------------------------- | ----------------------------------------------------- |
-| `/api/v1/time`, `/api/v1/time/stream`     | SSE серверного времени (публичный)                    |
-| `/api/v1/health`                          | Health-check (публичный)                              |
-| `/api/v1/auth/register`, `/auth/login`    | Публичные точки входа                                 |
-| `/api/v1/auth/me`, `PATCH /auth/me`       | Профиль по `x-api-key`                                |
-| `/api/v1/api-keys*`                       | CRUD ключей владельца                                 |
-| `/api/v1/admin/users*`                    | Админ-эндпоинты под `AdminGuard`                      |
-| `/api/v1/chat/messages`, `chat/stream`    | Web-chat: история, отправка, SSE                      |
-| `/api/v1/chat/button-callbacks`           | Нажатие inline-кнопки (без эха, плагины-opt-in)       |
-| `/api/v1/mock-bot/*`                      | Консоль оператора (списки, reply, стрим)              |
-| `/api/v1/mock-bot/presets*`               | CRUD button-presets с owner-scope                     |
-| `/api/v1/telegram/bots*`                  | CRUD Telegram-ботов с owner-scope                     |
-| `/api/v1/admin/users/:id/telegram-target` | Назначение/сброс цели транспорта (ADMIN)              |
-| `/api/v1/telegram/launch`                 | Deep-link привязки (AUTH, возвращает url+token)       |
-| `/api/telegram/webhook/:botId`            | Публичный приём Telegram-обновлений (VERSION_NEUTRAL) |
-| `/swagger`                                | Swagger UI (без `/api/v1`)                            |
+| Префикс                                                                                                   | Что                                                       |
+| --------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| `/api/v1/time`, `/api/v1/time/stream`                                                                     | SSE серверного времени (публичный)                        |
+| `/api/v1/health`                                                                                          | Health-check (публичный)                                  |
+| `/api/v1/auth/register`, `/auth/login`                                                                    | Публичные точки входа                                     |
+| `/api/v1/auth/me`, `PATCH /auth/me`                                                                       | Профиль по `x-api-key`                                    |
+| `/api/v1/api-keys*`                                                                                       | CRUD ключей владельца                                     |
+| `/api/v1/admin/users*`                                                                                    | Админ-эндпоинты под `AdminGuard`                          |
+| `/api/v1/chat/messages`, `chat/stream`                                                                    | Web-chat: история, отправка, SSE                          |
+| `/api/v1/chat/button-callbacks`                                                                           | Нажатие inline-кнопки (без эха, плагины-opt-in)           |
+| `/api/v1/mock-bot/*`                                                                                      | Консоль оператора (списки, reply, стрим)                  |
+| `/api/v1/mock-bot/presets*`                                                                               | CRUD button-presets с owner-scope                         |
+| `/api/v1/telegram/bots*`                                                                                  | CRUD Telegram-ботов с owner-scope                         |
+| `/api/v1/admin/users/:id/telegram-target`                                                                 | Назначение/сброс цели транспорта (ADMIN)                  |
+| `/api/v1/telegram/launch`                                                                                 | Deep-link привязки (AUTH, возвращает url+token)           |
+| `/api/telegram/webhook/:botId`                                                                            | Публичный приём Telegram-обновлений (VERSION_NEUTRAL)     |
+| `/swagger`                                                                                                | Swagger UI (без `/api/v1`)                                |
+| `/api/v1/taxi/cities`, `taxi/services`, `taxi/departure-slots`, `taxi/passenger-options`, `taxi/drivers*` | Справочники такси и водители с машинами (ADMIN)           |
+| `/api/v1/taxi/price-matrix*`                                                                              | Матрица цен: чтение, пара, авторасчёт (ADMIN)             |
+| `/api/v1/taxi/orders*`                                                                                    | Заказы такси: список (`?status=`) и смена статуса (ADMIN) |
 
 **Прокси фронта.** `frontend/proxy.conf.json` перенаправляет `/api` на
 `http://localhost:3000`; базовый URL хранится в
@@ -234,16 +262,24 @@ e2e-тесты (ActivityHelper поверх SDK)
 Только через `prisma migrate` (см.
 [`prisma-migrations-only`](../.agents/skills/prisma-migrations-only/SKILL.md)).
 
-| Модель                 | Назначение                                                                                                                                                                 |
-| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `User`                 | `email` unique, `password` (scrypt-hex), `role` enum, `isActive`, **`timezone`** (IANA или null → UTC), **`language`** (enum `en`/`ru`, default `en`)                      |
-| `ApiKey`               | `key` unique, `name`, `isActive`, `expiresAt?`, FK → `User` (`onDelete: Cascade`)                                                                                          |
-| `Conversation`         | `userId` unique — один диалог на пользователя, FK → `User` (`onDelete: Cascade`)                                                                                           |
-| `Message`              | `conversationId`, `senderRole` (`USER`/`BOT`), `kind` (`TEXT`/`BUTTON`), `content`, **`buttons: Json?`**, **снимок канала `channel`/`botName`/`operatorEmail`**, `readAt?` |
-| `BotPluginTask`        | Outbox-строка: `messageId` unique, `status` enum `PENDING`/`PROCESSING`/`DONE`, индекс `[status, updatedAt]`                                                               |
-| `ButtonPreset`         | `ownerId` FK, `name`, `buttons: Json` — набор inline-кнопок, принадлежащий ADMIN-пользователю                                                                              |
-| `TelegramBot`          | `ownerId` FK → User (`onDelete: Cascade`), `name`, `botToken`, `botUsername?`, `isActive`, `webhookSecret` (cuid), `settings: Json?` — Telegram-бот оператора              |
-| `TelegramBindingToken` | `token` unique (крипто-случайный), `userId`, `telegramBotId`, `expiresAt`, `usedAt?` — одноразовый токен привязки chat                                                     |
+| Модель                 | Назначение                                                                                                                                                                                                                                                                 |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `User`                 | `email` unique, `password` (scrypt-hex), `role` enum, `isActive`, **`timezone`** (IANA или null → UTC), **`language`** (enum `en`/`ru`, default `en`)                                                                                                                      |
+| `ApiKey`               | `key` unique, `name`, `isActive`, `expiresAt?`, FK → `User` (`onDelete: Cascade`)                                                                                                                                                                                          |
+| `Conversation`         | `userId` unique — один диалог на пользователя, FK → `User` (`onDelete: Cascade`)                                                                                                                                                                                           |
+| `Message`              | `conversationId`, `senderRole` (`USER`/`BOT`), `kind` (`TEXT`/`BUTTON`), `content`, **`buttons: Json?`**, **снимок канала `channel`/`botName`/`operatorEmail`**, `readAt?`                                                                                                 |
+| `BotPluginTask`        | Outbox-строка: `messageId` unique, `status` enum `PENDING`/`PROCESSING`/`DONE`, индекс `[status, updatedAt]`                                                                                                                                                               |
+| `ButtonPreset`         | `ownerId` FK, `name`, `buttons: Json` — набор inline-кнопок, принадлежащий ADMIN-пользователю                                                                                                                                                                              |
+| `TelegramBot`          | `ownerId` FK → User (`onDelete: Cascade`), `name`, `botToken`, `botUsername?`, `isActive`, `webhookSecret` (cuid), `settings: Json?` — Telegram-бот оператора                                                                                                              |
+| `TelegramBindingToken` | `token` unique (крипто-случайный), `userId`, `telegramBotId`, `expiresAt`, `usedAt?` — одноразовый токен привязки chat                                                                                                                                                     |
+| `TaxiCity`             | Город маршрута: `name` unique, **`distanceKm`** (километраж от первой точки — вход авторасчёта цен, D5), `isActive`, `sortOrder`                                                                                                                                           |
+| `TaxiExtraService`     | Доп. услуга визарда: `name` unique, `surcharge`, **`isCarFeature`** — услуга-возможность машины (m-n `TaxiCar.features`); не-возможности подбор машины не ограничивают                                                                                                     |
+| `TaxiCityPrice`        | Цена unordered-пары городов, нормализованная (`fromCityId < toCityId`) — симметрична по построению (D6); cascade по обоим городам                                                                                                                                          |
+| `TaxiDepartureSlot`    | Слоты выезда `HH:MM` (unique)                                                                                                                                                                                                                                              |
+| `TaxiPassengerOption`  | Варианты количества пассажиров (`count` unique)                                                                                                                                                                                                                            |
+| `TaxiDriver`           | Водитель: `fullName`, `phone`, `isActive`; удаление каскадно сносит машины                                                                                                                                                                                                 |
+| `TaxiCar`              | Машина: `plate` unique, **`seats`** (обязательная вместимость для подбора, D11), `features` m-n → `isCarFeature`-услуги, cascade по водителю                                                                                                                               |
+| `TaxiOrder`            | Заказ такси и строка-автомат визарда: `status` (enum `DRAFT`/`NEW`/`CONFIRMED`/`COMPLETED`/`CANCELLED`), `draftStep`, `serviceIds`, `priceBase`/`priceTotal`, снимки (`fromCityName`/`toCityName`/`departureSlotLabel`/`serviceSnapshot`/`carSnapshot`), `carId` (SetNull) |
 
 Ключевые semantics:
 
@@ -268,8 +304,19 @@ e2e-тесты (ActivityHelper поверх SDK)
 - **`BotPluginTask`** — транзакционный outbox. Создаётся в той же
   `prisma.$transaction`, что и `Message(USER)` любого `kind`, и закрывается в
   той же транзакции, что и `Message(BOT)`.
+- **`TaxiOrder` — и заказ, и строка-автомат визарда**: `status: DRAFT` с
+  `draftStep` — курсор визарда, `serviceIds` — черновой набор услуг; при
+  подтверждении строка переходит в `NEW` и фиксирует снимки (имена городов,
+  слот, услуги с наценками, машина, цены), поэтому последующие правки
+  словарей не переписывают прошлые заказы.
+- **Занятость машины такси** — `carId` держится заказами `NEW`/`CONFIRMED`
+  (`TAXI_CAR_BUSY_STATUSES`); `COMPLETED`/`CANCELLED` освобождают машину
+  автоматически. `carId`/`departureSlotId` — `SetNull`: дисплей опирается на
+  снимки, `fromCity`/`toCity` — `Restrict` (город с подтверждёнными заказами
+  не удалить, черновики сбрасываются транзакционно).
 - **`onDelete: Cascade`** — на `ApiKey.user`, `Message.conversation`,
-  `BotPluginTask.message`, `ButtonPreset.owner` — админ-удаление аккаунта
+  `BotPluginTask.message`, `ButtonPreset.owner`, `TaxiCar.driver`,
+  `TaxiCityPrice.fromCity/toCity` — админ-удаление аккаунта/водителя/города
   сносит всё зависимое.
 
 ## 7. Плагинная система бота и outbox-dispatch
@@ -372,6 +419,24 @@ recovery-sweep), поэтому HTTP-отклик нажатия остаётс�
 содержит. Тексты живут в таблице `{ en, ru }` внутри плагина — общий i18n для
 остальных строк отложен, см. [`../BACKLOG.md`](../BACKLOG.md).
 
+`TaxiPlugin`
+([`backend/src/plugins/taxi.plugin.ts`](../backend/src/plugins/taxi.plugin.ts))
+— второй плагин с `handlesCallbacks = true` и первый плагин-визард: `/taxi`
+стартует (или продолжает) конечный автомат из 6 шагов поверх `DRAFT`-строки
+`TaxiOrder` (design D4 — `draftStep` это курсор), поэтому недооформленный
+заказ переживает рестарт, а повторный `/taxi` продолжает с сохранённого шага.
+Кнопки `taxi:from/to/slot/pax/svc/done/confirm/cancel` ведут черновик; шаги
+1–5 пагинируются по 8 пунктов (`taxi:page:<n>` с клэмпом страниц,
+`taxi:svc:<id>:<page>` несёт страницу toggle-а) — словарь любого размера
+укладывается в лимит `MAX_BUTTONS = 12`. Подтверждение одной транзакцией
+считает цену пары (`TaxiPriceMatrixService.pairPrice`), наценки услуг и
+подбирает машину (`TaxiCarAssignmentService.findFreeCar`, design D11): нет
+цены или свободной машины — отказ-реплика с сохранением черновика (после
+освобождения машины повторное «Подтвердить» завершает заказ); `taxi:cancel`
+удаляет черновик, устаревшие кнопки отвечают репликой «визард не активен».
+Все ветки возвращают `BotPluginReply` и не throw; тексты — та же таблица
+`{ en, ru }`, что у SettingsPlugin.
+
 Автообнаружение плагинов (без правки `app.module.ts`) отложено — см.
 [`../BACKLOG.md`](../BACKLOG.md).
 
@@ -456,8 +521,9 @@ recovery-sweep), поэтому HTTP-отклик нажатия остаётс�
 Standalone-компоненты + `signal()` + `@if/@for`-контроль. Ключевые места:
 
 - [`frontend/src/app/app.routes.ts`](../frontend/src/app/app.routes.ts) —
-  `/login`, `/chat`, `/mock-bot`, дашборд под `requireAuthGuard` /
-  `adminAuthGuard`.
+  `/login`, `/chat`, `/mock-bot`, `/telegram-bots`, `/taxi` (админ-раздел
+  такси: layout-шелл под `requireAdminGuard` + семь lazy-дочерних страниц),
+  дашборд под `requireAuthGuard`.
 - `SessionService` — signal + `localStorage`; `restore()` (идемпотентный,
   вызывается из `provideAppInitializer`, а не из конструктора —
   см. [http-in-constructor-interceptor-cycle](pitfalls.md#http-in-constructor-interceptor-cycle))
@@ -469,6 +535,10 @@ Standalone-компоненты + `signal()` + `@if/@for`-контроль. Кл
   `reconnected` и refetch истории.
 - `MockBotService`, `ButtonPresetsService` — консоль оператора: переключение
   между пользователями, reply с кнопками, CRUD пресетов.
+- `TaxiService`
+  ([`frontend/src/app/taxi-admin/taxi.service.ts`](../frontend/src/app/taxi-admin/taxi.service.ts)) —
+  обёртка SDK домена такси для страниц `/taxi` (справочники, матрица цен,
+  заказы).
 - `utils/message-identity.ts` — общий для `/chat` и `/mock-bot` helper
   бейджей и цветов идентичности: ключ `bot:<name>` / `operator:<email>`,
   хэш → класс `msg-identity-0…7`; палитра — глобальные CSS-переменные в
@@ -479,11 +549,13 @@ Jest-тесты компонентов, Playwright-e2e — см. [`testing.md`](
 
 ## 11. Тестовый контур (краткий обзор)
 
-- **Backend unit** (`vitest`) — `backend/src/**/*.spec.ts`; 221 тест на
+- **Backend unit** (`vitest`) — `backend/src/**/*.spec.ts`; 329 тестов на
   момент написания документа.
 - **Backend e2e** — `backend/test/*.e2e-spec.ts` против **живого** бэкенда
-  через сгенерированный OpenAPI SDK. 136 тестов, без `Test.createTestingModule`.
-- **Frontend unit** — Jest + `jest-preset-angular`; 149 тестов.
+  через сгенерированный OpenAPI SDK. 159 тестов (15 файлов), без
+  `Test.createTestingModule`; файлы идут строго друг за другом
+  (`fileParallelism: false` — общая dev-БД и пересекающиеся домены).
+- **Frontend unit** — Jest + `jest-preset-angular`; 179 тестов.
 - **Frontend e2e** — Playwright против прод-стека (`start:prod`) или dev
   (`:4200`);详见 [`testing.md`](testing.md).
 

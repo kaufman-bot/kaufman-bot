@@ -779,3 +779,145 @@ BACKLOG #10.
 **Boundary.** Только `@angular/common/http/testing` (v19). Поведение `match()`
 документировано в его JSDoc: «Requests returned through this API will no longer
 be in the list of open requests».
+
+---
+
+<a id="ngmodel-number-input"></a>
+
+## `input[type=number]` + `[ngModel]` кладёт в сигнал число, а не строку
+
+**Symptom.** Юнит-тест формы такси: после программного `input`-ивента на поле
+«Километраж» computed-валидатор падает
+`TypeError: this.formDistance(...).trim is not a function` при следующем
+`detectChanges()`. В рантайме ввод «85» молча превращает строковый сигнал
+формы в число.
+
+**Root cause.** Angular автоматически вешает `NumberValueAccessor` на
+`input[type=number][ngModel]`; его `registerOnChange` конвертирует значение
+перед `ngModelChange` (`''` → `null`, числоподобное → `Number`). Формы же
+хранят ввод в строковых сигналах и конвертируют `Number(...)` при сабмите —
+`.trim()` на числе взрывается.
+
+**Fix.** Числовые поля админских форм делать `type="text"` +
+`inputmode="numeric"`, не полагаясь на `NumberValueAccessor`: сигнал остаётся
+строкой, «abc» не съедается браузером до валидации (сообщение «целое число
+≥ 0» показывается корректно). Паттерн —
+[`cities.component.ts`](../frontend/src/app/taxi-admin/cities.component.ts)
+(поля distanceKm/surcharge/count). Альтернатива — `String($event ?? '')` в
+каждом `ngModelChange` — не используется из-за шаблонного шума.
+
+**Boundary.** Пока формы админки хранят ввод в строковых сигналах
+(`signal('')`). Если форма переходит на `ReactiveFormsModule` с
+`FormControl<number>`, accessor становится полезным — правило пересмотреть.
+
+---
+
+<a id="ngmodel-async-setvalue"></a>
+
+## `[ngModel]` откладывает `control.setValue` микротаской — программный ввод затирается
+
+**Symptom.** Юнит-тест Angular-формы: `fixture.detectChanges()`, затем
+`input.value = 'Клин'` + `dispatchEvent(new Event('input'))`. Сигнал и
+FormControl остаются пустыми, DOM-значение — тоже; submits идут с пустой
+моделью. Симптом плавающий: иногда значение доходит (если между CD и вводом
+был `await`), иногда нет.
+
+**Root cause.** `NgModel._updateValue` планирует
+`resolvedPromise.then(() => control.setValue(bindingValue))` на каждое
+изменение `[ngModel]`-биндинга, включая первый рендер. Zone.js/стек
+микротасок отрабатывают эту очередь между вводом и CD: `setValue` идёт по
+пайплайну control→view (`writeValue` устаревшего значения) и затирает и DOM,
+и (при emit-модели) сигнал. В браузере пользователи вводят после
+стабилизации — гонка видна только в тестах, где ввод и CD синхронны.
+
+**Fix.** Перед программным вводом дренировать очередь:
+`await fixture.whenStable()` (или явный `await Promise.resolve()`) после
+первого `fixture.detectChanges()`. Паттерн —
+[`cities.component.spec.ts`](../frontend/src/app/taxi-admin/cities.component.spec.ts),
+первая строка `fillForm`. Альтернатива — задавать состояние через сигналы
+компонента (`formName.set(...)`) вместо DOM-событий, но тогда не
+тестируется view→model-плайн.
+
+**Boundary.** Тесты с `[ngModel]` + программный ввод. Не путать с
+[ngmodel-number-input](#ngmodel-number-input) — там меняется тип значения,
+здесь — тайминг записи.
+
+---
+
+<a id="template-map-bracket"></a>
+
+## Обращение к `Map` по ключу в шаблоне Angular возвращает `undefined`
+
+**Symptom.** Страница рендерится, но список строк пуст (или «0 rows» в
+Jest-спеке), хотя данные в сигнале есть. Ошибок в консоли нет — просто ветка
+`@if (map[key]; as item)` ни разу не срабатывает.
+
+**Root cause.** `[key]` в шаблоне компилируется в property-access, а у `Map`
+нет свойств-ключей — нужен `.get(key)`. Angular не проверяет это на этапе
+компиляции (типизируется как `any`/`undefined`), поэтому падение тихое.
+
+**Fix.** Для lookup-таблиц, используемых в шаблонах, строить `Record` через
+`Object`-литерал вместо `Map`: индексация `record[key]` в шаблоне работает.
+Паттерн — `cityById` в
+[`prices.component.ts`](../frontend/src/app/taxi-admin/prices.component.ts).
+Если нужен именно `Map` — вызывать `.get()` явно в шаблоне.
+
+**Boundary.** Шаблонные выражения с индексацией. В TypeScript-коде
+компонента `Map` использовать можно без ограничений.
+
+---
+
+<a id="template-arrow-functions"></a>
+
+## Стрелочные функции запрещены в шаблонах Angular (NG5002)
+
+**Symptom.** Сборка падает: `NG5002: Parser Error: Missing expected )` /
+`Unexpected token ')'` на выражении вида
+`{{ items.map((f) => f.name).join(', ') }}` — при этом `npm test` может быть
+зелёным (Jest-транспилятор soft-warning'ит вместо ошибки).
+
+**Root cause.** Шаблонный парсер Angular не поддерживает стрелочные функции
+и method chaining поверх них — это ограничение синтаксиса выражений, а не
+проверка типов.
+
+**Fix.** Выносить преобразование в метод компонента:
+`carFeaturesLabel(car)` в
+[`drivers.component.ts`](../frontend/src/app/taxi-admin/drivers.component.ts)
+вместо inline `car.features.map((f) => ...)` в шаблоне. Плоские вызовы
+(`join`, тернарники) в шаблонах допустимы.
+
+**Boundary.** Любое шаблонное выражение с `=>`. Если проект переедет на
+Angular с поддержкой функций в шаблонах (экспериментальные флаги), правило
+пересмотреть.
+
+---
+
+<a id="jest-mockrejectedvalueonce-realm"></a>
+
+## `mockRejectedValueOnce` в Angular Jest-тестах уходит в необработанный reject
+
+**Symptom.** Юнит-тест компонента с `mockRejectedValueOnce` на методе-сервисе:
+компонент корректно ловит ошибку (`.form-error` рендерится, вызовы
+подсчитываются), но тест всё равно падает с `TaxiApiError: ...` как
+«uncaught exception» — ошибка уходит в jsdom `reportException`, стек указывает
+на строку создания мока.
+
+**Root cause.** jest-mock создаёт rejected-promise через
+`this._environmentGlobal.Promise.reject(value)` — Promise **окружения**
+(jsdom), а не тот, что патчится zone.js для кода приложения. Цепочка
+`await` компонента (zone-patched) не полностью «усыновляет» чужой promise:
+поведение зависит от тайминга дренирования микротасок, поэтому тест
+периодически ловит необработанный reject. `mockRejectedValue` (не Once)
+наследует тот же механизм.
+
+**Fix.** Для rejection-сценариев в Angular-тестах использовать
+`mockImplementationOnce(async () => { throw new TaxiApiError('...') })` —
+async-функция возвращает promise того же реалма, что и `await` компонента.
+Паттерн —
+[`orders.component.spec.ts`](../frontend/src/app/taxi-admin/orders.component.spec.ts),
+тест «shows the API error and restores the row status on failure».
+
+**Boundary.** Тесты Angular-компонентов с зоной и rejection-моками jest.
+Чистый Node/Vitest без зоны не воспроизводит — правило не переносить.
+Если jest-mock начнёт создавать reject тем же Promise, что и приложение,
+правило пересмотреть.

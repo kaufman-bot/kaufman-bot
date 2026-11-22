@@ -87,6 +87,32 @@ describe('NavbarComponent', () => {
     expect(mockBotLink).toBeTruthy();
   });
 
+  it('should show taxi link when admin', () => {
+    (sessionService.isAuthenticated as jest.Mock).mockReturnValue(true);
+    (sessionService.isAdmin as jest.Mock).mockReturnValue(true);
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const links = compiled.querySelectorAll('a');
+    const taxiLink = Array.from(links).find((l) =>
+      l.textContent?.includes('Такси'),
+    );
+    expect(taxiLink).toBeTruthy();
+  });
+
+  it('should not show taxi link when not admin', () => {
+    (sessionService.isAuthenticated as jest.Mock).mockReturnValue(true);
+    (sessionService.isAdmin as jest.Mock).mockReturnValue(false);
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const links = compiled.querySelectorAll('a');
+    const taxiLink = Array.from(links).find((l) =>
+      l.textContent?.includes('Такси'),
+    );
+    expect(taxiLink).toBeFalsy();
+  });
+
   it('should not show mock-bot link when not admin', () => {
     (sessionService.isAuthenticated as jest.Mock).mockReturnValue(true);
     (sessionService.isAdmin as jest.Mock).mockReturnValue(false);

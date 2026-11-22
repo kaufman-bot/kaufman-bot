@@ -101,6 +101,40 @@ Jest specs for both components cover badge text, operator signatures, identity
 classes and legacy messages (`npm test`); `npm run build` verifies the
 production bundle.
 
+## Taxi admin console (`/taxi`)
+
+The taxi domain has an operator UI at [`/taxi`](src/app/app.routes.ts): the
+[`TaxiAdminLayoutComponent`](src/app/taxi-admin/taxi-admin-layout.component.ts)
+shell is guarded once with `requireAdminGuard` in `app.routes.ts` (the
+children inherit it), renders a seven-item sidebar with `routerLinkActive`
+highlighting and a nested `<router-outlet>`. Every page is a lazy child route
+(`taxi/cities|services|departure-slots|passenger-options|drivers|prices|orders`,
+`/taxi` redirects to `/taxi/cities`), and ADMIN users get a «Такси» link in
+the navbar.
+
+The pages share one template — a table, a signal-based form (`[ngModel]` +
+`(ngModelChange)`, selects use `[selected]`) and delete-with-confirmation,
+with `400`/`409` errors surfaced through the shared `ApiError` helper:
+
+- **Cities** — route points with kilometrage (drives the price auto-calc);
+- **Services** — extra services with a surcharge and the «car feature» flag;
+- **Departure slots** / **Passenger options** — dictionary rows for the
+  wizard steps;
+- **Drivers** — driver cards with nested cars (plate, seats, feature
+  checkboxes);
+- **Prices** — the symmetric city-pair matrix with manual pair editing and a
+  «Рассчитать автоматически» button;
+- **Orders** — the order table with passenger, route, prices and the assigned
+  car, a status filter (empty value = the backend default of active
+  NEW+CONFIRMED orders) and a status select.
+
+The user-facing half of the domain is the chat wizard plugin — see
+[`../backend/README.md`](../backend/README.md#taxi-ordering).
+[`TaxiService`](src/app/taxi-admin/taxi.service.ts) wraps the generated
+OpenAPI SDK for every page; Jest specs cover the layout (sidebar, guard,
+navbar link) and the key pages (`npm test`), `npm run build` verifies the
+bundle.
+
 ## Additional Resources
 
 For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.

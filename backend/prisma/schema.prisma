@@ -85,6 +85,7 @@ model User {
   apiKeys      ApiKey[]
   conversation Conversation?
   presets      ButtonPreset[]
+  taxiOrders   TaxiOrder[]
 
   ownedTelegramBots TelegramBot[] @relation("BotOwner")
   telegramBot       TelegramBot?  @relation("UserActiveBot", fields: [telegramBotId], references: [id], onDelete: SetNull)
@@ -258,4 +259,195 @@ model TelegramBindingToken {
 
   @@index([userId])
   @@map("telegram_binding_tokens")
+}
+
+/**
+ * Status of a taxi order. DRAFT is the wizard's single per-user draft row
+ * (never visible in the admin orders list); NEW/CONFIRMED hold the assigned
+ * car busy; COMPLETED/CANCELLED free the car for the next assignment.
+ */
+enum TaxiOrderStatus {
+  DRAFT
+  NEW
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+}
+
+/**
+ * Populated area along the taxi route with its km marker from the first
+ * point; `distanceKm` drives the price-matrix auto-calc (see change
+ * add-taxi-plugin, design D1/D5).
+ */
+model TaxiCity {
+  id         String   @id @default(cuid())
+  name       String   @unique
+  distanceKm Int
+  isActive   Boolean  @default(true)
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  pricesFrom TaxiCityPrice[] @relation("PriceFrom")
+  pricesTo   TaxiCityPrice[] @relation("PriceTo")
+  ordersFrom TaxiOrder[]     @relation("OrderFrom")
+  ordersTo   TaxiOrder[]     @relation("OrderTo")
+
+  @@map("taxi_cities")
+}
+
+/**
+ * Extra service selectable in the taxi wizard with its surcharge.
+ * `isCarFeature` marks services that require car equipment (child seat,
+ * smoking, …): cars declare which of them they provide, and the assignment
+ * service matches them (design D11). Non-feature services never restrict
+ * car selection.
+ */
+model TaxiExtraService {
+  id           String   @id @default(cuid())
+  name         String   @unique
+  surcharge    Int
+  isActive     Boolean  @default(true)
+  isCarFeature Boolean  @default(false)
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  cars TaxiCar[] @relation("CarFeatures")
+
+  @@map("taxi_extra_services")
+}
+
+/**
+ * Price of one unordered city pair; rows are stored normalized
+ * (`fromCityId < toCityId` lexicographically) so the pair is symmetric by
+ * construction — see design D6.
+ */
+model TaxiCityPrice {
+  id        String   @id @default(cuid())
+  price     Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  fromCity TaxiCity @relation("PriceFrom", fields: [fromCityId], references: [id], onDelete: Cascade)
+  toCity   TaxiCity @relation("PriceTo", fields: [toCityId], references: [id], onDelete: Cascade)
+
+  fromCityId String
+  toCityId   String
+
+  @@unique([fromCityId, toCityId])
+  @@map("taxi_city_prices")
+}
+
+/**
+ * Recurring daily departure time offered by the wizard (`HH:MM`).
+ */
+model TaxiDepartureSlot {
+  id        String   @id @default(cuid())
+  time      String   @unique
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orders TaxiOrder[]
+
+  @@map("taxi_departure_slots")
+}
+
+/**
+ * Passenger-count option offered by the wizard.
+ */
+model TaxiPassengerOption {
+  id        String   @id @default(cuid())
+  count     Int      @unique
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("taxi_passenger_options")
+}
+
+/**
+ * Driver managed by the admin; deleting a driver deletes his cars.
+ */
+model TaxiDriver {
+  id        String   @id @default(cuid())
+  fullName  String
+  phone     String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  cars TaxiCar[]
+
+  @@map("taxi_drivers")
+}
+
+/**
+ * Car of one driver. `seats` is the required capacity matched against the
+ * passenger count; `features` (m-n to car-feature services) declares the
+ * equipment the car provides (design D11).
+ */
+model TaxiCar {
+  id        String   @id @default(cuid())
+  model     String
+  plate     String   @unique
+  color     String?
+  seats     Int
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  driver   TaxiDriver         @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  driverId String
+  features TaxiExtraService[] @relation("CarFeatures")
+
+  orders TaxiOrder[]
+
+  @@map("taxi_cars")
+}
+
+/**
+ * Taxi order. Doubles as the wizard state machine row: `status: DRAFT` with
+ * `draftStep` tracks wizard progress; `serviceIds` holds the draft's selected
+ * extra-service ids. On confirmation the row flips to NEW and stores an
+ * immutable snapshot (names, services with surcharges, car, prices) so later
+ * dictionary edits never change past orders (design D4/D11). `carId` keeps
+ * the assigned car busy while NEW/CONFIRMED (SetNull on car deletion — display
+ * relies on the snapshot).
+ */
+model TaxiOrder {
+  id                 String          @id @default(cuid())
+  userId             String
+  status             TaxiOrderStatus @default(DRAFT)
+  draftStep          Int             @default(1)
+  passengerCount     Int?
+  serviceIds         Json?
+  priceBase          Int?
+  priceTotal         Int?
+  fromCityName       String?
+  toCityName         String?
+  departureSlotLabel String?
+  serviceSnapshot    Json?
+  carSnapshot        Json?
+  confirmedAt        DateTime?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  user          User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fromCity      TaxiCity?          @relation("OrderFrom", fields: [fromCityId], references: [id], onDelete: Restrict)
+  toCity        TaxiCity?          @relation("OrderTo", fields: [toCityId], references: [id], onDelete: Restrict)
+  departureSlot TaxiDepartureSlot? @relation(fields: [departureSlotId], references: [id], onDelete: SetNull)
+  car           TaxiCar?           @relation(fields: [carId], references: [id], onDelete: SetNull)
+
+  fromCityId      String?
+  toCityId        String?
+  departureSlotId String?
+  carId           String?
+
+  @@index([userId, status])
+  @@index([status, carId])
+  @@map("taxi_orders")
 }

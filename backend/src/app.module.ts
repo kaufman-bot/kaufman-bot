@@ -9,6 +9,9 @@ import { ButtonPresetsController } from './controllers/button-presets.controller
 import { ChatController } from './controllers/chat.controller.js';
 import { HealthController } from './controllers/health.controller.js';
 import { MockBotController } from './controllers/mock-bot.controller.js';
+import { TaxiCatalogController } from './controllers/taxi-catalog.controller.js';
+import { TaxiOrdersController } from './controllers/taxi-orders.controller.js';
+import { TaxiPriceMatrixController } from './controllers/taxi-price-matrix.controller.js';
 import { TelegramBotsController } from './controllers/telegram-bots.controller.js';
 import { TelegramLaunchController } from './controllers/telegram-launch.controller.js';
 import { TelegramWebhookController } from './controllers/telegram-webhook.controller.js';
@@ -17,6 +20,7 @@ import { BOT_PLUGINS } from './plugins/bot-plugin.interface.js';
 import { BotPluginsService } from './plugins/bot-plugins.service.js';
 import { PingPongPlugin } from './plugins/ping-pong.plugin.js';
 import { SettingsPlugin } from './plugins/settings.plugin.js';
+import { TaxiPlugin } from './plugins/taxi.plugin.js';
 import { TimePlugin } from './plugins/time.plugin.js';
 import { PrismaModule } from './prisma/index.js';
 import { SeedModule } from './seed/seed.module.js';
@@ -27,6 +31,10 @@ import { ChatEventsService } from './services/chat-events.service.js';
 import { ChatService } from './services/chat.service.js';
 import { MessageChannelService } from './services/message-channel.service.js';
 import { MockBotService } from './services/mock-bot.service.js';
+import { TaxiCarAssignmentService } from './services/taxi-car-assignment.service.js';
+import { TaxiCatalogService } from './services/taxi-catalog.service.js';
+import { TaxiOrdersService } from './services/taxi-orders.service.js';
+import { TaxiPriceMatrixService } from './services/taxi-price-matrix.service.js';
 import { TelegramBindingService } from './services/telegram-binding.service.js';
 import { TelegramBotsService } from './services/telegram-bots.service.js';
 import { TelegramBridgeService } from './services/telegram-bridge.service.js';
@@ -77,6 +85,9 @@ const isProd = process.env.NODE_ENV === 'production';
     TelegramBotsController,
     TelegramLaunchController,
     TelegramWebhookController,
+    TaxiCatalogController,
+    TaxiOrdersController,
+    TaxiPriceMatrixController,
   ],
   providers: [
     ApiKeysService,
@@ -91,6 +102,10 @@ const isProd = process.env.NODE_ENV === 'production';
     TelegramBindingService,
     TelegramBridgeService,
     TelegramWebhookService,
+    TaxiCarAssignmentService,
+    TaxiCatalogService,
+    TaxiOrdersService,
+    TaxiPriceMatrixService,
     // Bot plugins: each plugin is instantiated as its own provider and then
     // aggregated once under the shared BOT_PLUGINS token. Nest does not merge
     // several providers of one token into an array (the last one would win),
@@ -102,14 +117,16 @@ const isProd = process.env.NODE_ENV === 'production';
     PingPongPlugin,
     TimePlugin,
     SettingsPlugin,
+    TaxiPlugin,
     {
       provide: BOT_PLUGINS,
       useFactory: (
         pingPong: PingPongPlugin,
         time: TimePlugin,
         settings: SettingsPlugin,
-      ) => [pingPong, time, settings],
-      inject: [PingPongPlugin, TimePlugin, SettingsPlugin],
+        taxi: TaxiPlugin,
+      ) => [pingPong, time, settings, taxi],
+      inject: [PingPongPlugin, TimePlugin, SettingsPlugin, TaxiPlugin],
     },
   ],
 })

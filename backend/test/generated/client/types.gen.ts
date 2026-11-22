@@ -739,6 +739,519 @@ export type TelegramLaunchDto = {
     token: string;
 };
 
+export type TaxiCityDto = {
+    /**
+     * Unique city name
+     */
+    name: string;
+    /**
+     * Km marker along the route from the first point
+     */
+    distanceKm: number;
+    /**
+     * Inactive cities are hidden from the wizard
+     */
+    isActive: boolean;
+    /**
+     * Manual order within the admin list
+     */
+    sortOrder: number;
+    /**
+     * cuid of the city
+     */
+    id: string;
+};
+
+export type TaxiCityListDto = {
+    cities: Array<TaxiCityDto>;
+};
+
+export type CreateTaxiCityRequestDto = {
+    /**
+     * Unique city name
+     */
+    name: string;
+    /**
+     * Km marker from the first point
+     */
+    distanceKm: number;
+    /**
+     * Inactive cities are hidden from the wizard
+     */
+    isActive?: boolean;
+    /**
+     * Manual order within the admin list
+     */
+    sortOrder?: number;
+};
+
+export type UpdateTaxiCityRequestDto = {
+    /**
+     * Unique city name
+     */
+    name?: string;
+    /**
+     * Km marker from the first point
+     */
+    distanceKm?: number;
+    /**
+     * Inactive cities are hidden from the wizard
+     */
+    isActive?: boolean;
+    /**
+     * Manual order within the admin list
+     */
+    sortOrder?: number;
+};
+
+export type TaxiExtraServiceDto = {
+    /**
+     * Unique service name
+     */
+    name: string;
+    /**
+     * Surcharge added to the base price (rubles)
+     */
+    surcharge: number;
+    /**
+     * Requires car equipment; drives the auto-assignment matching
+     */
+    isCarFeature: boolean;
+    /**
+     * Inactive services are hidden from the wizard
+     */
+    isActive: boolean;
+    /**
+     * Manual order within the wizard step
+     */
+    sortOrder: number;
+    /**
+     * cuid of the service
+     */
+    id: string;
+};
+
+export type TaxiExtraServiceListDto = {
+    services: Array<TaxiExtraServiceDto>;
+};
+
+export type CreateTaxiExtraServiceRequestDto = {
+    /**
+     * Unique service name
+     */
+    name: string;
+    /**
+     * Surcharge added to the base price (rubles)
+     */
+    surcharge: number;
+    /**
+     * Requires car equipment (car-feature service)
+     */
+    isCarFeature?: boolean;
+    isActive?: boolean;
+    sortOrder?: number;
+};
+
+export type UpdateTaxiExtraServiceRequestDto = {
+    /**
+     * Unique service name
+     */
+    name?: string;
+    /**
+     * Surcharge added to the base price (rubles)
+     */
+    surcharge?: number;
+    /**
+     * Requires car equipment (car-feature service)
+     */
+    isCarFeature?: boolean;
+    isActive?: boolean;
+    sortOrder?: number;
+};
+
+export type TaxiDepartureSlotDto = {
+    /**
+     * Departure time, `HH:MM`
+     */
+    time: string;
+    /**
+     * Inactive slots are hidden from the wizard
+     */
+    isActive: boolean;
+    /**
+     * Manual order; ties break by time
+     */
+    sortOrder: number;
+    /**
+     * cuid of the slot
+     */
+    id: string;
+};
+
+export type TaxiDepartureSlotListDto = {
+    slots: Array<TaxiDepartureSlotDto>;
+};
+
+export type CreateTaxiDepartureSlotRequestDto = {
+    /**
+     * Departure time, `HH:MM`
+     */
+    time: string;
+    isActive?: boolean;
+    sortOrder?: number;
+};
+
+export type UpdateTaxiDepartureSlotRequestDto = {
+    /**
+     * Departure time, `HH:MM`
+     */
+    time?: string;
+    isActive?: boolean;
+    sortOrder?: number;
+};
+
+export type TaxiPassengerOptionDto = {
+    /**
+     * Allowed passenger count
+     */
+    count: number;
+    /**
+     * Inactive options are hidden from the wizard
+     */
+    isActive: boolean;
+    /**
+     * Manual order within the wizard step
+     */
+    sortOrder: number;
+    /**
+     * cuid of the option
+     */
+    id: string;
+};
+
+export type TaxiPassengerOptionListDto = {
+    options: Array<TaxiPassengerOptionDto>;
+};
+
+export type CreateTaxiPassengerOptionRequestDto = {
+    /**
+     * Allowed passenger count (unique)
+     */
+    count: number;
+    isActive?: boolean;
+    sortOrder?: number;
+};
+
+export type UpdateTaxiPassengerOptionRequestDto = {
+    /**
+     * Allowed passenger count (unique)
+     */
+    count?: number;
+    isActive?: boolean;
+    sortOrder?: number;
+};
+
+export type TaxiCarDto = {
+    /**
+     * Car model
+     */
+    model: string;
+    /**
+     * Unique state license plate
+     */
+    plate: string;
+    /**
+     * Body color (optional)
+     */
+    color?: string | null;
+    /**
+     * Seat capacity used by the auto-assignment
+     */
+    seats: number;
+    /**
+     * Car-feature services this car provides
+     */
+    features: Array<TaxiExtraServiceDto>;
+    /**
+     * Inactive cars are skipped by the assignment
+     */
+    isActive: boolean;
+    /**
+     * Id of the owning driver
+     */
+    driverId: string;
+    /**
+     * cuid of the car
+     */
+    id: string;
+};
+
+export type TaxiDriverDto = {
+    /**
+     * Driver full name
+     */
+    fullName: string;
+    /**
+     * Contact phone
+     */
+    phone: string;
+    /**
+     * Inactive drivers are hidden from orders
+     */
+    isActive: boolean;
+    cars: Array<TaxiCarDto>;
+    /**
+     * cuid of the driver
+     */
+    id: string;
+};
+
+export type TaxiDriverListDto = {
+    drivers: Array<TaxiDriverDto>;
+};
+
+export type CreateTaxiDriverRequestDto = {
+    /**
+     * Driver full name
+     */
+    fullName: string;
+    /**
+     * Contact phone
+     */
+    phone: string;
+    isActive?: boolean;
+};
+
+export type UpdateTaxiDriverRequestDto = {
+    /**
+     * Driver full name
+     */
+    fullName?: string;
+    /**
+     * Contact phone
+     */
+    phone?: string;
+    isActive?: boolean;
+};
+
+export type TaxiCarListDto = {
+    cars: Array<TaxiCarDto>;
+};
+
+export type CreateTaxiCarRequestDto = {
+    /**
+     * Car model
+     */
+    model: string;
+    /**
+     * Unique state license plate
+     */
+    plate: string;
+    /**
+     * Seat capacity (positive integer) used by the auto-assignment
+     */
+    seats: number;
+    /**
+     * Body color (optional)
+     */
+    color?: string;
+    /**
+     * Ids of car-feature services the car provides
+     */
+    featureServiceIds?: Array<string>;
+    isActive?: boolean;
+};
+
+export type UpdateTaxiCarRequestDto = {
+    /**
+     * Car model
+     */
+    model?: string;
+    /**
+     * Unique state license plate
+     */
+    plate?: string;
+    /**
+     * Seat capacity (positive integer)
+     */
+    seats?: number;
+    /**
+     * Body color (optional)
+     */
+    color?: string | null;
+    /**
+     * Replaces the whole car-feature list
+     */
+    featureServiceIds?: Array<string>;
+    isActive?: boolean;
+};
+
+export type TaxiOrderServiceSnapshotDto = {
+    /**
+     * Service id at confirmation time
+     */
+    id: string;
+    /**
+     * Service name at confirmation time
+     */
+    name: string;
+    /**
+     * Surcharge in rubles at confirmation time
+     */
+    surcharge: number;
+};
+
+export type TaxiOrderCarSnapshotDto = {
+    /**
+     * Driver full name at confirmation time
+     */
+    driverName: string;
+    /**
+     * Car model at confirmation time
+     */
+    model: string;
+    /**
+     * License plate at confirmation time
+     */
+    plate: string;
+    /**
+     * Body color at confirmation time (optional)
+     */
+    color?: string | null;
+};
+
+export type TaxiOrderDto = {
+    /**
+     * cuid of the order
+     */
+    id: string;
+    /**
+     * Order status (never DRAFT here)
+     */
+    status: 'NEW' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED';
+    /**
+     * Passenger account
+     */
+    passengerEmail: string;
+    /**
+     * Id of the passenger account
+     */
+    passengerId: string;
+    /**
+     * Departure city name at confirmation time
+     */
+    fromCityName?: string | null;
+    /**
+     * Destination city name at confirmation time
+     */
+    toCityName?: string | null;
+    /**
+     * Departure time label at confirmation time
+     */
+    departureSlotLabel?: string | null;
+    /**
+     * Passenger count at confirmation time
+     */
+    passengerCount?: number | null;
+    /**
+     * Selected services with surcharges, frozen at confirmation
+     */
+    services: Array<TaxiOrderServiceSnapshotDto>;
+    /**
+     * Base price from the matrix at confirmation time (rubles)
+     */
+    priceBase?: number | null;
+    /**
+     * Final price (base + surcharges) at confirmation time (rubles)
+     */
+    priceTotal?: number | null;
+    /**
+     * Assigned car and driver, null until confirmed
+     */
+    carSnapshot?: TaxiOrderCarSnapshotDto | null;
+    /**
+     * Submission/creation time
+     */
+    createdAt: string;
+    /**
+     * Confirmation time (null for never-confirmed drafts)
+     */
+    confirmedAt?: string | null;
+};
+
+export type TaxiOrderListDto = {
+    orders: Array<TaxiOrderDto>;
+};
+
+export type UpdateTaxiOrderStatusRequestDto = {
+    /**
+     * New status; DRAFT is not accepted (wizard-internal), unknown values are 400
+     */
+    status: 'NEW' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED';
+};
+
+export type TaxiPriceMatrixCityDto = {
+    /**
+     * cuid of the city
+     */
+    id: string;
+    /**
+     * City name
+     */
+    name: string;
+    /**
+     * Km marker along the route from the first point
+     */
+    distanceKm: number;
+};
+
+export type TaxiPricePairDto = {
+    /**
+     * First city id (normalized: id < toCityId)
+     */
+    fromCityId: string;
+    /**
+     * Second city id
+     */
+    toCityId: string;
+    /**
+     * Price for the trip between the two cities (rubles)
+     */
+    price: number;
+};
+
+export type TaxiPriceMatrixDto = {
+    /**
+     * Cities ordered by km marker
+     */
+    cities: Array<TaxiPriceMatrixCityDto>;
+    /**
+     * Stored pair prices, one row per unordered pair
+     */
+    prices: Array<TaxiPricePairDto>;
+};
+
+export type SetPairPriceRequestDto = {
+    /**
+     * Price for the pair in rubles (non-negative integer)
+     */
+    price: number;
+};
+
+export type AutoCalcRequestDto = {
+    /**
+     * Price of the trip between the extreme cities (min/max km marker); every pair price is derived proportionally to its km distance
+     */
+    price: number;
+};
+
+export type AutoCalcResultDto = {
+    /**
+     * Number of pair prices created or overwritten
+     */
+    pairs: number;
+};
+
 export type TimeControllerTimeV1Data = {
     body?: never;
     path?: never;
@@ -1987,3 +2500,1226 @@ export type TelegramWebhookControllerReceiveData = {
 export type TelegramWebhookControllerReceiveResponses = {
     201: unknown;
 };
+
+export type TaxiCatalogControllerListCitiesV1Data = {
+    body?: never;
+    headers?: {
+        /**
+         * API key of an ADMIN account (?apiKey= also works).
+         */
+        'x-api-key'?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/taxi/cities';
+};
+
+export type TaxiCatalogControllerListCitiesV1Errors = {
+    /**
+     * No valid API key
+     */
+    401: ApiErrorDto;
+    /**
+     * Authenticated account is not an admin
+     */
+    403: ApiErrorDto;
+};
+
+export type TaxiCatalogControllerListCitiesV1Error = TaxiCatalogControllerListCitiesV1Errors[keyof TaxiCatalogControllerListCitiesV1Errors];
+
+export type TaxiCatalogControllerListCitiesV1Responses = {
+    200: TaxiCityListDto;
+};
+
+export type TaxiCatalogControllerListCitiesV1Response = TaxiCatalogControllerListCitiesV1Responses[keyof TaxiCatalogControllerListCitiesV1Responses];
+
+export type TaxiCatalogControllerCreateCityV1Data = {
+    body: CreateTaxiCityRequestDto;
+    headers?: {
+        /**
+         * API key of an ADMIN account (?apiKey= also works).
+         */
+        'x-api-key'?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/taxi/cities';
+};
+
+export type TaxiCatalogControllerCreateCityV1Errors = {
+    /**
+     * Empty name or negative/non-integer distanceKm
+     */
+    400: ApiErrorDto;
+    /**
+     * No valid API key
+     */
+    401: ApiErrorDto;
+    /**
+     * Authenticated account is not an admin
+     */
+    403: ApiErrorDto;
+    /**
+     * City name already exists
+     */
+    409: ApiErrorDto;
+};
+
+export type TaxiCatalogControllerCreateCityV1Error = TaxiCatalogControllerCreateCityV1Errors[keyof TaxiCatalogControllerCreateCityV1Errors];
+
+export type TaxiCatalogControllerCreateCityV1Responses = {
+    201: TaxiCityDto;
+};
+
+export type TaxiCatalogControllerCreateCityV1Response = TaxiCatalogControllerCreateCityV1Responses[keyof TaxiCatalogControllerCreateCityV1Responses];
+
+export type TaxiCatalogControllerRemoveCityV1Data = {
+    body?: never;
+    headers?: {
+        /**
+         * API key of an ADMIN account (?apiKey= also works).
+         */
+        'x-api-key'?: string;
+    };
+    path: {
+        /**
+         * City id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/v1/taxi/cities/{id}';
+};
+
+export type TaxiCatalogControllerRemoveCityV1Errors = {
+    /**
+     * City is referenced by submitted taxi orders
+     */
+    400: ApiErrorDto;
+    /**
+     * No valid API key
+     */
+    401: ApiErrorDto;
+    /**
+     * Authenticated account is not an admin
+     */
+    403: ApiErrorDto;
+    /**
+     * City not found
+     */
+    404: ApiErrorDto;
+};
+
+export type TaxiCatalogControllerRemoveCityV1Error = TaxiCatalogControllerRemoveCityV1Errors[keyof TaxiCatalogControllerRemoveCityV1Errors];
+
+export type TaxiCatalogControllerRemoveCityV1Responses = {
+    /**
+     * City deleted
+     */
+    204: void;
+};
+
+export type TaxiCatalogControllerRemoveCityV1Response = TaxiCatalogControllerRemoveCityV1Responses[keyof TaxiCatalogControllerRemoveCityV1Responses];
+
+export type TaxiCatalogControllerUpdateCityV1Data = {
+    body: UpdateTaxiCityRequestDto;
+    headers?: {
+        /**
+         * API key of an ADMIN account (?apiKey= also works).
+         */
+        'x-api-key'?: string;
+    };
+    path: {
+        /**
+         * City id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/v1/taxi/cities/{id}';
+};
+
+export type TaxiCatalogControllerUpdateCityV1Errors = {
+    /**
+     * Invalid field values
+     */
+    400: ApiErrorDto;
+    /**
+     * No valid API key
+     */
+    401: ApiErrorDto;
+    /**
+     * Authenticated account is not an admin
+     */
+    403: ApiErrorDto;
+    /**
+     * City not found
+     */
+    404: ApiErrorDto;
+    /**
+     * City name already exists
+     */
+    409: ApiErrorDto;
+};
+
+export type TaxiCatalogControllerUpdateCityV1Error = TaxiCatalogControllerUpdateCityV1Errors[keyof TaxiCatalogControllerUpdateCityV1Errors];
+
+export type TaxiCatalogControllerUpdateCityV1Responses = {
+    200: TaxiCityDto;
+};
+
+export type TaxiCatalogControllerUpdateCityV1Response = TaxiCatalogControllerUpdateCityV1Responses[keyof TaxiCatalogControllerUpdateCityV1Responses];
+
+export type TaxiCatalogControllerListServicesV1Data = {
+    body?: never;
+    headers?: {
+        /**
+         * API key of an ADMIN account (?apiKey= also works).
+         */
+        'x-api-key'?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/taxi/services';
+};
+
+export type TaxiCatalogControllerListServicesV1Errors = {
+    /**
+     * No valid API key
+     */
+    401: ApiErrorDto;
+    /**
+     * Authenticated account is not an admin
+     */
+    403: ApiErrorDto;
+};
+
+export type TaxiCatalogControllerListServicesV1Error = TaxiCatalogControllerListServicesV1Errors[keyof TaxiCatalogControllerListServicesV1Errors];
+
+export type TaxiCatalogControllerListServicesV1Responses = {
+    200: TaxiExtraServiceListDto;
+};
+
+export type TaxiCatalogControllerListServicesV1Response = TaxiCatalogControllerListServicesV1Responses[keyof TaxiCatalogControllerListServicesV1Responses];
+
+export type TaxiCatalogControllerCreateServiceV1Data = {
+    body: CreateTaxiExtraServiceRequestDto;
+    headers?: {
+        /**
+         * API key of an ADMIN account (?apiKey= also works).
+         */
+        'x-api-key'?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/taxi/services';
+};
+
+export type TaxiCatalogControllerCreateServiceV1Errors = {
+    /**
+     * Empty name or negative/non-integer surcharge
+     */
+    400: ApiErrorDto;
+    /**
+     * No valid API key
+     */
+    401: ApiErrorDto;
+    /**
+     * Authenticated account is not an admin
+     */
+    403: ApiErrorDto;
+    /**
+     * Service name already exists
+     */
+    409: ApiErrorDto;
+};
+
+export type TaxiCatalogControllerCreateServiceV1Error = TaxiCatalogControllerCreateServiceV1Errors[keyof TaxiCatalogControllerCreateServiceV1Errors];
+
+export type TaxiCatalogControllerCreateServiceV1Responses = {
+    201: TaxiExtraServiceDto;
+};
+
+export type TaxiCatalogControllerCreateServiceV1Response = TaxiCatalogControllerCreateServiceV1Responses[keyof TaxiCatalogControllerCreateServiceV1Responses];
+
+export type TaxiCatalogControllerRemoveServiceV1Data = {
+    body?: never;
+    headers?: {
+        /**
+         * API key of an ADMIN account (?apiKey= also works).
+         */
+        'x-api-key'?: string;
+    };
+    path: {
+        /**
+         * Service id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/v1/taxi/services/{id}';
+};
+
+export type TaxiCatalogControllerRemoveServiceV1Errors = {
+    /**
+     * No valid API key
+     */
+    401: ApiErrorDto;
+    /**
+     * Authenticated account is not an admin
+     */
+    403: ApiErrorDto;
+    /**
+     * Service not found
+     */
+    404: ApiErrorDto;
+};
+
+export type TaxiCatalogControllerRemoveServiceV1Error = TaxiCatalogControllerRemoveServiceV1Errors[keyof TaxiCatalogControllerRemoveServiceV1Errors];
+
+export type TaxiCatalogControllerRemoveServiceV1Responses = {
+    /**
+     * Service deleted
+     */
+    204: void;
+};
+
+export type TaxiCatalogControllerRemoveServiceV1Response = TaxiCatalogControllerRemoveServiceV1Responses[keyof TaxiCatalogControllerRemoveServiceV1Responses];
+
+export type TaxiCatalogControllerUpdateServiceV1Data = {
+    body: UpdateTaxiExtraServiceRequestDto;
+    headers?: {
+        /**
+         * API key of an ADMIN account (?apiKey= also works).
+         */
+        'x-api-key'?: string;
+    };
+    path: {
+        /**
+         * Service id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/v1/taxi/services/{id}';
+};
+
+export type TaxiCatalogControllerUpdateServiceV1Errors = {
+    /**
+     * Invalid field values
+     */
+    400: ApiErrorDto;
+    /**
+     * No valid API key
+     */
+    401: ApiErrorDto;
+    /**
+     * Authenticated account is not an admin
+     */
+    403: ApiErrorDto;
+    /**
+     * Service not found
+     */
+    404: ApiErrorDto;
+    /**
+     * Service name already exists
+     */
+    409: ApiErrorDto;
+};
+
+export type TaxiCatalogControllerUpdateServiceV1Error = TaxiCatalogControllerUpdateServiceV1Errors[keyof TaxiCatalogControllerUpdateServiceV1Errors];
+
+export type TaxiCatalogControllerUpdateServiceV1Responses = {
+    200: TaxiExtraServiceDto;
+};
+
+export type TaxiCatalogControllerUpdateServiceV1Response = TaxiCatalogControllerUpdateServiceV1Responses[keyof TaxiCatalogControllerUpdateServiceV1Responses];
+
+export type TaxiCatalogControllerListDepartureSlotsV1Data = {
+    body?: never;
+    headers?: {
+        /**
+         * API key of an ADMIN account (?apiKey= also works).
+         */
+        'x-api-key'?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/taxi/departure-slots';
+};
+
+export type TaxiCatalogControllerListDepartureSlotsV1Errors = {
+    /**
+     * No valid API key
+     */
+    401: ApiErrorDto;
+    /**
+     * Authenticated account is not an admin
+     */
+    403: ApiErrorDto;
+};
+
+export type TaxiCatalogControllerListDepartureSlotsV1Error = TaxiCatalogControllerListDepartureSlotsV1Errors[keyof TaxiCatalogControllerListDepartureSlotsV1Errors];
+
+export type TaxiCatalogControllerListDepartureSlotsV1Responses = {
+    200: TaxiDepartureSlotListDto;
+};
+
+export type TaxiCatalogControllerListDepartureSlotsV1Response = TaxiCatalogControllerListDepartureSlotsV1Responses[keyof TaxiCatalogControllerListDepartureSlotsV1Responses];
+
+export type TaxiCatalogControllerCreateDepartureSlotV1Data = {
+    body: CreateTaxiDepartureSlotRequestDto;
+    headers?: {
+        /**
+         * API key of an ADMIN account (?apiKey= also works).
+         */
+        'x-api-key'?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/taxi/departure-slots';
+};
+
+export type TaxiCatalogControllerCreateDepartureSlotV1Errors = {
+    /**
+     * time must be HH:MM (00:00..23:59)
+     */
+    400: ApiErrorDto;
+    /**
+     * No valid API key
+     */
+    401: ApiErrorDto;
+    /**
+     * Authenticated account is not an admin
+     */
+    403: ApiErrorDto;
+    /**
+     * Departure time already exists
+     */
+    409: ApiErrorDto;
+};
+
+export type TaxiCatalogControllerCreateDepartureSlotV1Error = TaxiCatalogControllerCreateDepartureSlotV1Errors[keyof TaxiCatalogControllerCreateDepartureSlotV1Errors];
+
+export type TaxiCatalogControllerCreateDepartureSlotV1Responses = {
+    201: TaxiDepartureSlotDto;
+};
+
+export type TaxiCatalogControllerCreateDepartureSlotV1Response = TaxiCatalogControllerCreateDepartureSlotV1Responses[keyof TaxiCatalogControllerCreateDepartureSlotV1Responses];
+
+export type TaxiCatalogControllerRemoveDepartureSlotV1Data = {
+    body?: never;
+    headers?: {
+        /**
+         * API key of an ADMIN account (?apiKey= also works).
+         */
+        'x-api-key'?: string;
+    };
+    path: {
+        /**
+         * Slot id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/v1/taxi/departure-slots/{id}';
+};
+
+export type TaxiCatalogControllerRemoveDepartureSlotV1Errors = {
+    /**
+     * No valid API key
+     */
+    401: ApiErrorDto;
+    /**
+     * Authenticated account is not an admin
+     */
+    403: ApiErrorDto;
+    /**
+     * Slot not found
+     */
+    404: ApiErrorDto;
+};
+
+export type TaxiCatalogControllerRemoveDepartureSlotV1Error = TaxiCatalogControllerRemoveDepartureSlotV1Errors[keyof TaxiCatalogControllerRemoveDepartureSlotV1Errors];
+
+export type TaxiCatalogControllerRemoveDepartureSlotV1Responses = {
+    /**
+     * Slot deleted
+     */
+    204: void;
+};
+
+export type TaxiCatalogControllerRemoveDepartureSlotV1Response = TaxiCatalogControllerRemoveDepartureSlotV1Responses[keyof TaxiCatalogControllerRemoveDepartureSlotV1Responses];
+
+export type TaxiCatalogControllerUpdateDepartureSlotV1Data = {
+    body: UpdateTaxiDepartureSlotRequestDto;
+    headers?: {
+        /**
+         * API key of an ADMIN account (?apiKey= also works).
+         */
+        'x-api-key'?: string;
+    };
+    path: {
+        /**
+         * Slot id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/v1/taxi/departure-slots/{id}';
+};
+
+export type TaxiCatalogControllerUpdateDepartureSlotV1Errors = {
+    /**
+     * Invalid time format
+     */
+    400: ApiErrorDto;
+    /**
+     * No valid API key
+     */
+    401: ApiErrorDto;
+    /**
+     * Authenticated account is not an admin
+     */
+    403: ApiErrorDto;
+    /**
+     * Slot not found
+     */
+    404: ApiErrorDto;
+    /**
+     * Departure time already exists
+     */
+    409: ApiErrorDto;
+};
+
+export type TaxiCatalogControllerUpdateDepartureSlotV1Error = TaxiCatalogControllerUpdateDepartureSlotV1Errors[keyof TaxiCatalogControllerUpdateDepartureSlotV1Errors];
+
+export type TaxiCatalogControllerUpdateDepartureSlotV1Responses = {
+    200: TaxiDepartureSlotDto;
+};
+
+export type TaxiCatalogControllerUpdateDepartureSlotV1Response = TaxiCatalogControllerUpdateDepartureSlotV1Responses[keyof TaxiCatalogControllerUpdateDepartureSlotV1Responses];
+
+export type TaxiCatalogControllerListPassengerOptionsV1Data = {
+    body?: never;
+    headers?: {
+        /**
+         * API key of an ADMIN account (?apiKey= also works).
+         */
+        'x-api-key'?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/taxi/passenger-options';
+};
+
+export type TaxiCatalogControllerListPassengerOptionsV1Errors = {
+    /**
+     * No valid API key
+     */
+    401: ApiErrorDto;
+    /**
+     * Authenticated account is not an admin
+     */
+    403: ApiErrorDto;
+};
+
+export type TaxiCatalogControllerListPassengerOptionsV1Error = TaxiCatalogControllerListPassengerOptionsV1Errors[keyof TaxiCatalogControllerListPassengerOptionsV1Errors];
+
+export type TaxiCatalogControllerListPassengerOptionsV1Responses = {
+    200: TaxiPassengerOptionListDto;
+};
+
+export type TaxiCatalogControllerListPassengerOptionsV1Response = TaxiCatalogControllerListPassengerOptionsV1Responses[keyof TaxiCatalogControllerListPassengerOptionsV1Responses];
+
+export type TaxiCatalogControllerCreatePassengerOptionV1Data = {
+    body: CreateTaxiPassengerOptionRequestDto;
+    headers?: {
+        /**
+         * API key of an ADMIN account (?apiKey= also works).
+         */
+        'x-api-key'?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/taxi/passenger-options';
+};
+
+export type TaxiCatalogControllerCreatePassengerOptionV1Errors = {
+    /**
+     * count must be a positive integer
+     */
+    400: ApiErrorDto;
+    /**
+     * No valid API key
+     */
+    401: ApiErrorDto;
+    /**
+     * Authenticated account is not an admin
+     */
+    403: ApiErrorDto;
+    /**
+     * Passenger option already exists
+     */
+    409: ApiErrorDto;
+};
+
+export type TaxiCatalogControllerCreatePassengerOptionV1Error = TaxiCatalogControllerCreatePassengerOptionV1Errors[keyof TaxiCatalogControllerCreatePassengerOptionV1Errors];
+
+export type TaxiCatalogControllerCreatePassengerOptionV1Responses = {
+    201: TaxiPassengerOptionDto;
+};
+
+export type TaxiCatalogControllerCreatePassengerOptionV1Response = TaxiCatalogControllerCreatePassengerOptionV1Responses[keyof TaxiCatalogControllerCreatePassengerOptionV1Responses];
+
+export type TaxiCatalogControllerRemovePassengerOptionV1Data = {
+    body?: never;
+    headers?: {
+        /**
+         * API key of an ADMIN account (?apiKey= also works).
+         */
+        'x-api-key'?: string;
+    };
+    path: {
+        /**
+         * Option id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/v1/taxi/passenger-options/{id}';
+};
+
+export type TaxiCatalogControllerRemovePassengerOptionV1Errors = {
+    /**
+     * No valid API key
+     */
+    401: ApiErrorDto;
+    /**
+     * Authenticated account is not an admin
+     */
+    403: ApiErrorDto;
+    /**
+     * Option not found
+     */
+    404: ApiErrorDto;
+};
+
+export type TaxiCatalogControllerRemovePassengerOptionV1Error = TaxiCatalogControllerRemovePassengerOptionV1Errors[keyof TaxiCatalogControllerRemovePassengerOptionV1Errors];
+
+export type TaxiCatalogControllerRemovePassengerOptionV1Responses = {
+    /**
+     * Option deleted
+     */
+    204: void;
+};
+
+export type TaxiCatalogControllerRemovePassengerOptionV1Response = TaxiCatalogControllerRemovePassengerOptionV1Responses[keyof TaxiCatalogControllerRemovePassengerOptionV1Responses];
+
+export type TaxiCatalogControllerUpdatePassengerOptionV1Data = {
+    body: UpdateTaxiPassengerOptionRequestDto;
+    headers?: {
+        /**
+         * API key of an ADMIN account (?apiKey= also works).
+         */
+        'x-api-key'?: string;
+    };
+    path: {
+        /**
+         * Option id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/v1/taxi/passenger-options/{id}';
+};
+
+export type TaxiCatalogControllerUpdatePassengerOptionV1Errors = {
+    /**
+     * Invalid count
+     */
+    400: ApiErrorDto;
+    /**
+     * No valid API key
+     */
+    401: ApiErrorDto;
+    /**
+     * Authenticated account is not an admin
+     */
+    403: ApiErrorDto;
+    /**
+     * Option not found
+     */
+    404: ApiErrorDto;
+    /**
+     * Passenger option already exists
+     */
+    409: ApiErrorDto;
+};
+
+export type TaxiCatalogControllerUpdatePassengerOptionV1Error = TaxiCatalogControllerUpdatePassengerOptionV1Errors[keyof TaxiCatalogControllerUpdatePassengerOptionV1Errors];
+
+export type TaxiCatalogControllerUpdatePassengerOptionV1Responses = {
+    200: TaxiPassengerOptionDto;
+};
+
+export type TaxiCatalogControllerUpdatePassengerOptionV1Response = TaxiCatalogControllerUpdatePassengerOptionV1Responses[keyof TaxiCatalogControllerUpdatePassengerOptionV1Responses];
+
+export type TaxiCatalogControllerListDriversV1Data = {
+    body?: never;
+    headers?: {
+        /**
+         * API key of an ADMIN account (?apiKey= also works).
+         */
+        'x-api-key'?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/taxi/drivers';
+};
+
+export type TaxiCatalogControllerListDriversV1Errors = {
+    /**
+     * No valid API key
+     */
+    401: ApiErrorDto;
+    /**
+     * Authenticated account is not an admin
+     */
+    403: ApiErrorDto;
+};
+
+export type TaxiCatalogControllerListDriversV1Error = TaxiCatalogControllerListDriversV1Errors[keyof TaxiCatalogControllerListDriversV1Errors];
+
+export type TaxiCatalogControllerListDriversV1Responses = {
+    200: TaxiDriverListDto;
+};
+
+export type TaxiCatalogControllerListDriversV1Response = TaxiCatalogControllerListDriversV1Responses[keyof TaxiCatalogControllerListDriversV1Responses];
+
+export type TaxiCatalogControllerCreateDriverV1Data = {
+    body: CreateTaxiDriverRequestDto;
+    headers?: {
+        /**
+         * API key of an ADMIN account (?apiKey= also works).
+         */
+        'x-api-key'?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/taxi/drivers';
+};
+
+export type TaxiCatalogControllerCreateDriverV1Errors = {
+    /**
+     * Empty fullName or phone
+     */
+    400: ApiErrorDto;
+    /**
+     * No valid API key
+     */
+    401: ApiErrorDto;
+    /**
+     * Authenticated account is not an admin
+     */
+    403: ApiErrorDto;
+};
+
+export type TaxiCatalogControllerCreateDriverV1Error = TaxiCatalogControllerCreateDriverV1Errors[keyof TaxiCatalogControllerCreateDriverV1Errors];
+
+export type TaxiCatalogControllerCreateDriverV1Responses = {
+    201: TaxiDriverDto;
+};
+
+export type TaxiCatalogControllerCreateDriverV1Response = TaxiCatalogControllerCreateDriverV1Responses[keyof TaxiCatalogControllerCreateDriverV1Responses];
+
+export type TaxiCatalogControllerRemoveDriverV1Data = {
+    body?: never;
+    headers?: {
+        /**
+         * API key of an ADMIN account (?apiKey= also works).
+         */
+        'x-api-key'?: string;
+    };
+    path: {
+        /**
+         * Driver id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/v1/taxi/drivers/{id}';
+};
+
+export type TaxiCatalogControllerRemoveDriverV1Errors = {
+    /**
+     * A car of this driver is busy with an active order
+     */
+    400: ApiErrorDto;
+    /**
+     * No valid API key
+     */
+    401: ApiErrorDto;
+    /**
+     * Authenticated account is not an admin
+     */
+    403: ApiErrorDto;
+    /**
+     * Driver not found
+     */
+    404: ApiErrorDto;
+};
+
+export type TaxiCatalogControllerRemoveDriverV1Error = TaxiCatalogControllerRemoveDriverV1Errors[keyof TaxiCatalogControllerRemoveDriverV1Errors];
+
+export type TaxiCatalogControllerRemoveDriverV1Responses = {
+    /**
+     * Driver and his cars deleted
+     */
+    204: void;
+};
+
+export type TaxiCatalogControllerRemoveDriverV1Response = TaxiCatalogControllerRemoveDriverV1Responses[keyof TaxiCatalogControllerRemoveDriverV1Responses];
+
+export type TaxiCatalogControllerUpdateDriverV1Data = {
+    body: UpdateTaxiDriverRequestDto;
+    headers?: {
+        /**
+         * API key of an ADMIN account (?apiKey= also works).
+         */
+        'x-api-key'?: string;
+    };
+    path: {
+        /**
+         * Driver id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/v1/taxi/drivers/{id}';
+};
+
+export type TaxiCatalogControllerUpdateDriverV1Errors = {
+    /**
+     * Invalid field values
+     */
+    400: ApiErrorDto;
+    /**
+     * No valid API key
+     */
+    401: ApiErrorDto;
+    /**
+     * Authenticated account is not an admin
+     */
+    403: ApiErrorDto;
+    /**
+     * Driver not found
+     */
+    404: ApiErrorDto;
+};
+
+export type TaxiCatalogControllerUpdateDriverV1Error = TaxiCatalogControllerUpdateDriverV1Errors[keyof TaxiCatalogControllerUpdateDriverV1Errors];
+
+export type TaxiCatalogControllerUpdateDriverV1Responses = {
+    200: TaxiDriverDto;
+};
+
+export type TaxiCatalogControllerUpdateDriverV1Response = TaxiCatalogControllerUpdateDriverV1Responses[keyof TaxiCatalogControllerUpdateDriverV1Responses];
+
+export type TaxiCatalogControllerListCarsV1Data = {
+    body?: never;
+    headers?: {
+        /**
+         * API key of an ADMIN account (?apiKey= also works).
+         */
+        'x-api-key'?: string;
+    };
+    path: {
+        /**
+         * Driver id
+         */
+        driverId: string;
+    };
+    query?: never;
+    url: '/api/v1/taxi/drivers/{driverId}/cars';
+};
+
+export type TaxiCatalogControllerListCarsV1Errors = {
+    /**
+     * No valid API key
+     */
+    401: ApiErrorDto;
+    /**
+     * Authenticated account is not an admin
+     */
+    403: ApiErrorDto;
+    /**
+     * Driver not found
+     */
+    404: ApiErrorDto;
+};
+
+export type TaxiCatalogControllerListCarsV1Error = TaxiCatalogControllerListCarsV1Errors[keyof TaxiCatalogControllerListCarsV1Errors];
+
+export type TaxiCatalogControllerListCarsV1Responses = {
+    200: TaxiCarListDto;
+};
+
+export type TaxiCatalogControllerListCarsV1Response = TaxiCatalogControllerListCarsV1Responses[keyof TaxiCatalogControllerListCarsV1Responses];
+
+export type TaxiCatalogControllerCreateCarV1Data = {
+    body: CreateTaxiCarRequestDto;
+    headers?: {
+        /**
+         * API key of an ADMIN account (?apiKey= also works).
+         */
+        'x-api-key'?: string;
+    };
+    path: {
+        /**
+         * Driver id
+         */
+        driverId: string;
+    };
+    query?: never;
+    url: '/api/v1/taxi/drivers/{driverId}/cars';
+};
+
+export type TaxiCatalogControllerCreateCarV1Errors = {
+    /**
+     * Non-positive seats, non-feature service or invalid fields
+     */
+    400: ApiErrorDto;
+    /**
+     * No valid API key
+     */
+    401: ApiErrorDto;
+    /**
+     * Authenticated account is not an admin
+     */
+    403: ApiErrorDto;
+    /**
+     * Driver or car-feature service not found
+     */
+    404: ApiErrorDto;
+    /**
+     * License plate already exists
+     */
+    409: ApiErrorDto;
+};
+
+export type TaxiCatalogControllerCreateCarV1Error = TaxiCatalogControllerCreateCarV1Errors[keyof TaxiCatalogControllerCreateCarV1Errors];
+
+export type TaxiCatalogControllerCreateCarV1Responses = {
+    201: TaxiCarDto;
+};
+
+export type TaxiCatalogControllerCreateCarV1Response = TaxiCatalogControllerCreateCarV1Responses[keyof TaxiCatalogControllerCreateCarV1Responses];
+
+export type TaxiCatalogControllerRemoveCarV1Data = {
+    body?: never;
+    headers?: {
+        /**
+         * API key of an ADMIN account (?apiKey= also works).
+         */
+        'x-api-key'?: string;
+    };
+    path: {
+        /**
+         * Driver id
+         */
+        driverId: string;
+        /**
+         * Car id
+         */
+        carId: string;
+    };
+    query?: never;
+    url: '/api/v1/taxi/drivers/{driverId}/cars/{carId}';
+};
+
+export type TaxiCatalogControllerRemoveCarV1Errors = {
+    /**
+     * Car is busy with an active taxi order
+     */
+    400: ApiErrorDto;
+    /**
+     * No valid API key
+     */
+    401: ApiErrorDto;
+    /**
+     * Authenticated account is not an admin
+     */
+    403: ApiErrorDto;
+    /**
+     * Driver or car not found
+     */
+    404: ApiErrorDto;
+};
+
+export type TaxiCatalogControllerRemoveCarV1Error = TaxiCatalogControllerRemoveCarV1Errors[keyof TaxiCatalogControllerRemoveCarV1Errors];
+
+export type TaxiCatalogControllerRemoveCarV1Responses = {
+    /**
+     * Car deleted
+     */
+    204: void;
+};
+
+export type TaxiCatalogControllerRemoveCarV1Response = TaxiCatalogControllerRemoveCarV1Responses[keyof TaxiCatalogControllerRemoveCarV1Responses];
+
+export type TaxiCatalogControllerUpdateCarV1Data = {
+    body: UpdateTaxiCarRequestDto;
+    headers?: {
+        /**
+         * API key of an ADMIN account (?apiKey= also works).
+         */
+        'x-api-key'?: string;
+    };
+    path: {
+        /**
+         * Driver id
+         */
+        driverId: string;
+        /**
+         * Car id
+         */
+        carId: string;
+    };
+    query?: never;
+    url: '/api/v1/taxi/drivers/{driverId}/cars/{carId}';
+};
+
+export type TaxiCatalogControllerUpdateCarV1Errors = {
+    /**
+     * Non-positive seats, non-feature service or invalid fields
+     */
+    400: ApiErrorDto;
+    /**
+     * No valid API key
+     */
+    401: ApiErrorDto;
+    /**
+     * Authenticated account is not an admin
+     */
+    403: ApiErrorDto;
+    /**
+     * Driver, car or car-feature service not found
+     */
+    404: ApiErrorDto;
+    /**
+     * License plate already exists
+     */
+    409: ApiErrorDto;
+};
+
+export type TaxiCatalogControllerUpdateCarV1Error = TaxiCatalogControllerUpdateCarV1Errors[keyof TaxiCatalogControllerUpdateCarV1Errors];
+
+export type TaxiCatalogControllerUpdateCarV1Responses = {
+    200: TaxiCarDto;
+};
+
+export type TaxiCatalogControllerUpdateCarV1Response = TaxiCatalogControllerUpdateCarV1Responses[keyof TaxiCatalogControllerUpdateCarV1Responses];
+
+export type TaxiOrdersControllerListV1Data = {
+    body?: never;
+    headers?: {
+        /**
+         * API key of an ADMIN account (?apiKey= also works).
+         */
+        'x-api-key'?: string;
+    };
+    path?: never;
+    query?: {
+        /**
+         * Explicit status filter; omitted → only NEW and CONFIRMED are returned
+         */
+        status?: 'NEW' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED';
+    };
+    url: '/api/v1/taxi/orders';
+};
+
+export type TaxiOrdersControllerListV1Errors = {
+    /**
+     * Unknown status filter value
+     */
+    400: ApiErrorDto;
+    /**
+     * No valid API key
+     */
+    401: ApiErrorDto;
+    /**
+     * Authenticated account is not an admin
+     */
+    403: ApiErrorDto;
+};
+
+export type TaxiOrdersControllerListV1Error = TaxiOrdersControllerListV1Errors[keyof TaxiOrdersControllerListV1Errors];
+
+export type TaxiOrdersControllerListV1Responses = {
+    200: TaxiOrderListDto;
+};
+
+export type TaxiOrdersControllerListV1Response = TaxiOrdersControllerListV1Responses[keyof TaxiOrdersControllerListV1Responses];
+
+export type TaxiOrdersControllerUpdateStatusV1Data = {
+    body: UpdateTaxiOrderStatusRequestDto;
+    headers?: {
+        /**
+         * API key of an ADMIN account (?apiKey= also works).
+         */
+        'x-api-key'?: string;
+    };
+    path: {
+        /**
+         * Order id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/v1/taxi/orders/{id}';
+};
+
+export type TaxiOrdersControllerUpdateStatusV1Errors = {
+    /**
+     * Unknown status or wizard draft order
+     */
+    400: ApiErrorDto;
+    /**
+     * No valid API key
+     */
+    401: ApiErrorDto;
+    /**
+     * Authenticated account is not an admin
+     */
+    403: ApiErrorDto;
+    /**
+     * Order not found
+     */
+    404: ApiErrorDto;
+};
+
+export type TaxiOrdersControllerUpdateStatusV1Error = TaxiOrdersControllerUpdateStatusV1Errors[keyof TaxiOrdersControllerUpdateStatusV1Errors];
+
+export type TaxiOrdersControllerUpdateStatusV1Responses = {
+    200: TaxiOrderDto;
+};
+
+export type TaxiOrdersControllerUpdateStatusV1Response = TaxiOrdersControllerUpdateStatusV1Responses[keyof TaxiOrdersControllerUpdateStatusV1Responses];
+
+export type TaxiPriceMatrixControllerGetMatrixV1Data = {
+    body?: never;
+    headers?: {
+        /**
+         * API key of an ADMIN account (?apiKey= also works).
+         */
+        'x-api-key'?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/taxi/price-matrix';
+};
+
+export type TaxiPriceMatrixControllerGetMatrixV1Errors = {
+    /**
+     * No valid API key
+     */
+    401: ApiErrorDto;
+    /**
+     * Authenticated account is not an admin
+     */
+    403: ApiErrorDto;
+};
+
+export type TaxiPriceMatrixControllerGetMatrixV1Error = TaxiPriceMatrixControllerGetMatrixV1Errors[keyof TaxiPriceMatrixControllerGetMatrixV1Errors];
+
+export type TaxiPriceMatrixControllerGetMatrixV1Responses = {
+    200: TaxiPriceMatrixDto;
+};
+
+export type TaxiPriceMatrixControllerGetMatrixV1Response = TaxiPriceMatrixControllerGetMatrixV1Responses[keyof TaxiPriceMatrixControllerGetMatrixV1Responses];
+
+export type TaxiPriceMatrixControllerSetPairPriceV1Data = {
+    body: SetPairPriceRequestDto;
+    headers?: {
+        /**
+         * API key of an ADMIN account (?apiKey= also works).
+         */
+        'x-api-key'?: string;
+    };
+    path: {
+        /**
+         * First city id
+         */
+        fromCityId: string;
+        /**
+         * Second city id
+         */
+        toCityId: string;
+    };
+    query?: never;
+    url: '/api/v1/taxi/price-matrix/{fromCityId}/{toCityId}';
+};
+
+export type TaxiPriceMatrixControllerSetPairPriceV1Errors = {
+    /**
+     * Negative/fractional price or identical city ids
+     */
+    400: ApiErrorDto;
+    /**
+     * No valid API key
+     */
+    401: ApiErrorDto;
+    /**
+     * Authenticated account is not an admin
+     */
+    403: ApiErrorDto;
+    /**
+     * One of the cities does not exist
+     */
+    404: ApiErrorDto;
+};
+
+export type TaxiPriceMatrixControllerSetPairPriceV1Error = TaxiPriceMatrixControllerSetPairPriceV1Errors[keyof TaxiPriceMatrixControllerSetPairPriceV1Errors];
+
+export type TaxiPriceMatrixControllerSetPairPriceV1Responses = {
+    200: TaxiPricePairDto;
+};
+
+export type TaxiPriceMatrixControllerSetPairPriceV1Response = TaxiPriceMatrixControllerSetPairPriceV1Responses[keyof TaxiPriceMatrixControllerSetPairPriceV1Responses];
+
+export type TaxiPriceMatrixControllerAutoCalcV1Data = {
+    body: AutoCalcRequestDto;
+    headers?: {
+        /**
+         * API key of an ADMIN account (?apiKey= also works).
+         */
+        'x-api-key'?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/taxi/price-matrix/auto-calc';
+};
+
+export type TaxiPriceMatrixControllerAutoCalcV1Errors = {
+    /**
+     * Invalid price or fewer than two active cities
+     */
+    400: ApiErrorDto;
+    /**
+     * No valid API key
+     */
+    401: ApiErrorDto;
+    /**
+     * Authenticated account is not an admin
+     */
+    403: ApiErrorDto;
+};
+
+export type TaxiPriceMatrixControllerAutoCalcV1Error = TaxiPriceMatrixControllerAutoCalcV1Errors[keyof TaxiPriceMatrixControllerAutoCalcV1Errors];
+
+export type TaxiPriceMatrixControllerAutoCalcV1Responses = {
+    200: AutoCalcResultDto;
+};
+
+export type TaxiPriceMatrixControllerAutoCalcV1Response = TaxiPriceMatrixControllerAutoCalcV1Responses[keyof TaxiPriceMatrixControllerAutoCalcV1Responses];
